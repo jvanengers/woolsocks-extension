@@ -49,6 +49,13 @@ const manifest = {
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'; connect-src 'self' https:;"
   },
+  // Firefox-specific settings for cross-browser compatibility
+  browser_specific_settings: {
+    gecko: {
+      id: 'woolsocks-extension@example.com',
+      strict_min_version: '109.0'
+    }
+  }
 }
 
 // https://vite.dev/config/

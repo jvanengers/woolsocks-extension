@@ -141,8 +141,13 @@ chrome.action.onClicked.addListener(async (tab) => {
     )
     
     if (activeActivation) {
-      // Already active, show popup with status
-      chrome.action.openPopup()
+      // Already active, show popup with status (guard for browsers without openPopup)
+      const canOpenPopup = typeof chrome.action !== 'undefined' && typeof (chrome.action as any).openPopup === 'function'
+      if (canOpenPopup) {
+        chrome.action.openPopup()
+      } else if (typeof chrome.runtime.openOptionsPage === 'function') {
+        chrome.runtime.openOptionsPage()
+      }
     } else {
       // Activate cashback
       const newActivation: ActivationRecord = {
