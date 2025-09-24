@@ -265,3 +265,29 @@ For support, feature requests, or bug reports:
 ---
 
 **Made with ❤️ for Dutch online shoppers**
+
+## 🌐 Cross-Browser Support
+
+### Microsoft Edge (Chromium)
+- Load the built `dist/` as an unpacked extension at `edge://extensions`
+- MV3 and APIs used are compatible with Edge 109+
+
+### Mozilla Firefox
+- Manifest includes `browser_specific_settings.gecko`
+- Tested with Firefox 109+
+- Load temporary add-on via `about:debugging` → This Firefox → Load Temporary Add-on… and select `dist/manifest.json`
+- Note: `chrome.action.openPopup()` is not available in Firefox; a guarded fallback opens the options page instead
+
+### Apple Safari
+Safari does not support MV3 service workers yet in the same way. Convert using Xcode’s Safari Web Extension Converter:
+
+```bash
+xcrun safari-web-extension-converter dist --project-location ./safari
+```
+
+Then in Xcode:
+- Set the bundle identifier and signing
+- Enable the extension target and run on Safari
+- Review permissions and ensure content script matches are retained
+
+If using an MV2-compatible path is required, consider a background page build variant; otherwise, the converter wraps the MV3 bundle for Safari.
