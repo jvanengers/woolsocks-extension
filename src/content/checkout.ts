@@ -195,12 +195,16 @@ const coolblueDetector: CheckoutDetector = {
 const mediamarktDetector: CheckoutDetector = {
   isCheckoutPage: () => {
     const url = window.location.href
-    const modalTitle = Array.from(document.querySelectorAll('h2, h3, div'))
-      .some(el => /cadeaukaart|gift.?card/i.test(el.textContent || ''))
+    
+    // Only check for actual checkout URLs
+    const isCheckoutURL = url.includes('/checkout') || url.includes('/checkout/payment') || url.includes('/cart')
+    
     // Strong signals for the payment step and summary present
     const hasPaymentRoot = !!document.querySelector('[data-test="checkout-payment-page"]')
     const hasSummary = !!document.querySelector('#totalPriceWrapper, [data-test="checkout-total"], h3.sc-94eb08bc-0.gZiaJK')
-    return url.includes('/checkout') || url.includes('/checkout/payment') || modalTitle || hasPaymentRoot || hasSummary
+    
+    // Only return true if we have strong checkout indicators
+    return isCheckoutURL && (hasPaymentRoot || hasSummary)
   },
   extractTotal: () => {
     // First try exact selectors from the page you shared
@@ -228,10 +232,14 @@ const mediamarktDetector: CheckoutDetector = {
         }
       }
     }
-    const bodyText = document.body.textContent || ''
-    const euroMatch = bodyText.match(/(?:totaal|total)[^\n€]*€\s*([\d.,]+)/i)
-    if (euroMatch) {
-      return parseFloat(euroMatch[1].replace('.', '').replace(',', '.'))
+    // Only search in checkout-related containers to avoid homepage false positives
+    const checkoutContainers = document.querySelectorAll('[class*="checkout"], [class*="cart"], [class*="order"], [class*="payment"], #totalPriceWrapper')
+    for (const container of checkoutContainers) {
+      const text = container.textContent || ''
+      const euroMatch = text.match(/(?:totaal|total)[^\n€]*€\s*([\d.,]+)/i)
+      if (euroMatch) {
+        return parseFloat(euroMatch[1].replace('.', '').replace(',', '.'))
+      }
     }
     return null
   },

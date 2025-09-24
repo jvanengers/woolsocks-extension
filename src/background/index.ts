@@ -73,22 +73,13 @@ async function evaluateTab(tabId: number, url?: string | null) {
         }
       }
       
-      // Show cashback prompt if not already active and settings allow
+      // Check if cashback is already active (no automatic prompts)
       const result = await chrome.storage.local.get('user')
       const user: MockUser = result.user || { isLoggedIn: false, totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
       
       const activeActivation = user.activationHistory.find(
         activation => activation.partner === partner.name && activation.status === 'active'
       )
-      
-      if (!activeActivation && user.settings.showCashbackPrompt) {
-        // Show cashback activation prompt
-        chrome.scripting.executeScript({
-          target: { tabId },
-          func: showCashbackPrompt,
-          args: [partner]
-        })
-      }
       
       if (activeActivation) {
         setIcon('active', tabId)
@@ -175,36 +166,8 @@ chrome.action.onClicked.addListener(async (tab) => {
         message: `You'll earn ${partner.cashbackRate}% cashback on ${partner.name} purchases`
       })
 
-      // Fallback demo: if on checkout and vouchers available, show voucher offer immediately
-      if (partner.voucherAvailable && u.pathname.toLowerCase().includes('checkout')) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: (p: any) => {
-              // quick amount detection
-              const text = document.body.textContent || ''
-              const match = text.match(/€\s*([\d.,]+)/)
-              const amount = match ? parseFloat(match[1].replace('.', '').replace(',', '.')) : 50
-              const cashback = amount * (p.voucherCashbackRate / 100)
-              const evt = new CustomEvent('woolsocks-show-voucher', { detail: { p, amount, cashback } })
-              document.dispatchEvent(evt)
-            },
-            args: [partner]
-          })
-          // Inject our UI using the same function used by checkout detection
-          const fallbackVoucher = partner.vouchers.find(v => v.available) || partner.vouchers[0]
-          if (fallbackVoucher) {
-            const fbAmount = (fallbackVoucher as any).type === 'fixed'
-              ? (fallbackVoucher as any).denomination
-              : Math.max((fallbackVoucher as any).minAmount, Math.min(100, (fallbackVoucher as any).maxAmount))
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: showVoucherOffer,
-              args: [partner, fallbackVoucher, fbAmount, fbAmount * ((fallbackVoucher as any).cashbackRate / 100)]
-            })
-          }
-        } catch {}
-      }
+      // Voucher offers will be shown automatically when checkout is detected
+      // No need for fallback logic here - let the checkout detection handle it
     }
   } catch (error) {
     console.error('Error activating cashback:', error)
@@ -296,6 +259,27 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
   // Set flag to prevent multiple instances
   ;(window as any).showVoucherOfferInjected = true
   
+  // Global cleanup function for easy access
+  ;(window as any).closeVoucherDialog = () => {
+    console.log('Global close function called')
+    const prompt = document.getElementById('woolsocks-voucher-prompt')
+    if (prompt) {
+      // Add fade out animation
+      prompt.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out'
+      prompt.style.opacity = '0'
+      prompt.style.transform = 'scale(0.95) translateY(-10px)'
+      
+      setTimeout(() => {
+        prompt.remove()
+        // Keep flag set for a cooldown period to prevent immediate recreation
+        setTimeout(() => {
+          ;(window as any).showVoucherOfferInjected = false
+          console.log('Dialog cooldown ended, can create new dialog')
+        }, 1000) // 1 second cooldown
+      }, 300) // Wait for animation to complete
+    }
+  }
+  
   // Initialize global variables for current amount and cashback
   ;(window as any).currentAmount = amount
   ;(window as any).currentCashback = cashback
@@ -312,8 +296,8 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
   prompt.id = 'woolsocks-voucher-prompt'
   prompt.style.cssText = `
     position: fixed;
-    top: 84px;
-    right: 84px;
+    top: 20px;
+    right: 20px;
     width: 310px;
     height: 602px;
     background: #FDC408;
@@ -323,6 +307,9 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
     z-index: 10000;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     display: flex;
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
     flex-direction: column;
     overflow: hidden;
   `
@@ -421,7 +408,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
             </div>
-            <div id="close-voucher" style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <div id="close-voucher" style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.1)'" onmouseout="this.style.backgroundColor='transparent'">
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#0D0E0F" stroke-width="1.33" stroke-linecap="round">
                 <path d="M1 1L7 7M7 1L1 7"></path>
               </svg>
@@ -527,276 +514,232 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
 
   document.body.appendChild(prompt)
 
+  // Trigger appear animation
+  setTimeout(() => {
+    prompt.style.opacity = '1'
+    prompt.style.transform = 'scale(1) translateY(0)'
+  }, 10) // Small delay to ensure DOM is ready
+
   // Event listener cleanup function
   const cleanupPrompt = () => {
     console.log('Cleaning up voucher prompt')
-    // Remove all event listeners by cloning and replacing
-    if (prompt && prompt.parentNode) {
-      const cloned = prompt.cloneNode(true)
-      prompt.parentNode.replaceChild(cloned, prompt)
-      prompt.remove()
+    
+    // Use the global close function for consistency
+    if ((window as any).closeVoucherDialog) {
+      (window as any).closeVoucherDialog()
+    } else {
+      // Fallback cleanup
+      if (prompt) {
+        prompt.style.display = 'none'
+        setTimeout(() => prompt.remove(), 100)
+      }
+      ;(window as any).showVoucherOfferInjected = false
     }
     
-    // Clear global variables and flags
+    // Clear global variables
     ;(window as any).currentAmount = undefined
     ;(window as any).currentCashback = undefined
-    ;(window as any).showVoucherOfferInjected = false
+    
+    console.log('Cleanup completed')
   }
 
-  // Event listeners with proper cleanup
-  const closeBtn = document.getElementById('close-voucher')
-  closeBtn?.addEventListener('click', cleanupPrompt)
-  
-  // Amount input functionality with debugging
-  const amountInput = document.getElementById('amount-input') as HTMLInputElement
-  const cashbackAmountSpan = document.getElementById('cashback-amount')
-  
-  console.log('Setting up amount input:', amountInput)
-  
-  const updateCashback = () => {
-    console.log('updateCashback called, input value:', amountInput?.value)
-    if (amountInput && cashbackAmountSpan) {
-      const inputValue = amountInput.value
-      
-      // Allow empty input for typing
-      if (inputValue === '') {
-        cashbackAmountSpan.textContent = '€0,00'
-        ;(window as any).currentCashback = 0
-        ;(window as any).currentAmount = 0
-        return
-      }
-      
-      const newAmount = parseFloat(inputValue)
-      
-      // Only validate if we have a valid number
-      if (isNaN(newAmount)) {
-        return // Don't interfere with typing
-      }
-      
-      // Validate amount against voucher limits
-      const minAmount = voucher.minAmount || 1
-      const maxAmount = voucher.maxAmount || 10000
-      
-      // Only auto-correct on blur, not while typing
-      const newCashback = newAmount * (voucher.cashbackRate / 100)
-      cashbackAmountSpan.textContent = `€${newCashback.toFixed(2).replace('.', ',')}`
-      
-      // Update the global cashback variable for the buy button
-      ;(window as any).currentCashback = newCashback
-      ;(window as any).currentAmount = newAmount
-      
-      // Visual feedback for valid input
-      const inputContainer = amountInput.parentElement
-      if (inputContainer) {
-        if (newAmount >= minAmount && newAmount <= maxAmount) {
-          inputContainer.style.borderColor = '#E0E0E0'
-          inputContainer.style.backgroundColor = '#FAFAFA'
+  // Wait for DOM to be fully rendered before adding event listeners
+  setTimeout(() => {
+    // Event listeners with proper cleanup
+    const closeBtn = document.getElementById('close-voucher')
+    console.log('Close button found:', closeBtn)
+    
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        console.log('Close button clicked!')
+        e.preventDefault()
+        e.stopPropagation()
+        // Use global close function
+        if ((window as any).closeVoucherDialog) {
+          (window as any).closeVoucherDialog()
         } else {
-          inputContainer.style.borderColor = '#FF6B6B'
-          inputContainer.style.backgroundColor = '#FFF5F5'
+          cleanupPrompt()
         }
-      }
+      })
+    } else {
+      console.error('Close button not found!')
     }
-  }
-  
-  const validateAndCorrect = () => {
-    console.log('validateAndCorrect called, input value:', amountInput?.value)
-    if (amountInput) {
-      const inputValue = amountInput.value
-      const newAmount = parseFloat(inputValue)
-      
-      // Only validate and correct if we have a number
-      if (!isNaN(newAmount)) {
+    // Amount input functionality with debugging
+    const amountInput = document.getElementById('amount-input') as HTMLInputElement
+    const cashbackAmountSpan = document.getElementById('cashback-amount')
+    
+    console.log('Setting up amount input:', amountInput)
+    
+    const updateCashback = () => {
+      console.log('updateCashback called, input value:', amountInput?.value)
+      if (amountInput && cashbackAmountSpan) {
+        const inputValue = amountInput.value
+        
+        // Allow empty input for typing
+        if (inputValue === '') {
+          cashbackAmountSpan.textContent = '€0,00'
+          ;(window as any).currentCashback = 0
+          ;(window as any).currentAmount = 0
+          return
+        }
+        
+        const newAmount = parseFloat(inputValue)
+        
+        // Only validate if we have a valid number
+        if (isNaN(newAmount)) {
+          return // Don't interfere with typing
+        }
+        
+        // Validate amount against voucher limits
         const minAmount = voucher.minAmount || 1
         const maxAmount = voucher.maxAmount || 10000
         
-        if (newAmount < minAmount) {
-          console.log('Correcting to min amount:', minAmount)
-          amountInput.value = minAmount.toString()
-          updateCashback()
-        } else if (newAmount > maxAmount) {
-          console.log('Correcting to max amount:', maxAmount)
-          amountInput.value = maxAmount.toString()
-          updateCashback()
+        // Only auto-correct on blur, not while typing
+        const newCashback = newAmount * (voucher.cashbackRate / 100)
+        cashbackAmountSpan.textContent = `€${newCashback.toFixed(2).replace('.', ',')}`
+        
+        // Update the global cashback variable for the buy button
+        ;(window as any).currentCashback = newCashback
+        ;(window as any).currentAmount = newAmount
+        
+        // Visual feedback for valid input
+        const inputContainer = amountInput.parentElement
+        if (inputContainer) {
+          if (newAmount >= minAmount && newAmount <= maxAmount) {
+            inputContainer.style.borderColor = '#E0E0E0'
+            inputContainer.style.backgroundColor = '#FAFAFA'
+          } else {
+            inputContainer.style.borderColor = '#FF6B6B'
+            inputContainer.style.backgroundColor = '#FFF5F5'
+          }
         }
       }
     }
-  }
-  
-  // Add input event listeners with debugging
-  amountInput?.addEventListener('input', (e) => {
-    console.log('Input event:', (e.target as HTMLInputElement)?.value)
-    updateCashback()
-  })
-  amountInput?.addEventListener('change', (e) => {
-    console.log('Change event:', (e.target as HTMLInputElement)?.value)
-    updateCashback()
-  })
-  amountInput?.addEventListener('blur', (e) => {
-    console.log('Blur event:', (e.target as HTMLInputElement)?.value)
-    validateAndCorrect()
-  })
-  
-  // Also add keydown to debug and filter input
-  amountInput?.addEventListener('keydown', (e) => {
-    console.log('Keydown event:', e.key, 'current value:', (e.target as HTMLInputElement)?.value)
     
-    // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
-    if ([8, 9, 27, 13, 46, 35, 36, 37, 38, 39, 40].indexOf(e.keyCode) !== -1 ||
-        // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-        (e.keyCode === 65 && e.ctrlKey === true) ||
-        (e.keyCode === 67 && e.ctrlKey === true) ||
-        (e.keyCode === 86 && e.ctrlKey === true) ||
-        (e.keyCode === 88 && e.ctrlKey === true)) {
-      return
+    const validateAndCorrect = () => {
+      console.log('validateAndCorrect called, input value:', amountInput?.value)
+      if (amountInput) {
+        const inputValue = amountInput.value
+        const newAmount = parseFloat(inputValue)
+        
+        // Only validate and correct if we have a number
+        if (!isNaN(newAmount)) {
+          const minAmount = voucher.minAmount || 1
+          const maxAmount = voucher.maxAmount || 10000
+          
+          if (newAmount < minAmount) {
+            console.log('Correcting to min amount:', minAmount)
+            amountInput.value = minAmount.toString()
+            updateCashback()
+          } else if (newAmount > maxAmount) {
+            console.log('Correcting to max amount:', maxAmount)
+            amountInput.value = maxAmount.toString()
+            updateCashback()
+          }
+        }
+      }
     }
     
-    // Ensure that it is a number or decimal point and stop the keypress
-    if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105) && e.keyCode !== 190 && e.keyCode !== 110) {
-      e.preventDefault()
-    }
-  })
-  
-  // Prevent paste of non-numeric content
-  amountInput?.addEventListener('paste', (e) => {
-    const paste = (e.clipboardData || (window as any).clipboardData).getData('text')
-    if (!/^\d*\.?\d*$/.test(paste)) {
-      e.preventDefault()
-    }
-  })
-  
-  // Service switch (Vouchers <-> Online Cashback)
-  const serviceSwitch = document.getElementById('service-switch')
-  serviceSwitch?.addEventListener('click', () => {
-    // This would switch between voucher and cashback modes
-    // For now, just show an alert
-    alert('Switch to Online Cashback mode - Coming soon!')
-  })
-  
-  // Collapsible sections
-  const howToUseToggle = document.getElementById('how-to-use-toggle')
-  howToUseToggle?.addEventListener('click', () => {
-    const content = document.getElementById('how-to-use-content')
-    const arrow = document.getElementById('how-to-use-arrow')
-    if (content && arrow) {
-      const isVisible = content.style.display !== 'none'
-      content.style.display = isVisible ? 'none' : 'block'
-      arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
-    }
-  })
-  
-  const conditionsToggle = document.getElementById('conditions-toggle')
-  conditionsToggle?.addEventListener('click', () => {
-    const content = document.getElementById('conditions-content')
-    const arrow = document.getElementById('conditions-arrow')
-    if (content && arrow) {
-      const isVisible = content.style.display !== 'none'
-      content.style.display = isVisible ? 'none' : 'block'
-      arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
-    }
-  })
-  
-  const buyBtn = document.getElementById('buy-voucher')
-  buyBtn?.addEventListener('click', () => {
-    cleanupPrompt()
-    
-    // Get current values from input or fallback to original values
-    const finalAmount = (window as any).currentAmount || amount
-    const finalCashback = (window as any).currentCashback || cashback
-    
-    // Simulate voucher purchase
-    const voucherCode = Math.random().toString(36).substring(2, 15).toUpperCase()
-    alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nHow to use: ${voucher.howToUse}\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
-    // After voucher purchase, set icon to green (active)
-    chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
-  })
-
-  // Auto-dismiss after 30 seconds with cleanup
-  const autoDismissTimer = setTimeout(cleanupPrompt, 30000)
-  
-  // Cleanup on page navigation
-  const beforeUnloadHandler = () => {
-    clearTimeout(autoDismissTimer)
-    cleanupPrompt()
-  }
-  window.addEventListener('beforeunload', beforeUnloadHandler)
-}
-
-function showCashbackPrompt(partner: any) {
-  // Clean up any existing prompts and their event listeners
-  const existing = document.getElementById('woolsocks-cashback-prompt')
-  if (existing) {
-    const cloned = existing.cloneNode(true)
-    existing.parentNode?.replaceChild(cloned, existing)
-    existing.remove()
-  }
-  
-  const prompt = document.createElement('div')
-  prompt.id = 'woolsocks-cashback-prompt'
-  prompt.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 320px;
-    background: #fff;
-    border: 2px solid #FFA500;
-    border-radius: 8px;
-    padding: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 10000;
-    font-family: system-ui, sans-serif;
-    font-size: 14px;
-  `
-  
-  prompt.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3 style="margin: 0; color: #FFA500; font-size: 16px;">💰 Cashback Available!</h3>
-      <button id="close-cashback" style="background: none; border: none; font-size: 18px; cursor: pointer;">×</button>
-    </div>
-    <p style="margin: 0 0 12px 0; color: #333;">
-      Activate <strong>${partner.cashbackRate}% cashback</strong> on ${partner.name} purchases. Never miss out on savings!
-    </p>
-    <div style="display: flex; gap: 8px;">
-      <button id="activate-cashback" style="flex: 1; background: #FFA500; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold;">
-        Activate Cashback
-      </button>
-      <button id="dismiss-cashback" style="background: #f5f5f5; color: #666; border: 1px solid #ddd; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
-        Not Now
-      </button>
-    </div>
-  `
-  
-  document.body.appendChild(prompt)
-  
-  // Event listener cleanup function
-  const cleanupPrompt = () => {
-    const cloned = prompt.cloneNode(true)
-    prompt.parentNode?.replaceChild(cloned, prompt)
-    prompt.remove()
-  }
-
-  // Event listeners with proper cleanup
-  document.getElementById('close-cashback')?.addEventListener('click', cleanupPrompt)
-  document.getElementById('dismiss-cashback')?.addEventListener('click', cleanupPrompt)
-  document.getElementById('activate-cashback')?.addEventListener('click', () => {
-    cleanupPrompt()
-    // Send message to background to activate cashback
-    chrome.runtime.sendMessage({
-      type: 'ACTIVATE_CASHBACK',
-      partner: partner.name
+    // Add input event listeners with debugging
+    amountInput?.addEventListener('input', (e) => {
+      console.log('Input event:', (e.target as HTMLInputElement)?.value)
+      updateCashback()
     })
-  })
-  
-  // Auto-dismiss after 30 seconds with cleanup
-  const autoDismissTimer = setTimeout(cleanupPrompt, 30000)
-  
-  // Cleanup on page navigation
-  const beforeUnloadHandler = () => {
-    clearTimeout(autoDismissTimer)
-    cleanupPrompt()
-  }
-  window.addEventListener('beforeunload', beforeUnloadHandler)
+    amountInput?.addEventListener('change', (e) => {
+      console.log('Change event:', (e.target as HTMLInputElement)?.value)
+      updateCashback()
+    })
+    amountInput?.addEventListener('blur', (e) => {
+      console.log('Blur event:', (e.target as HTMLInputElement)?.value)
+      validateAndCorrect()
+    })
+    
+    // Also add keydown to debug and filter input
+    amountInput?.addEventListener('keydown', (e) => {
+      console.log('Keydown event:', e.key, 'current value:', (e.target as HTMLInputElement)?.value)
+      
+      // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
+      if ([8, 9, 27, 13, 46, 35, 36, 37, 38, 39, 40].indexOf(e.keyCode) !== -1 ||
+          // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+          (e.keyCode === 65 && e.ctrlKey === true) ||
+          (e.keyCode === 67 && e.ctrlKey === true) ||
+          (e.keyCode === 86 && e.ctrlKey === true) ||
+          (e.keyCode === 88 && e.ctrlKey === true)) {
+        return
+      }
+      
+      // Ensure that it is a number or decimal point and stop the keypress
+      if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105) && e.keyCode !== 190 && e.keyCode !== 110) {
+        e.preventDefault()
+      }
+    })
+    
+    // Prevent paste of non-numeric content
+    amountInput?.addEventListener('paste', (e) => {
+      const paste = (e.clipboardData || (window as any).clipboardData).getData('text')
+      if (!/^\d*\.?\d*$/.test(paste)) {
+        e.preventDefault()
+      }
+    })
+    // Service switch (Vouchers <-> Online Cashback)
+    const serviceSwitch = document.getElementById('service-switch')
+    serviceSwitch?.addEventListener('click', () => {
+      // This would switch between voucher and cashback modes
+      // For now, just show an alert
+      alert('Switch to Online Cashback mode - Coming soon!')
+    })
+    
+    // Collapsible sections
+    const howToUseToggle = document.getElementById('how-to-use-toggle')
+    howToUseToggle?.addEventListener('click', () => {
+      const content = document.getElementById('how-to-use-content')
+      const arrow = document.getElementById('how-to-use-arrow')
+      if (content && arrow) {
+        const isVisible = content.style.display !== 'none'
+        content.style.display = isVisible ? 'none' : 'block'
+        arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
+      }
+    })
+    
+    const conditionsToggle = document.getElementById('conditions-toggle')
+    conditionsToggle?.addEventListener('click', () => {
+      const content = document.getElementById('conditions-content')
+      const arrow = document.getElementById('conditions-arrow')
+      if (content && arrow) {
+        const isVisible = content.style.display !== 'none'
+        content.style.display = isVisible ? 'none' : 'block'
+        arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
+      }
+    })
+    
+    const buyBtn = document.getElementById('buy-voucher')
+    buyBtn?.addEventListener('click', () => {
+      cleanupPrompt()
+      
+      // Get current values from input or fallback to original values
+      const finalAmount = (window as any).currentAmount || amount
+      const finalCashback = (window as any).currentCashback || cashback
+      
+      // Simulate voucher purchase
+      const voucherCode = Math.random().toString(36).substring(2, 15).toUpperCase()
+      alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nHow to use: ${voucher.howToUse}\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
+      // After voucher purchase, set icon to green (active)
+      chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
+    })
+
+    // Auto-dismiss after 30 seconds with cleanup
+    const autoDismissTimer = setTimeout(cleanupPrompt, 30000)
+    
+    // Cleanup on page navigation
+    const beforeUnloadHandler = () => {
+      clearTimeout(autoDismissTimer)
+      cleanupPrompt()
+    }
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+  }, 100)
 }
+
+// Removed showCashbackPrompt function - no longer using automatic cashback prompts
 
 // Removed unused showProfileScreen function
 
