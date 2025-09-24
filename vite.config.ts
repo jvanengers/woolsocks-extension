@@ -32,7 +32,7 @@ const manifest = {
     page: 'options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'alarms'],
+  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications'],
   host_permissions: ['https://*/*', 'http://*/*'],
   web_accessible_resources: [
     {
