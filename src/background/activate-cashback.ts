@@ -1,6 +1,6 @@
 // Handle cashback activation from content script
 import { PARTNERS } from '../shared/partners'
-import { MockUser, ActivationRecord } from '../shared/types'
+import type { MockUser, ActivationRecord } from '../shared/types'
 
 export async function handleActivateCashback(partnerName: string, tabId?: number, setIcon?: (state: string, tabId?: number) => void) {
   const partner = PARTNERS.find(p => p.name === partnerName)

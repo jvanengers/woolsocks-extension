@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { MockUser } from '../shared/types'
+import type { MockUser } from '../shared/types'
 
 function Options() {
   const [user, setUser] = useState<MockUser | null>(null)

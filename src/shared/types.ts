@@ -1,12 +1,39 @@
 // Shared types for the extension
 
+export type Voucher =
+  | {
+      voucherId: string
+      type: 'fixed'
+      denomination: number
+      currency: string
+      cashbackRate: number
+      available: boolean
+      howToUse: string
+      conditions: string
+      validityDays: number
+      imageUrl?: string
+    }
+  | {
+      voucherId: string
+      type: 'flex'
+      minAmount: number
+      maxAmount: number
+      step?: number
+      currency: string
+      cashbackRate: number
+      available: boolean
+      howToUse: string
+      conditions: string
+      validityDays: number
+      imageUrl?: string
+    }
+
 export interface Partner {
   domain: string
   name: string
   cashbackRate: number
   voucherAvailable: boolean
-  voucherDenominations: number[]
-  voucherCashbackRate: number
+  vouchers: Voucher[]
   logo?: string
 }
 

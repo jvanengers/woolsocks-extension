@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { MockUser } from '../shared/types'
+import type { MockUser } from '../shared/types'
 import { ONBOARDING_STEPS, hasCompletedOnboarding, markOnboardingComplete } from '../shared/onboarding'
 
 function App() {
