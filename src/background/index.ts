@@ -229,18 +229,17 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
     }
   }
 
-  const voucherAmount = bestAmount
-  const cashbackAmount = voucherAmount * (bestVoucher.cashbackRate / 100)
+  const checkoutTotal = checkoutInfo.total
   
-  // Inject voucher offer prompt
+  // Inject voucher offer prompt with checkout total prefilled
   chrome.scripting.executeScript({
     target: { tabId },
     func: showVoucherOffer,
-    args: [partner, bestVoucher, voucherAmount, cashbackAmount]
+    args: [partner, bestVoucher, checkoutTotal]
   })
 }
 
-function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: number) {
+function showVoucherOffer(partner: any, voucher: any, amount: number) {
   // Prevent multiple instances - check if already exists
   const existing = document.getElementById('woolsocks-voucher-prompt')
   if (existing) {
@@ -282,7 +281,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
   
   // Initialize global variables for current amount and cashback
   ;(window as any).currentAmount = amount
-  ;(window as any).currentCashback = cashback
+  ;(window as any).currentCashback = amount * (voucher.cashbackRate / 100)
   
   // Avoid overlap with cashback prompt by removing it when voucher appears
   const existingCashback = document.getElementById('woolsocks-cashback-prompt')
@@ -314,35 +313,36 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
     overflow: hidden;
   `
 
-  // Calculate cashback percentage
+  // Calculate cashback percentage based on current amount
+  const cashback = amount * (voucher.cashbackRate / 100)
   const cashbackPercentage = Math.round((cashback / amount) * 100)
   
       // Get merchant logo from partner data or fallback
       const getMerchantLogo = (partner: any) => {
         if (partner.logo) {
-          return `<img src="${partner.logo}" alt="${partner.name}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px;" />`
+          return `<img src="${partner.logo}" alt="${partner.name}" style="width: 48px; height: 48px; object-fit: contain; border-radius: 8px;" />`
         }
         // Fallback to CSS-generated logo
         const logos: { [key: string]: string } = {
           'MediaMarkt': `
-            <div style="width: 32px; height: 32px; background: #E60012; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+            <div style="width: 32px; height: 32px; background: #E60012; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
               <div style="width: 20px; height: 20px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                 <span style="color: #E60012; font-weight: bold; font-size: 14px;">M</span>
               </div>
             </div>
           `,
           'Zalando': `
-            <div style="width: 24px; height: 24px; background: #FF6900; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-right: 8px; position: relative;">
+            <div style="width: 24px; height: 24px; background: #FF6900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px; position: relative;">
               <div style="width: 12px; height: 12px; background: white; border-radius: 2px; transform: rotate(45deg);"></div>
             </div>
           `,
           'Amazon': `
-            <div style="width: 24px; height: 24px; background: #FF9900; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
+            <div style="width: 24px; height: 24px; background: #FF9900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
               <span style="color: white; font-weight: bold; font-size: 10px;">A</span>
             </div>
           `,
           'Coolblue': `
-            <div style="width: 24px; height: 24px; background: #0032FF; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
+            <div style="width: 24px; height: 24px; background: #0032FF; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
               <span style="color: white; font-weight: bold; font-size: 10px;">C</span>
             </div>
           `
@@ -352,33 +352,63 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
   
       const getVoucherImage = (voucher: any) => {
         if (voucher.imageUrl) {
-          return `<img src="${voucher.imageUrl}" alt="${partner.name} voucher" style="width: 104px; height: 66px; object-fit: cover; border-radius: 8px; margin-bottom: -8px; position: relative;">`
+          // Voucher card with overlaid percentage pill matching Figma
+          return `
+            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                <img src="${voucher.imageUrl}" alt="${partner.name} voucher" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;">
+              </div>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
+              </div>
+            </div>
+          `
         }
         // Fallback to CSS-generated voucher image
         const images: { [key: string]: string } = {
           'MediaMarkt': `
-            <div style="width: 104px; height: 66px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); border: 2px solid #E60012; border-radius: 8px; position: relative; margin-bottom: -8px;">
-              <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: #E60012; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                <span style="color: white; font-weight: bold; font-size: 10px;">M</span>
+            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: #E60012; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                  <span style="color: white; font-weight: bold; font-size: 10px;">M</span>
+                </div>
+              </div>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `,
           'Zalando': `
-            <div style="width: 104px; height: 66px; background: linear-gradient(135deg, #FF6900 0%, #FF8C00 100%); border: 2px solid #FF6900; border-radius: 8px; position: relative; margin-bottom: -8px;">
-              <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; transform: rotate(45deg);"></div>
+            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; transform: rotate(45deg);"></div>
+              </div>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
+              </div>
             </div>
           `,
           'Amazon': `
-            <div style="width: 104px; height: 66px; background: linear-gradient(135deg, #FF9900 0%, #FFB84D 100%); border: 2px solid #FF9900; border-radius: 8px; position: relative; margin-bottom: -8px;">
-              <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                <span style="color: #FF9900; font-weight: bold; font-size: 10px;">A</span>
+            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                  <span style="color: #FF9900; font-weight: bold; font-size: 10px;">A</span>
+                </div>
+              </div>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `,
           'Coolblue': `
-            <div style="width: 104px; height: 66px; background: linear-gradient(135deg, #0032FF 0%, #3366FF 100%); border: 2px solid #0032FF; border-radius: 8px; position: relative; margin-bottom: -8px;">
-              <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                <span style="color: #0032FF; font-weight: bold; font-size: 10px;">C</span>
+            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                  <span style="color: #0032FF; font-weight: bold; font-size: 10px;">C</span>
+                </div>
+              </div>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `
@@ -417,9 +447,9 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
         </div>
 
     <!-- Main Content -->
-    <div style="flex: 1; background: white; margin: 0 0 25px 0; display: flex; flex-direction: column;">
+    <div style="flex: 1; background: white; margin: 0 0 25px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: visible; position: relative;">
           <!-- Partner Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 16px 0 16px; height: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 16px 8px 16px; height: 32px;">
             <div style="display: flex; align-items: center;">
               <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">${partner.name}</span>
             </div>
@@ -432,7 +462,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
           </div>
 
           <!-- Merchant Logo -->
-          <div style="display: flex; justify-content: center; margin: 16px 0;">
+          <div style="display: flex; justify-content: center; position: relative; top: -48px; margin: 0 0 32px 0;">
             <div style="width: 48px; height: 48px; background: white; border: 7px solid #FDC408; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
               ${getMerchantLogo(partner)}
             </div>
@@ -443,10 +473,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
             <!-- Dynamic Voucher Image -->
             ${getVoucherImage(voucher)}
             
-            <!-- Cashback Percentage Display -->
-            <div style="background: rgba(253, 196, 8, 0.2); border-radius: 8px; padding: 12px 16px 4px 16px; margin-top: 8px; display: flex; align-items: center; justify-content: center; width: 104px; height: 36px;">
-              <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-            </div>
+            <!-- Cashback Percentage Display moved into card overlay -->
         
         <!-- Dynamic Voucher Info -->
         <div style="text-align: center; margin-top: 8px;">
@@ -488,18 +515,9 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
       </div>
     </div>
 
-    <!-- Collapsible Footer Links -->
+    <!-- Collapsible Footer Links - HIDDEN FOR NOW -->
+    <!--
     <div style="background: white; display: flex; flex-direction: column;">
-      <div id="how-to-use-toggle" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; cursor: pointer; border-bottom: 1px solid #F0F0F0;">
-        <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">How to use voucher</span>
-        <svg id="how-to-use-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" style="transform: rotate(0deg); transition: transform 0.2s;">
-          <path d="M5 3L10 7L5 11" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div id="how-to-use-content" style="display: none; padding: 0 16px 16px 16px; background: #FAFAFA; border-bottom: 1px solid #F0F0F0;">
-        <p style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 12px; color: #666; margin: 0; line-height: 1.4;">${voucher.howToUse}</p>
-      </div>
-      
       <div id="conditions-toggle" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; cursor: pointer;">
         <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">Conditions</span>
         <svg id="conditions-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" style="transform: rotate(0deg); transition: transform 0.2s;">
@@ -510,6 +528,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
         <p style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 12px; color: #666; margin: 0; line-height: 1.4;">${voucher.conditions}</p>
       </div>
     </div>
+    -->
   `
 
   document.body.appendChild(prompt)
@@ -690,17 +709,6 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
     })
     
     // Collapsible sections
-    const howToUseToggle = document.getElementById('how-to-use-toggle')
-    howToUseToggle?.addEventListener('click', () => {
-      const content = document.getElementById('how-to-use-content')
-      const arrow = document.getElementById('how-to-use-arrow')
-      if (content && arrow) {
-        const isVisible = content.style.display !== 'none'
-        content.style.display = isVisible ? 'none' : 'block'
-        arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
-      }
-    })
-    
     const conditionsToggle = document.getElementById('conditions-toggle')
     conditionsToggle?.addEventListener('click', () => {
       const content = document.getElementById('conditions-content')
@@ -717,12 +725,12 @@ function showVoucherOffer(partner: any, voucher: any, amount: number, cashback: 
       cleanupPrompt()
       
       // Get current values from input or fallback to original values
-      const finalAmount = (window as any).currentAmount || amount
-      const finalCashback = (window as any).currentCashback || cashback
+      const finalAmount = (window as any).currentAmount ?? amount
+      const finalCashback = (window as any).currentCashback ?? (finalAmount * (voucher.cashbackRate / 100))
       
       // Simulate voucher purchase
       const voucherCode = Math.random().toString(36).substring(2, 15).toUpperCase()
-      alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nHow to use: ${voucher.howToUse}\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
+      alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
       // After voucher purchase, set icon to green (active)
       chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
     })

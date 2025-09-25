@@ -9,7 +9,7 @@ export const PARTNERS: Partner[] = [
     voucherAvailable: true,
     logo: 'https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg',
     vouchers: [
-      { voucherId: 'abcdefg123456', type: 'flex', minAmount: 5, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 5.0, available: true, howToUse: 'Redeem at checkout by selecting Gift Card and entering the code.', conditions: 'Usable only on Amazon.nl for eligible products; cannot be used to buy other gift cards.', validityDays: 3650, imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/61X8VhKjKBL._AC_SL1500_.jpg' },
+      { voucherId: 'abcdefg123456', type: 'flex', minAmount: 10, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 5.0, available: true, howToUse: 'Redeem at checkout by selecting Gift Card and entering the code.', conditions: 'Usable only on Amazon.nl for eligible products; cannot be used to buy other gift cards.', validityDays: 3650, imageUrl: 'https://images-na.ssl-images-amazon.com/images/I/61X8VhKjKBL._AC_SL1500_.jpg' },
     ],
   },
   {
@@ -18,7 +18,7 @@ export const PARTNERS: Partner[] = [
     cashbackRate: 3.0,
     voucherAvailable: true,
     vouchers: [
-      { voucherId: 'hjk987poi654', type: 'flex', minAmount: 5, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 5.0, available: true, howToUse: 'Redeem at checkout by selecting Gift Cards and entering the code.', conditions: 'Valid on Amazon.de; not valid for certain restricted items or gift cards.', validityDays: 3650 },
+      { voucherId: 'hjk987poi654', type: 'flex', minAmount: 10, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 5.0, available: true, howToUse: 'Redeem at checkout by selecting Gift Cards and entering the code.', conditions: 'Valid on Amazon.de; not valid for certain restricted items or gift cards.', validityDays: 3650 },
     ],
   },
   {
@@ -26,9 +26,9 @@ export const PARTNERS: Partner[] = [
     name: 'Zalando',
     cashbackRate: 2.5,
     voucherAvailable: true,
-    logo: 'https://upload.wikimedia.org/wikipedia/commons/9/9a/Zalando_201x_logo.svg',
+    logo: 'https://pbs.twimg.com/profile_images/705724583794630656/Id7jmjPO_400x400.jpg',
     vouchers: [
-      { voucherId: 'zyx321abc987', type: 'flex', minAmount: 5, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Apply the code in the "Gift card or promo code" field at checkout.', conditions: 'Valid on Zalando.nl; not combinable with some promotions; cannot be exchanged for cash.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_0.jpg?v=w500' },
+      { voucherId: 'zyx321abc987', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Apply the code in the "Gift card or promo code" field at checkout.', conditions: 'Valid on Zalando.nl; not combinable with some promotions; cannot be exchanged for cash.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
     ],
   },
   {
@@ -36,8 +36,9 @@ export const PARTNERS: Partner[] = [
     name: 'Zalando',
     cashbackRate: 2.5,
     voucherAvailable: true,
+    logo: 'https://pbs.twimg.com/profile_images/705724583794630656/Id7jmjPO_400x400.jpg',
     vouchers: [
-      { voucherId: 'pqr555lmn888', type: 'flex', minAmount: 5, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Enter the gift code in the designated field during checkout.', conditions: 'Valid on Zalando.de; some brands excluded; non-refundable.', validityDays: 1095 },
+      { voucherId: 'pqr555lmn888', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Enter the gift code in the designated field during checkout.', conditions: 'Valid on Zalando.de; some brands excluded; non-refundable.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
     ],
   },
   {
@@ -94,7 +95,7 @@ export const PARTNERS: Partner[] = [
     cashbackRate: 1.0,
     voucherAvailable: true,
     vouchers: [
-      { voucherId: 'wer123sdf456', type: 'flex', minAmount: 5, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 2.0, available: true, howToUse: 'Redeem online at IKEA checkout.', conditions: 'Valid on IKEA.nl; in-store redemption rules may differ.', validityDays: 1825 },
+      { voucherId: 'wer123sdf456', type: 'flex', minAmount: 10, maxAmount: 500, step: 5, currency: 'EUR', cashbackRate: 2.0, available: true, howToUse: 'Redeem online at IKEA checkout.', conditions: 'Valid on IKEA.nl; in-store redemption rules may differ.', validityDays: 1825 },
     ],
   },
   {
