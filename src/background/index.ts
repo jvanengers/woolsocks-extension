@@ -987,14 +987,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
           partner.voucherProductUrl ||
           'https://woolsocks.eu'
 
-        await chrome.storage.session.set({
-          voucherIntent: {
-            partner: partner.name,
-            domain: partner.domain,
-            amount: finalAmount,
-            createdAt: Date.now()
-          }
-        })
+        // Open details in new tab only; do NOT change in-extension state
         // Try background to open new tab; if that fails, fallback to window.open
         try {
           console.log('[Woolsocks] Opening product URL via background:', resolvedUrl)
@@ -1015,12 +1008,10 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
           console.warn('[Woolsocks] Background message throw, falling back to window.open')
           window.open(resolvedUrl, '_blank', 'noopener,noreferrer')
         }
-        // Switch UI to waiting state immediately
-        renderWaiting(prompt, finalAmount)
+        // Keep current UI; do not move to waiting here
       } catch (e) {
         console.error('[Woolsocks] Failed to open product page:', e)
-        // Still move to waiting to avoid dead-end
-        renderWaiting(prompt, (window as any).currentAmount ?? amount)
+        // No state change on error
       }
     })
     // Main CTA now also moves to waiting state immediately (doesn't open a tab)
