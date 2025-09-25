@@ -354,12 +354,12 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
         if (voucher.imageUrl) {
           // Voucher card with overlaid percentage pill matching Figma
           return `
-            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; overflow: hidden;">
+            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
+              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 0; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
                 <img src="${voucher.imageUrl}" alt="${partner.name} voucher" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;">
               </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: 0; transform: translateX(-50%); width: 140px; background: rgba(253,196,8,0.2); border: 0; border-radius: 0 0 8px 8px; padding: 8px 0 6px 0; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 12px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `
@@ -367,24 +367,24 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
         // Fallback to CSS-generated voucher image
         const images: { [key: string]: string } = {
           'MediaMarkt': `
-            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
               <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
                 <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: #E60012; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                   <span style="color: white; font-weight: bold; font-size: 10px;">M</span>
                 </div>
               </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: -16px; transform: translateX(-50%); width: 140px; background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 0 0 8px 8px; padding: 8px 0 4px 0; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
                 <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `,
           'Zalando': `
-            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
+            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
               <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
                 <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; transform: rotate(45deg);"></div>
               </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
+              <div style="position: absolute; z-index: 0; left: 50%; bottom: 0; transform: translateX(-50%); width: 140px; background: rgba(253,196,8,0.2); border: 0; border-radius: 0 0 8px 8px; padding: 8px 0 6px 0; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.06);">
+                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 12px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
               </div>
             </div>
           `,
@@ -449,7 +449,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
     <!-- Main Content -->
     <div style="flex: 1; background: white; margin: 0 0 25px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: visible; position: relative;">
           <!-- Partner Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 16px 8px 16px; height: 32px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 4px 16px; height: 32px;">
             <div style="display: flex; align-items: center;">
               <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">${partner.name}</span>
             </div>
@@ -476,7 +476,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
             <!-- Cashback Percentage Display moved into card overlay -->
         
         <!-- Dynamic Voucher Info -->
-        <div style="text-align: center; margin-top: 8px;">
+        <div style="text-align: center; margin-top: 16px;">
           <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; margin-bottom: 4px;">${partner.name} Cadeaukaart</div>
           <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 14px; color: #020B0F; opacity: 0.5;">Geldig ${Math.floor(voucher.validityDays / 365)} jaar na aankoop</div>
         </div>
