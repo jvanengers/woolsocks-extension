@@ -35,6 +35,8 @@ export interface Partner {
   voucherAvailable: boolean
   vouchers: Voucher[]
   logo?: string
+  voucherProductUrl?: string
+  buildVoucherProductUrl?: (amount: number, currency?: string) => string
 }
 
 export interface ActivationRecord {

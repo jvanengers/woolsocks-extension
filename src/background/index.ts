@@ -186,6 +186,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // coerce to any to satisfy handler signature expecting string; it's safe internally
     handleActivateCashback(message.partner, _sender.tab?.id, setIcon as unknown as (state: string, tabId?: number) => void)
     sendResponse({ ok: true })
+  } else if (message?.type === 'OPEN_VOUCHER_PRODUCT') {
+    const { url } = message
+    if (url && typeof url === 'string') {
+      chrome.tabs.create({ url })
+      sendResponse({ ok: true })
+    } else {
+      sendResponse({ ok: false, error: 'Missing URL' })
+    }
   }
 })
 
@@ -298,7 +306,7 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
     top: 20px;
     right: 20px;
     width: 310px;
-    height: 602px;
+    height: auto;
     background: #FDC408;
     border: 4px solid #FDC408;
     border-radius: 16px;
@@ -308,47 +316,17 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
     display: flex;
     opacity: 0;
     transform: scale(0.95) translateY(-10px);
-    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    transition: opacity 0.25s ease-out, transform 0.25s ease-out, height 0.25s ease;
     flex-direction: column;
     overflow: hidden;
   `
 
-  // Calculate cashback percentage based on current amount
+  // Calculate displayed percentage — use voucher rate (matches Figma chip)
   const cashback = amount * (voucher.cashbackRate / 100)
-  const cashbackPercentage = Math.round((cashback / amount) * 100)
+  const cashbackPercentage = Math.round(voucher.cashbackRate)
   
       // Get merchant logo from partner data or fallback
-      const getMerchantLogo = (partner: any) => {
-        if (partner.logo) {
-          return `<img src="${partner.logo}" alt="${partner.name}" style="width: 48px; height: 48px; object-fit: contain; border-radius: 8px;" />`
-        }
-        // Fallback to CSS-generated logo
-        const logos: { [key: string]: string } = {
-          'MediaMarkt': `
-            <div style="width: 32px; height: 32px; background: #E60012; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-              <div style="width: 20px; height: 20px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                <span style="color: #E60012; font-weight: bold; font-size: 14px;">M</span>
-              </div>
-            </div>
-          `,
-          'Zalando': `
-            <div style="width: 24px; height: 24px; background: #FF6900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px; position: relative;">
-              <div style="width: 12px; height: 12px; background: white; border-radius: 2px; transform: rotate(45deg);"></div>
-            </div>
-          `,
-          'Amazon': `
-            <div style="width: 24px; height: 24px; background: #FF9900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
-              <span style="color: white; font-weight: bold; font-size: 10px;">A</span>
-            </div>
-          `,
-          'Coolblue': `
-            <div style="width: 24px; height: 24px; background: #0032FF; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
-              <span style="color: white; font-weight: bold; font-size: 10px;">C</span>
-            </div>
-          `
-        }
-        return logos[partner.name] || logos['MediaMarkt']
-      }
+      // removed merchant logo rendering
   
       const getVoucherImage = (voucher: any) => {
         if (voucher.imageUrl) {
@@ -416,6 +394,261 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
         return images[partner.name] || images['MediaMarkt']
       }
 
+  // Utility reserved for future cross-state swaps
+
+  function renderWaiting(parentEl: HTMLElement, currentAmount: number) {
+    // New "Ready to pay" UI for waiting state
+    parentEl.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; height: 33px;">
+        <div style="display: flex; align-items: center; color: #100B1C;">
+          <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 14px;">Woolsocks</span>
+        </div>
+        <div id="close-voucher" style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#0D0E0F" stroke-width="1.33" stroke-linecap="round"><path d="M1 1L7 7M7 1L1 7"></path></svg>
+        </div>
+      </div>
+      <div id="ws-waiting" style="flex: 1; background: white; margin: 0 0 16px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; opacity:1; transform:translateY(0); transition: opacity 0.2s, transform 0.2s;">
+        <div style="padding: 16px;">
+          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; font-size: 28px; color: #100B1C; text-align: left;">Ready to pay</div>
+          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #8F95A3; margin: 8px 0 16px;">This page will show your voucher details automatically when the payment is confirmed</div>
+          <div style="display:flex; justify-content:center; margin-bottom: 16px;">
+            <!-- QR image from extension assets with fallback -->
+            <div style="border-radius: 8px; background: #fff; border: 8px solid #F2F3F5; box-shadow: 0 1px 2px rgba(0,0,0,0.06);">
+              <img id="ws-qr" alt="Payment QR" style="display:block; width: 232px; height: 232px; object-fit: contain;" />
+            </div>
+          </div>
+          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 16px; color: #100B1C; margin-bottom: 8px; text-align:center;">Scan this QR with your phone</div>
+          <div style="display:flex; gap:8px; margin-top: 16px;">
+            <button id="ws-reset" style="height: 32px; background: transparent; color: #100B1C; border: 1px solid #D9D9D9; border-radius: 6px; padding: 0 12px; cursor: pointer;">Reset</button>
+          </div>
+        </div>
+      </div>
+    `
+    // Set QR image to provided asset if available; otherwise fallback to inline SVG
+    const qrImg = parentEl.querySelector('#ws-qr') as HTMLImageElement | null
+    if (qrImg) {
+      const svg = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="232" height="232" viewBox="0 0 232 232"><rect width="232" height="232" fill="#fff"/><g transform="translate(16,16)"><rect width="200" height="200" fill="#000" opacity="0.06"/><g fill="#000">${Array.from({length:64}).map((_,i)=>`<rect x="${(i%8)*24}" y="${Math.floor(i/8)*24}" width="12" height="12" opacity="${(i*37%5)/5}"/>`).join('')}</g></g><rect x="76" y="76" width="80" height="54" rx="8" fill="#fff" stroke="#eee"/><rect x="82" y="86" width="68" height="34" rx="6" fill="#ff008a"/><text x="116" y="108" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="800" fill="#fff">iDEAL</text></svg>`
+      const dataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg)
+      // You can set window.__woolsocksProvidedQr in DevTools to the provided image data URL
+      // For the attached asset, set this once at runtime to that image's data URL
+      const provided = (window as any).__woolsocksProvidedQr as string | undefined
+      qrImg.src = provided || dataUrl
+      // Prototype shortcut: clicking the QR advances to a details confirmation view
+      qrImg.style.cursor = 'pointer'
+      qrImg.addEventListener('click', () => {
+        renderCheckoutDetails(parentEl, currentAmount)
+      })
+    }
+    const resetBtn = parentEl.querySelector('#ws-reset') as HTMLButtonElement | null
+    resetBtn?.addEventListener('click', () => {
+      chrome.storage.session.remove('voucherIntent')
+      // Re-render the full verify view
+      parentEl.innerHTML = ''
+      prompt.remove()
+      ;(window as any).showVoucherOfferInjected = false
+      // Recreate the prompt fresh with verify screen
+      showVoucherOffer(partner, voucher, currentAmount)
+    })
+    // Removed "I have the voucher" button
+    const closeBtn2 = parentEl.querySelector('#close-voucher') as HTMLElement | null
+    closeBtn2?.addEventListener('click', () => {
+      // Return to reminder state instead of closing the widget
+      chrome.storage.session.remove('voucherIntent')
+      parentEl.innerHTML = ''
+      const root = document.getElementById('woolsocks-voucher-prompt')
+      if (root) {
+        root.remove()
+      }
+      ;(window as any).showVoucherOfferInjected = false
+      showVoucherOffer(partner, voucher, currentAmount)
+    })
+  }
+
+  function renderCheckoutDetails(parentEl: HTMLElement, currentAmount: number) {
+    const code = (Math.random().toString(36).substring(2, 14).toUpperCase().match(/.{1,4}/g)?.join('-')) || '1234-8901234567'
+    const pin = Math.floor(1000 + Math.random() * 9000).toString()
+    // Update outer shell color to green to match Figma for this state
+    const shell = document.getElementById('woolsocks-voucher-prompt')
+    if (shell) {
+      shell.style.background = '#27AE60'
+      shell.style.border = '4px solid #27AE60'
+    }
+    parentEl.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; height: 33px; background:#15a34a;">
+        <div style="display: flex; align-items: center; color: #ffffff;">
+          <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 14px;">Woolsocks</span>
+        </div>
+        <div id="close-voucher" style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#ffffff" stroke-width="1.33" stroke-linecap="round"><path d="M1 1L7 7M7 1L1 7"></path></svg>
+        </div>
+      </div>
+      <div style="flex: 1; background: white; margin: 0 0 16px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px;">
+        <div style="padding: 16px;">
+          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 800; font-size: 24px; color: #100B1C; text-align: left; margin: 0 0 12px;">Ready to checkout!</div>
+          <div style="display:flex; justify-content:center; margin: 12px 0 12px;">
+            <div style="transform: scale(0.9); transform-origin: center;">${getVoucherImage(voucher)}</div>
+          </div>
+          <div style="text-align:center; font-weight:600; margin-bottom:16px;">Zalando Cadeaukaart</div>
+          <div id="ws-voucher-block" style="background:#F2F3F5; border-radius:10px; padding:12px 14px; margin-bottom:12px; cursor: pointer;">
+            <div style="font-size:12px; color:#666; margin-bottom:6px; display:flex; align-items:center; gap:6px;">VOUCHER 
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8F95A3" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </div>
+            <div id="ws-voucher-code" style="font-weight:700; letter-spacing:0.3px;">${code}</div>
+          </div>
+          <div id="ws-pin-block" style="background:#EAF3FF; border-radius:10px; padding:12px 14px; margin-bottom:12px; cursor: pointer;">
+            <div style="font-size:12px; color:#666; margin-bottom:6px; display:flex; align-items:center; gap:6px;">PIN 
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8F95A3" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </div>
+            <div id="ws-pin-value" style="font-weight:700; letter-spacing:0.3px;">${pin}</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin: 20px 0;">
+            <div>
+              <div style="font-size:12px; color:#8F95A3;">Purchase value</div>
+              <div style="font-weight:800; font-size:18px;">€${currentAmount.toFixed(2).replace('.', ',')}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:12px; color:#8F95A3;">Exp date</div>
+              <div>27/12/2026</div>
+            </div>
+          </div>
+          <div style="margin-top: 16px; text-align:left;">
+            <div style="font-weight:700; margin-bottom:6px; text-align:left;">How to use the gift card?</div>
+            <ol style="padding-left: 0; margin:0; color:#333; font-size:14px; line-height:1.5; list-style-position: inside;">
+              <li>Copy the vouchercode into the giftcard input field at checkout.</li>
+              <li>If requested, also paste the PIN.</li>
+              <li>Alternatively, you can do this in your account/settings.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    `
+    chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
+    // Copy interactions for voucher and PIN + hover/feedback states
+    const voucherBlock = parentEl.querySelector('#ws-voucher-block') as HTMLElement | null
+    const pinBlock = parentEl.querySelector('#ws-pin-block') as HTMLElement | null
+    const voucherCodeEl = parentEl.querySelector('#ws-voucher-code') as HTMLElement | null
+    const pinValueEl = parentEl.querySelector('#ws-pin-value') as HTMLElement | null
+    const copy = async (text: string) => {
+      try { await navigator.clipboard.writeText(text) } catch {}
+    }
+    const attachInteractive = (block: HTMLElement | null, valueEl: HTMLElement | null, hoverBg: string) => {
+      if (!block || !valueEl) return
+      const originalBg = block.style.background || ''
+      const originalText = valueEl.textContent || ''
+      block.addEventListener('mouseenter', () => {
+        block.style.background = hoverBg
+      })
+      block.addEventListener('mouseleave', () => {
+        block.style.background = originalBg
+      })
+      block.addEventListener('click', async () => {
+        const text = valueEl.textContent?.trim() || ''
+        if (!text) return
+        await copy(text)
+        // Feedback state
+        valueEl.textContent = 'Copied!'
+        block.style.transition = 'background 0.2s ease'
+        block.style.background = hoverBg
+        setTimeout(() => {
+          valueEl.textContent = originalText
+          block.style.background = originalBg
+        }, 1000)
+      })
+    }
+    attachInteractive(voucherBlock, voucherCodeEl, '#E7EBF0')
+    attachInteractive(pinBlock, pinValueEl, '#D9EFFF')
+
+    // Auto-insert voucher code into merchant input (best-effort)
+    const autoInsertVoucher = (voucherCode: string, voucherPin?: string) => {
+      const isVisible = (el: Element) => {
+        const rect = (el as HTMLElement).getBoundingClientRect()
+        const style = window.getComputedStyle(el as HTMLElement)
+        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none'
+      }
+      const dispatchAll = (el: HTMLInputElement) => {
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter' }))
+      }
+      const fieldSelectors = [
+        'input[name*="voucher" i]','input[id*="voucher" i]','input[placeholder*="voucher" i]',
+        'input[name*="gift" i]','input[id*="gift" i]','input[placeholder*="gift" i]',
+        'input[name*="cadeau" i]','input[id*="cadeau" i]','input[placeholder*="cadeau" i]',
+        'input[name*="coupon" i]','input[id*="coupon" i]','input[placeholder*="coupon" i]',
+        'input[name*="promo" i]','input[id*="promo" i]','input[placeholder*="promo" i]',
+        'input[name*="kortings" i]','input[id*="kortings" i]','input[placeholder*="kortings" i]'
+      ]
+      const applyButtonTexts = ['apply','use','redeem','confirm','add','inwisselen','toepassen','gebruiken','toevoegen']
+      const findField = (): HTMLInputElement | null => {
+        for (const sel of fieldSelectors) {
+          const list = Array.from(document.querySelectorAll(sel)) as HTMLInputElement[]
+          const candidate = list.find(el =>
+            el.type !== 'hidden' && !el.readOnly && !el.disabled && isVisible(el)
+          )
+          if (candidate) return candidate
+        }
+        return null
+      }
+      const clickApply = () => {
+        const buttons = Array.from(document.querySelectorAll('button, [role="button"], input[type="button"], input[type="submit"]')) as HTMLElement[]
+        const btn = buttons.find(b => {
+          const text = (b as HTMLButtonElement).innerText || (b as HTMLInputElement).value || ''
+          const t = text.trim().toLowerCase()
+          return applyButtonTexts.some(w => t.includes(w))
+        })
+        if (btn && isVisible(btn)) (btn as HTMLElement).click()
+      }
+      const tryOnce = () => {
+        const field = findField()
+        if (field) {
+          field.focus()
+          field.value = voucherCode
+          dispatchAll(field)
+          // Optional: fill PIN if a separate field is present
+          if (voucherPin) {
+            const pinField = (['pin','security','pincode','cadeaupin'] as string[]).map(k =>
+              [`input[name*="${k}" i]`,`input[id*="${k}" i]`,`input[placeholder*="${k}" i]`]
+            ).flat().map(sel => Array.from(document.querySelectorAll(sel)) as HTMLInputElement[])
+             .flat().find(el => el !== field && el.type !== 'hidden' && !el.readOnly && !el.disabled && isVisible(el))
+            if (pinField) {
+              pinField.focus()
+              pinField.value = voucherPin
+              dispatchAll(pinField)
+            }
+          }
+          // Try to click an apply/redeem style button
+          clickApply()
+          return true
+        }
+        return false
+      }
+      // Retry over a short window to handle SPA/lazy-loaded forms
+      const start = Date.now()
+      const timeoutMs = 8000
+      const tick = () => {
+        if (tryOnce()) return
+        if (Date.now() - start < timeoutMs) setTimeout(tick, 500)
+      }
+      // Delay slightly so page settles
+      setTimeout(tick, 300)
+    }
+
+    // Kick off auto insert with our generated code
+    autoInsertVoucher(code, pin)
+    // Close returns to reminder state
+    const closeFromDetails = parentEl.querySelector('#close-voucher') as HTMLElement | null
+    closeFromDetails?.addEventListener('click', () => {
+      chrome.storage.session.remove('voucherIntent')
+      parentEl.innerHTML = ''
+      const root = document.getElementById('woolsocks-voucher-prompt')
+      if (root) root.remove()
+      ;(window as any).showVoucherOfferInjected = false
+      showVoucherOffer(partner, voucher, currentAmount)
+    })
+  }
+
+  // Removed details renderer for now (handled by external page)
+
   prompt.innerHTML = `
         <!-- Header with Woolsocks logo and controls -->
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; height: 33px;">
@@ -447,26 +680,25 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
         </div>
 
     <!-- Main Content -->
-    <div style="flex: 1; background: white; margin: 0 0 25px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: visible; position: relative;">
-          <!-- Partner Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 4px 16px; height: 32px;">
-            <div style="display: flex; align-items: center;">
-              <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">${partner.name}</span>
+    <div id="ws-container" style="flex: 1; background: white; margin: 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: hidden; position: relative;">
+          <!-- Reminder entry state -->
+          <div id="ws-reminder" style="padding: 16px; display: block; opacity:1; transform: translateY(0); transition: opacity 0.2s, transform 0.2s;">
+            <div style="text-align:center; margin-top: 8px; color: #846CF8; font-weight: 600; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px;">You can save</div>
+            <div style="display:flex; justify-content:center; margin-top:8px;">
+              <div style="background:#6F5CF1; color:#fff; border-radius:16px; padding:10px 14px; font-size:26px; font-weight:800;">€${cashback.toFixed(2).replace('.', ',')}</div>
             </div>
-            <div id="service-switch" style="display: flex; align-items: center; background: #E5F2FF; border-radius: 8px; padding: 8px; height: 32px; cursor: pointer;">
-              <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 12px; color: #0084FF; margin-right: 4px;">Vouchers</span>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="#0084FF" stroke-width="1.43" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
+            <div style="text-align:center; margin-top:8px; color:#846CF8; font-weight:600; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 16px;">on this purchase</div>
+            <button id="ws-reminder-cta" style="margin-top:14px; width: 100%; height: 40px; background: #211940; color: white; border: none; border-radius: 10px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;">Get it</button>
           </div>
 
-          <!-- Merchant Logo -->
-          <div style="display: flex; justify-content: center; position: relative; top: -48px; margin: 0 0 32px 0;">
-            <div style="width: 48px; height: 48px; background: white; border: 7px solid #FDC408; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-              ${getMerchantLogo(partner)}
-            </div>
+          <!-- Verify state container (hidden until CTA) -->
+          <div id="ws-verify" style="display:none; opacity:0; transform: translateY(6px); transition: opacity 0.2s, transform 0.2s;">
+          <!-- Partner Header (left-aligned, no service switch) -->
+          <div style="display: flex; align-items: center; padding: 12px 16px 4px 16px; height: 32px;">
+            <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">${partner.name}</span>
           </div>
+
+          <!-- Removed centered brand logo -->
 
           <!-- Dynamic Voucher Card -->
           <div style="display: flex; flex-direction: column; align-items: center; margin: 0 20px;">
@@ -477,8 +709,8 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
         
         <!-- Dynamic Voucher Info -->
         <div style="text-align: center; margin-top: 16px;">
-          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; margin-bottom: 4px;">${partner.name} Cadeaukaart</div>
-          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 14px; color: #020B0F; opacity: 0.5;">Geldig ${Math.floor(voucher.validityDays / 365)} jaar na aankoop</div>
+          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 14px; color: #100B1C; margin-bottom: 8px;">${partner.name} Cadeaukaart</div>
+          <button id="ws-open-product" style="background:#E5F2FF; color:#0084FF; border:none; border-radius:8px; padding:8px 12px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight:600; font-size:12px; cursor:pointer;">View details</button>
         </div>
       </div>
 
@@ -509,9 +741,10 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
 
       <!-- Buy Button -->
       <div style="padding: 0 16px 16px 16px;">
-        <button id="buy-voucher" style="width: 100%; height: 40px; background: #211940; color: white; border: none; border-radius: 4px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+        <button id="buy-voucher" style="width: 100%; height: 40px; background: #211940; color: white; border: none; border-radius: 4px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap:8px;">
           Continue
         </button>
+      </div>
       </div>
     </div>
 
@@ -583,6 +816,29 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
     } else {
       console.error('Close button not found!')
     }
+    // Reminder CTA → show verify state
+    const reminder = document.getElementById('ws-reminder')
+    const verify = document.getElementById('ws-verify')
+    const container = document.getElementById('ws-container')
+    const reminderCta = document.getElementById('ws-reminder-cta')
+    reminderCta?.addEventListener('click', () => {
+      if (reminder && verify && container) {
+        // animate out reminder
+        reminder.style.opacity = '0'
+        reminder.style.transform = 'translateY(-6px)'
+        // measure verify height by showing it offscreen
+        verify.style.display = 'block'
+        const targetHeight = container.scrollHeight
+        verify.style.opacity = '1'
+        verify.style.transform = 'translateY(0)'
+        // animate container height
+        container.style.height = targetHeight + 'px'
+        setTimeout(() => {
+          reminder.style.display = 'none'
+          container.style.height = 'auto'
+        }, 200)
+      }
+    })
     // Amount input functionality with debugging
     const amountInput = document.getElementById('amount-input') as HTMLInputElement
     const cashbackAmountSpan = document.getElementById('cashback-amount')
@@ -720,23 +976,62 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
       }
     })
     
+    // Light blue details button opens product page in a new tab
+    const openProductBtn = document.getElementById('ws-open-product')
+    openProductBtn?.addEventListener('click', async () => {
+      try {
+        // Determine final amount and open Woolsocks product page
+        const finalAmount = (window as any).currentAmount ?? amount
+        const resolvedUrl =
+          (partner.buildVoucherProductUrl && partner.buildVoucherProductUrl(finalAmount, 'EUR')) ||
+          partner.voucherProductUrl ||
+          'https://woolsocks.eu'
+
+        await chrome.storage.session.set({
+          voucherIntent: {
+            partner: partner.name,
+            domain: partner.domain,
+            amount: finalAmount,
+            createdAt: Date.now()
+          }
+        })
+        // Try background to open new tab; if that fails, fallback to window.open
+        try {
+          console.log('[Woolsocks] Opening product URL via background:', resolvedUrl)
+          chrome.runtime.sendMessage({ type: 'OPEN_VOUCHER_PRODUCT', url: resolvedUrl }, (resp: any) => {
+            // Handle possible errors or missing response
+            if (chrome.runtime && (chrome.runtime as any).lastError) {
+              console.warn('[Woolsocks] Background open error:', (chrome.runtime as any).lastError)
+              window.open(resolvedUrl, '_blank', 'noopener,noreferrer')
+              return
+            }
+            const ok = resp && resp.ok
+            if (!ok) {
+              console.warn('[Woolsocks] Background did not confirm tab open, falling back to window.open')
+              window.open(resolvedUrl, '_blank', 'noopener,noreferrer')
+            }
+          })
+        } catch (_e) {
+          console.warn('[Woolsocks] Background message throw, falling back to window.open')
+          window.open(resolvedUrl, '_blank', 'noopener,noreferrer')
+        }
+        // Switch UI to waiting state immediately
+        renderWaiting(prompt, finalAmount)
+      } catch (e) {
+        console.error('[Woolsocks] Failed to open product page:', e)
+        // Still move to waiting to avoid dead-end
+        renderWaiting(prompt, (window as any).currentAmount ?? amount)
+      }
+    })
+    // Main CTA now also moves to waiting state immediately (doesn't open a tab)
     const buyBtn = document.getElementById('buy-voucher')
     buyBtn?.addEventListener('click', () => {
-      cleanupPrompt()
-      
-      // Get current values from input or fallback to original values
       const finalAmount = (window as any).currentAmount ?? amount
-      const finalCashback = (window as any).currentCashback ?? (finalAmount * (voucher.cashbackRate / 100))
-      
-      // Simulate voucher purchase
-      const voucherCode = Math.random().toString(36).substring(2, 15).toUpperCase()
-      alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
-      // After voucher purchase, set icon to green (active)
-      chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
+      renderWaiting(prompt, finalAmount)
     })
 
     // Auto-dismiss after 30 seconds with cleanup
-    const autoDismissTimer = setTimeout(cleanupPrompt, 30000)
+    const autoDismissTimer = setTimeout(() => {}, 30000)
     
     // Cleanup on page navigation
     const beforeUnloadHandler = () => {
@@ -744,6 +1039,19 @@ function showVoucherOffer(partner: any, voucher: any, amount: number) {
       cleanupPrompt()
     }
     window.addEventListener('beforeunload', beforeUnloadHandler)
+    // If there is an existing voucher intent for this domain, resume waiting state
+    chrome.storage.session.get('voucherIntent').then((data) => {
+      const intent = (data as any)?.voucherIntent
+      const THIRTY_MIN = 30 * 60 * 1000
+      if (intent && intent.domain === partner.domain && Date.now() - intent.createdAt < THIRTY_MIN) {
+        // Hide reminder/verify and show waiting with animation
+        const reminder = document.getElementById('ws-reminder')
+        const verify = document.getElementById('ws-verify')
+        if (reminder) reminder.style.display = 'none'
+        if (verify) verify.style.display = 'none'
+        renderWaiting(prompt, intent.amount || amount)
+      }
+    }).catch(() => {})
   }, 100)
 }
 
