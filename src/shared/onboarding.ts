@@ -57,3 +57,4 @@ export function markOnboardingComplete(): void {
 export function resetOnboarding(): void {
   localStorage.removeItem('woolsocks-onboarding-completed')
 }
+

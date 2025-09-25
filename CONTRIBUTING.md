@@ -393,3 +393,4 @@ Contributors will be recognized in:
 - GitHub contributor graphs
 
 Thank you for contributing to Woolsocks Extension! 🚀
+

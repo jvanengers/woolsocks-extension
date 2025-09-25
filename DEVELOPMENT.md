@@ -349,3 +349,4 @@ Minimize required permissions:
 ### React Resources
 - [React Documentation](https://reactjs.org/docs/)
 - [Vite Guide](https://vitejs.dev/guide/)
+

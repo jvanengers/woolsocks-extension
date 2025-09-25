@@ -172,3 +172,4 @@ For support with version updates or migration:
 ---
 
 *This changelog is maintained by the Woolsocks development team. For the most up-to-date information, always refer to the latest release notes on GitHub.*
+
