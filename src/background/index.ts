@@ -375,10 +375,10 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   
   console.log(`[DEBUG] Showing voucher offer for ${partner.name} with ${partner.cashbackRate}% cashback`)
   
-  // MVP: Simplified voucher offer - just redirect to deal page
+  // Render single voucher view with USPs
   chrome.scripting.executeScript({
     target: { tabId },
-    func: showSimplifiedVoucherOffer,
+    func: showVoucherDetailWithUsps,
     args: [partner, checkoutTotal]
   })
 }
@@ -389,11 +389,17 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 
 // Removed unused showProfileScreen function
 
-function showSimplifiedVoucherOffer(partner: any, amount: number) {
+// (Removed old simplified voucher list renderer)
+
+// Removed showCashbackPrompt function - no longer using automatic cashback prompts
+
+// Removed unused showProfileScreen function
+
+function showVoucherDetailWithUsps(partner: any, amount: number) {
   // Prevent multiple instances
   const existing = document.getElementById('woolsocks-voucher-prompt')
   if (existing) return
-  
+
   function markVoucherDismissed(ms: number) {
     const host = window.location.hostname
     const until = Date.now() + ms
@@ -403,10 +409,29 @@ function showSimplifiedVoucherOffer(partner: any, amount: number) {
       map[host] = until
       window.localStorage.setItem('__wsVoucherDismissals', JSON.stringify(map))
     } catch {
-      // Fallback: store on the DOM element to signal dismissal within the page
       try { document.documentElement.setAttribute('data-ws-voucher-dismissed-until', String(until)) } catch {}
     }
   }
+
+  type VoucherDeal = { name?: string; cashbackRate?: number; imageUrl?: string; url?: string }
+  const collected: VoucherDeal[] = []
+  const voucherCategory = Array.isArray(partner.categories)
+    ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
+    : null
+
+  if (voucherCategory && Array.isArray(voucherCategory.deals)) {
+    for (const d of voucherCategory.deals) {
+      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: d?.imageUrl, url: d?.dealUrl })
+    }
+  } else if (Array.isArray(partner.allVouchers)) {
+    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: v.imageUrl, url: v.url })
+  } else if (partner.voucherProductUrl) {
+    collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: partner.merchantImageUrl, url: partner.voucherProductUrl })
+  }
+
+  const best = collected
+    .filter(v => typeof v.cashbackRate === 'number' && (v.cashbackRate as number) > 0)
+    .sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))[0]
 
   const prompt = document.createElement('div')
   prompt.id = 'woolsocks-voucher-prompt'
@@ -427,155 +452,110 @@ function showSimplifiedVoucherOffer(partner: any, amount: number) {
     transition: opacity 0.3s ease, transform 0.3s ease;
   `
 
-  const cashbackAmount = (amount * partner.cashbackRate / 100).toFixed(2)
-  
-  // Gather voucher deals from categories
-  const voucherCategory = Array.isArray(partner.categories)
-    ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
-    : null
+  const effectiveRate = typeof (best?.cashbackRate ?? partner.cashbackRate) === 'number' ? (best?.cashbackRate ?? partner.cashbackRate) : 0
+  const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
 
-  type VoucherDeal = { name?: string; cashbackRate?: number; imageUrl?: string; url?: string }
-  const collected: VoucherDeal[] = []
-  if (voucherCategory && Array.isArray(voucherCategory.deals)) {
-    for (const d of voucherCategory.deals) {
-      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: d?.imageUrl, url: d?.dealUrl })
-    }
-  } else if (Array.isArray(partner.allVouchers)) {
-    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: v.imageUrl, url: v.url })
-  } else if (partner.voucherProductUrl) {
-    collected.push({ name: partner.name + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: partner.merchantImageUrl, url: partner.voucherProductUrl })
-  }
+  const usps: Array<{ icon: string; text: string }> = [
+    { icon: '✅', text: 'Instant delivery' },
+    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ icon: '💶', text: `${effectiveRate}% cashback on purchase` }] : []),
+    { icon: '🛍️', text: 'Use online at checkout' },
+  ]
 
-  // Filter out invalid/zero-rate items and deduplicate (keep highest rate)
-  const bestByKey = new Map<string, VoucherDeal>()
-  for (const v of collected) {
-    const rate = typeof v.cashbackRate === 'number' ? v.cashbackRate : 0
-    if (rate <= 0) continue
-    const key = (v.url || (v.name || '').toLowerCase().trim()) || Math.random().toString(36)
-    const existingDeal = bestByKey.get(key)
-    if (!existingDeal || (existingDeal.cashbackRate || 0) < rate) {
-      bestByKey.set(key, v)
-    }
-  }
-  const voucherDeals = Array.from(bestByKey.values()).sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))
-  
-  // Build list UI
-  let vouchersHtml = ''
-  if (voucherDeals.length > 0) {
-    vouchersHtml = voucherDeals.map((v) => `
-      <div style="display: flex; align-items: center; padding: 12px; border: 1px solid #E5E7EB; border-radius: 8px; margin-bottom: 12px; background: #FAFAFA;">
-        <div style="width: 60px; height: 40px; margin-right: 12px; flex-shrink: 0;">
-          ${v.imageUrl ? 
-            `<img src="${v.imageUrl}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;" alt="${v.name || 'Voucher'}">` :
-            `<div style=\"width: 100%; height: 100%; background: #E5E7EB; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #666;\">Gift</div>`
-          }
-        </div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 12px; color: #666; margin-bottom: 2px;">Instant delivery</div>
-          <div style="font-size: 14px; font-weight: 600; color: #100B1C; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${v.name || 'Gift Card'}
-          </div>
-            </div>
-        <div style="text-align: right; margin-left: 8px;">
-          <div style="font-size: 14px; font-weight: 600; color: #0084FF;">
-            ${v.cashbackRate}%
-          </div>
-        </div>
-        <button class="ws-voucher-btn" data-url="${v.url || ''}" style="margin-left: 8px; padding: 6px 12px; background: #211940; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">
-          Use
-        </button>
-      </div>
-    `).join('')
-  } else {
-    vouchersHtml = `<div style="font-size: 13px; color: #666;">No vouchers available at this moment.</div>`
-  }
+  const image = best?.imageUrl || partner.merchantImageUrl || ''
+  const title = best?.name || partner.name || 'Gift Card'
+  const rateBadge = typeof effectiveRate === 'number' && effectiveRate > 0 ? `${effectiveRate.toFixed(0)}%` : ''
+
+  // Details (optional): omitted here as they are not available in current partner payload
 
   prompt.innerHTML = `
     <div style="padding: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #100B1C;">${partner.name} Vouchers</h3>
-        <button id="ws-close" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #666;">×</button>
+        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
+        <button id="ws-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666; line-height: 1;">×</button>
+      </div>
+
+      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+        <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">Voucher</div>
+          <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
+        </div>
+        ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
+      </div>
+
+      <div style="margin-bottom: 16px; padding: 12px; background: #F0F8FF; border-radius: 10px;">
+        <div style="font-size: 13px; color: #1D4ED8; font-weight: 600;">You’ll get cashback</div>
+        <div style="font-size: 18px; color: #111827; font-weight: 700; margin-top: 2px;">€${cashbackAmount}</div>
+        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Purchase amount: €${amount.toFixed(2)}</div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        ${usps.map(u => `
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #F3F4F6;">
+            <span style="font-size: 14px;">${u.icon}</span>
+            <span style="font-size: 13px; color: #111827;">${u.text}</span>
           </div>
-          
-      <div style="margin-bottom: 16px;">
-        <div style="font-size: 14px; color: #666; margin-bottom: 8px;">Purchase amount</div>
-        <div style="font-size: 18px; font-weight: 600; color: #100B1C;">€${amount.toFixed(2)}</div>
+        `).join('')}
       </div>
 
-      <div style="margin-bottom: 20px; padding: 12px; background: #F0F8FF; border-radius: 8px;">
-        <div style="font-size: 14px; color: #0084FF; font-weight: 600;">
-          You'll get ${partner.cashbackRate}% cashback
-        </div>
-        <div style="font-size: 16px; color: #100B1C; font-weight: 600; margin-top: 4px;">
-          €${cashbackAmount}
-        </div>
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+        <button id="ws-use-voucher" style="flex: 1; padding: 10px 14px; background: #211940; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;">
+          Use voucher
+        </button>
+        <button id="ws-dismiss" style="padding: 10px 12px; background: #F3F4F6; color: #374151; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;">
+          Not now
+        </button>
       </div>
 
-      <div style="margin-bottom: 16px;">
-        <div style="font-size: 14px; color: #666; margin-bottom: 12px; font-weight: 600;">Available Vouchers:</div>
-        ${vouchersHtml}
-      </div>
+      
     </div>
   `
 
   document.body.appendChild(prompt)
 
-  // Animate in
   setTimeout(() => {
-    prompt.style.opacity = '1'
-    prompt.style.transform = 'translateY(0) scale(1)'
+    (prompt as HTMLElement).style.opacity = '1'
+    ;(prompt as HTMLElement).style.transform = 'translateY(0) scale(1)'
   }, 100)
 
-  // Event listeners
   document.getElementById('ws-close')?.addEventListener('click', () => {
-    // Prevent immediate re-open after manual dismiss
-    markVoucherDismissed(5 * 60 * 1000) // 5 minutes
-    prompt.style.opacity = '0'
-    prompt.style.transform = 'translateY(-10px) scale(0.95)'
+    markVoucherDismissed(5 * 60 * 1000)
+    ;(prompt as HTMLElement).style.opacity = '0'
+    ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
+    setTimeout(() => prompt.remove(), 300)
+  })
+  document.getElementById('ws-dismiss')?.addEventListener('click', () => {
+    markVoucherDismissed(5 * 60 * 1000)
+    ;(prompt as HTMLElement).style.opacity = '0'
+    ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
     setTimeout(() => prompt.remove(), 300)
   })
 
-  // Handle individual voucher buttons
-  document.querySelectorAll('.ws-voucher-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const target = e.target as HTMLButtonElement
-      const voucherUrl = target.getAttribute('data-url')
-      
-      if (voucherUrl) {
-        let dealUrl = voucherUrl
-        
-        // Add amount parameter if it's a product URL
-        if (dealUrl.includes('/products/') && !dealUrl.includes('amount=')) {
-          const amountInCents = Math.round(amount * 100)
-          const separator = dealUrl.includes('?') ? '&' : '?'
-          dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
-        }
-        
-        chrome.runtime.sendMessage({
-          type: 'OPEN_URL',
-          url: dealUrl
-        })
-        // Consider engagement as an implicit dismiss to avoid quick re-open
-        markVoucherDismissed(5 * 60 * 1000)
-        prompt.remove()
-      }
-    })
+  const cta = document.getElementById('ws-use-voucher')
+  cta?.addEventListener('click', () => {
+    const voucherUrl = best?.url || partner.voucherProductUrl
+    if (!voucherUrl) return
+    let dealUrl = voucherUrl
+    if (dealUrl.includes('/products/') && !dealUrl.includes('amount=')) {
+      const amountInCents = Math.round(amount * 100)
+      const separator = dealUrl.includes('?') ? '&' : '?'
+      dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
+    }
+    chrome.runtime.sendMessage({ type: 'OPEN_URL', url: dealUrl })
+    markVoucherDismissed(5 * 60 * 1000)
+    prompt.remove()
   })
 
-  // Auto-dismiss after 30 seconds
   setTimeout(() => {
     if (document.body.contains(prompt)) {
-      // Respect auto-dismiss as a dismissal to avoid immediate re-open due to DOM changes
       markVoucherDismissed(5 * 60 * 1000)
-      prompt.style.opacity = '0'
-      prompt.style.transform = 'translateY(-10px) scale(0.95)'
+      ;(prompt as HTMLElement).style.opacity = '0'
+      ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
       setTimeout(() => prompt.remove(), 300)
     }
   }, 30000)
 }
-
-// Removed showCashbackPrompt function - no longer using automatic cashback prompts
-
-// Removed unused showProfileScreen function
 
 
