@@ -863,12 +863,7 @@ function detectCheckout(): CheckoutInfo | null {
   const extracted = detector.extractTotal()
   let total = extracted && extracted > 0 ? extracted : 0
 
-  // Normalize values that are 100x too large (e.g., 1516.00 instead of 15.16, 87745.00 instead of 877.45)
-  if (total >= 100) {
-    const maybe = total / 100
-    // Apply normalization if the result is a reasonable e-commerce amount (< 1000)
-    if (maybe < 1000 && maybe > 0) total = maybe
-  }
+  // Do not auto-normalize amounts >= 100; sites like Zalando legitimately have totals ≥ 100
 
   return {
     total,
