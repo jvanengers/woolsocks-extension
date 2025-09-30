@@ -455,10 +455,12 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   const effectiveRate = typeof (best?.cashbackRate ?? partner.cashbackRate) === 'number' ? (best?.cashbackRate ?? partner.cashbackRate) : 0
   const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
 
-  const usps: Array<{ icon: string; text: string }> = [
-    { icon: '✅', text: 'Instant delivery' },
-    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ icon: '💶', text: `${effectiveRate}% cashback on purchase` }] : []),
-    { icon: '🛍️', text: 'Use online at checkout' },
+  // USPs with unified checkmark icon
+  const uspIconUrl = (() => { try { return chrome.runtime.getURL('public/icons/Circle checkmark.svg') } catch { return '' } })()
+  const usps: Array<{ text: string }> = [
+    { text: 'Instant delivery' },
+    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}% cashback on purchase` }] : []),
+    { text: 'Use online at checkout' },
   ]
 
   const image = best?.imageUrl || partner.merchantImageUrl || ''
@@ -513,7 +515,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
       <div style="margin-bottom: 16px;">
         ${usps.map(u => `
           <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #F3F4F6;">
-            <span style="font-size: 14px;">${u.icon}</span>
+            ${uspIconUrl ? `<img src="${uspIconUrl}" alt="check" style="width:16px;height:16px;display:block;" />` : ''}
             <span style="font-size: 13px; color: #111827;">${u.text}</span>
           </div>
         `).join('')}
