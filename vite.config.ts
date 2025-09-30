@@ -25,7 +25,7 @@ const manifest = {
     16: 'icons/icon-grey-16.png',
     32: 'icons/icon-grey-32.png',
     48: 'icons/icon-grey-48.png',
-    128: 'icons/icon-128.png',
+    128: 'icons/icon-yellow-128px16.png',
   },
   options_ui: {
     page: 'src/options/index.html',

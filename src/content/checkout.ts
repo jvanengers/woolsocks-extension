@@ -39,6 +39,31 @@ interface CheckoutDetector {
   getCurrency: () => string
 }
 
+// Retry state for delayed amount availability
+let __wsLastSentTotal: number | null = null
+let __wsRetryTimeoutId: number | null = null
+let __wsRetryAttempts = 0
+const __wsMaxRetryAttempts = 10
+
+function __wsClearRetry() {
+  if (__wsRetryTimeoutId) {
+    clearTimeout(__wsRetryTimeoutId)
+    __wsRetryTimeoutId = null
+  }
+  __wsRetryAttempts = 0
+}
+
+function __wsScheduleRetry(trigger: () => void) {
+  if (__wsRetryAttempts >= __wsMaxRetryAttempts) return
+  const base = 500
+  const delay = Math.min(base * Math.pow(2, __wsRetryAttempts), 8000)
+  __wsRetryAttempts += 1
+  if (__wsRetryTimeoutId) clearTimeout(__wsRetryTimeoutId)
+  __wsRetryTimeoutId = window.setTimeout(() => {
+    trigger()
+  }, delay)
+}
+
 // Amazon checkout detection
 const amazonDetector: CheckoutDetector = {
   isCheckoutPage: () => {
@@ -870,15 +895,21 @@ function throttle(func: Function, delay: number) {
 const debouncedCheckForCheckout = throttle(() => {
   const checkoutInfo = detectCheckout()
   if (checkoutInfo) {
-    // Respect recent manual dismissals to avoid re-opening
     if (isVoucherDismissed(window.location.hostname)) return
-    chrome.runtime.sendMessage({
-      type: 'CHECKOUT_DETECTED',
-      checkoutInfo
-    })
-    // Ensure voucher prompt is not blocked by an existing cashback banner
-    const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
-    if (cashbackPrompt) cashbackPrompt.remove()
+    if (checkoutInfo.total && checkoutInfo.total > 0) {
+      if (__wsLastSentTotal !== checkoutInfo.total) {
+        chrome.runtime.sendMessage({
+          type: 'CHECKOUT_DETECTED',
+          checkoutInfo
+        })
+        __wsLastSentTotal = checkoutInfo.total
+        __wsClearRetry()
+        const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
+        if (cashbackPrompt) cashbackPrompt.remove()
+      }
+    } else {
+      __wsScheduleRetry(debouncedCheckForCheckout)
+    }
   }
 }, 500) // Throttle to max once per 500ms
 
@@ -923,8 +954,8 @@ const observer = new MutationObserver((mutations) => {
   if (relevantMutations.length > 0) debouncedCheckForCheckout()
 })
 
-observer.observe(document.body, { childList: true, subtree: false, attributes: false })
+observer.observe(document.body, { childList: true, subtree: true, attributes: false })
 
-function cleanup() { observer.disconnect(); clearInterval(urlCheckInterval) }
+function cleanup() { observer.disconnect(); clearInterval(urlCheckInterval); __wsClearRetry() }
 window.addEventListener('beforeunload', cleanup)
 if (typeof window !== 'undefined') { ;(window as any).__woolsocksCleanup = cleanup }
