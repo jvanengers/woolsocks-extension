@@ -467,6 +467,25 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
 
   // Details (optional): omitted here as they are not available in current partner payload
 
+  // Payment methods row (from extension assets)
+  const paymentIconFiles = [
+    'public/icons/Payment method icon_VISA.png',
+    'public/icons/Payment method icon_mastercard.png',
+    'public/icons/Payment method icon_IDEAL.png',
+    'public/icons/Payment method icon_APPLEPAY.png',
+    'public/icons/Payment method icon_GPAY.png',
+  ]
+  const paymentIconUrls = paymentIconFiles.map((p) => {
+    try {
+      return chrome.runtime.getURL(p)
+    } catch {
+      return ''
+    }
+  }).filter(Boolean)
+  const paymentIconsHtml = paymentIconUrls.map((src) => `
+    <img src="${src}" alt="payment" style="height: 18px; width: auto; display: block;" />
+  `).join('')
+
   prompt.innerHTML = `
     <div style="padding: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -498,6 +517,10 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
             <span style="font-size: 13px; color: #111827;">${u.text}</span>
           </div>
         `).join('')}
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin: 6px 0 14px;">
+        ${paymentIconsHtml}
       </div>
 
       <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
