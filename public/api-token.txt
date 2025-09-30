@@ -1,0 +1,3 @@
+# Place the shared Bearer token on a single line below. This file is packaged with the extension.
+# Do not commit real secrets to public repos. For local builds, replace with your token.
+# The API client will read this file at runtime via chrome.runtime.getURL('api-token.txt').

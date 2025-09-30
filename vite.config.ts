@@ -31,14 +31,32 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications'],
-  host_permissions: ['https://*/*', 'http://*/*'],
+  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest', 'webRequestBlocking'],
+  host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {
       matches: ['<all_urls>'],
       js: ['src/content/checkout.ts'],
-      run_at: 'document_end'
-    }
+      run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*'
+      ]
+    },
+    {
+      matches: ['<all_urls>'],
+      js: ['src/content/entrance.ts'],
+      run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*'
+      ]
+    },
+    // Intentionally do not inject any content scripts on woolsocks.eu
   ],
   web_accessible_resources: [
     {
@@ -47,7 +65,7 @@ const manifest = {
     },
   ],
   content_security_policy: {
-    extension_pages: "script-src 'self'; object-src 'self'; connect-src 'self' https:;"
+    extension_pages: "script-src 'self'; object-src 'self'; connect-src 'self' https: https://woolsocks.eu https://api.woolsocks.eu;"
   },
 }
 
@@ -61,6 +79,7 @@ export default defineConfig({
         options: 'src/options/index.html',
         background: 'src/background/index.ts',
         content: 'src/content/checkout.ts',
+        entrance: 'src/content/entrance.ts',
       },
     },
   },

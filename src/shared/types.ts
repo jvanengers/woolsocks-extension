@@ -47,8 +47,7 @@ export interface ActivationRecord {
   status: 'active' | 'completed' | 'expired'
 }
 
-export interface MockUser {
-  isLoggedIn: boolean
+export interface AnonymousUser {
   totalEarnings: number
   activationHistory: ActivationRecord[]
   settings: {
@@ -78,4 +77,50 @@ export interface VoucherOffer {
   cashbackAmount: number
   isVisible: boolean
   dismissed: boolean
+}
+
+// Enhanced partner data with detailed deals and categories
+export interface Deal {
+  name: string
+  rate: number
+  description?: string
+  imageUrl?: string
+  dealUrl?: string
+}
+
+export interface Category {
+  name: string
+  iconUrl?: string
+  deals: Deal[]
+  maxRate?: number
+}
+
+export interface PartnerLite {
+  domain: string
+  name: string
+  cashbackRate: number
+  voucherAvailable: boolean
+  dealUrl?: string
+  voucherProductUrl?: string
+  // Enhanced data
+  categories?: Category[]
+  merchantImageUrl?: string
+  description?: string
+  // Voucher data
+  allVouchers?: Array<{
+    url: string
+    imageUrl?: string
+    name?: string
+    cashbackRate?: number
+  }>
+}
+
+// MVP: Remote config cache structure
+export interface PartnersCache {
+  partners: PartnerLite[]
+  toggles: Record<string, boolean>
+  fetchedAt: number
+  ttl: number
+  etag?: string
+  lastModified?: string
 }

@@ -1,133 +1,120 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { MockUser } from '../shared/types'
+
+type WsProfile = any
+
+async function getAnonId(): Promise<string> {
+  const stored = await chrome.storage.local.get('wsAnonId')
+  if (stored?.wsAnonId) return stored.wsAnonId as string
+  const id = crypto.randomUUID()
+  await chrome.storage.local.set({ wsAnonId: id })
+  return id
+}
+
+async function fetchUserInfo(): Promise<WsProfile | null> {
+  try {
+    const anonId = await getAnonId()
+    const resp = await fetch('https://woolsocks.eu/api/wsProxy/user-info/api/v0', {
+      credentials: 'include',
+      headers: {
+        'x-application-name': 'WOOLSOCKS_WEB',
+        'x-user-id': anonId,
+      },
+    })
+    if (!resp.ok) return null
+    const data = await resp.json()
+    return data
+  } catch {
+    return null
+  }
+}
 
 function Options() {
-  const [user, setUser] = useState<MockUser | null>(null)
+  const [session, setSession] = useState<boolean | null>(null)
+  const [profile, setProfile] = useState<WsProfile | null>(null)
 
   useEffect(() => {
-    chrome.storage.local.get('user', (res) => {
-      setUser(res.user || null)
+    checkSession().then((has) => {
+      setSession(has)
+      if (has) loadProfile()
     })
   }, [])
 
-  function updateSetting<K extends keyof MockUser['settings']>(key: K, value: MockUser['settings'][K]) {
-    if (!user) return
-    
-    const updatedUser = {
-      ...user,
-      settings: {
-        ...user.settings,
-        [key]: value
-      }
+  async function checkSession(): Promise<boolean> {
+    try {
+      const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
+      const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
+      const all = [...site, ...api]
+      return all.some(c => c.name === 'ws-session' || /session/i.test(c.name))
+    } catch {
+      return false
     }
-    setUser(updatedUser)
-    chrome.storage.local.set({ user: updatedUser })
   }
 
-  const logout = () => {
-    const loggedOutUser: MockUser = {
-      isLoggedIn: false,
-      totalEarnings: 0,
-      activationHistory: [],
-      settings: {
-        showCashbackPrompt: true,
-        showVoucherPrompt: true,
-      },
-    }
-    chrome.storage.local.set({ user: loggedOutUser })
-    setUser(loggedOutUser)
+  async function loadProfile() {
+    const p = await fetchUserInfo()
+    setProfile(p)
   }
 
-  if (!user) {
-    return <div>Loading...</div>
+  const openLogin = () => {
+    chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
   }
+
+  const firstName: string | undefined =
+    profile?.data?.firstName || profile?.firstName || profile?.user?.firstName
+
+  // Try to read a sensible sock/cashback balance from the profile payload
+  const sockValueRaw: number | undefined =
+    profile?.data?.sockValue ??
+    profile?.data?.cashback?.sockValue ??
+    profile?.data?.cashbackSock ??
+    profile?.data?.balance ??
+    profile?.sockValue ??
+    profile?.balance
+
+  const sockValue = typeof sockValueRaw === 'number' ? sockValueRaw : 0
 
   return (
-    <div style={{ width: 400, padding: 20, fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h2 style={{ margin: 0 }}>Woolsocks Settings</h2>
-        {user.isLoggedIn && (
-          <button
-            onClick={logout}
-            style={{
-              background: '#f5f5f5',
-              color: '#666',
-              border: '1px solid #ddd',
-              padding: '6px 12px',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontSize: 12
-            }}
-          >
-            Logout
-          </button>
-        )}
+    <div style={{ width: 420, padding: 24, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h2 style={{ margin: 0 }}>Woolsocks</h2>
+        <div style={{ fontSize: 12, color: '#666' }}>Options</div>
       </div>
 
-      {!user.isLoggedIn && (
-        <div style={{ 
-          background: '#fff3cd', 
-          border: '1px solid #ffeaa7', 
-          borderRadius: 4, 
-          padding: 12, 
-          marginBottom: 20,
-          fontSize: 14
-        }}>
-          <strong>Not logged in</strong><br />
-          <span style={{ color: '#666' }}>Log in to sync settings across devices</span>
+      {session === null && (
+        <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>Checking session…</div>
+      )}
+
+      {session === false && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 14, marginBottom: 12 }}>No active session found.</div>
+          <button
+            onClick={openLogin}
+            style={{
+              background: '#211940', color: 'white', border: 'none', borderRadius: 6,
+              padding: '10px 14px', fontSize: 13, cursor: 'pointer'
+            }}
+          >
+            Login at Woolsocks.eu
+          </button>
         </div>
       )}
 
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ fontSize: 16, margin: '0 0 12px 0' }}>Notifications</h3>
-        <label style={{ display: 'block', marginBottom: 12, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={user.settings.showCashbackPrompt}
-            onChange={(e) => updateSetting('showCashbackPrompt', e.target.checked)}
-            style={{ marginRight: 8 }}
-          />
-          <span>Cashback activation reminders</span>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-            Show popup when cashback is available on partner sites
-          </div>
-        </label>
-        <label style={{ display: 'block', marginBottom: 12, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={user.settings.showVoucherPrompt}
-            onChange={(e) => updateSetting('showVoucherPrompt', e.target.checked)}
-            style={{ marginRight: 8 }}
-          />
-          <span>Voucher suggestions at checkout</span>
-          <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-            Show gift card offers when you're about to pay
-          </div>
-        </label>
-        <p style={{ fontSize: 12, color: '#666', margin: '8px 0 0 0' }}>
-          💡 Icon will still change color even if popups are disabled
-        </p>
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ fontSize: 16, margin: '0 0 12px 0' }}>Account</h3>
-        <div style={{ fontSize: 14, color: '#666' }}>
-          <div>Total Earnings: <strong style={{ color: '#4CAF50' }}>€{user.totalEarnings.toFixed(2)}</strong></div>
-          <div style={{ marginTop: 4 }}>Active Cashback: {user.activationHistory.filter(a => a.status === 'active').length} sites</div>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
-        <h3 style={{ fontSize: 16, margin: '0 0 12px 0' }}>About</h3>
-        <div style={{ fontSize: 12, color: '#666' }}>
-          <div>Woolsocks Extension v0.1.0</div>
-          <div style={{ marginTop: 4 }}>
-            <a href="#" style={{ color: '#4CAF50' }}>Privacy Policy</a> • 
-            <a href="#" style={{ color: '#4CAF50', marginLeft: 8 }}>Terms of Service</a>
+      {session === true && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
+          <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>Cashback sock</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>€{sockValue.toFixed(2)}</div>
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={loadProfile}
+              style={{ background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}
+            >
+              Refresh
+            </button>
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
