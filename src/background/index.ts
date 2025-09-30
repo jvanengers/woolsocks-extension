@@ -485,7 +485,9 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
     }
   }).filter(Boolean)
   const paymentIconsHtml = paymentIconUrls.map((src) => `
-    <img src="${src}" alt="payment" style="height: 18px; width: auto; display: block;" />
+    <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0;">
+      <img src="${src}" alt="payment" style="height: 36px; width: auto; display: block; max-width: 100%; object-fit: contain;" />
+    </div>
   `).join('')
 
   prompt.innerHTML = `
@@ -521,7 +523,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
         `).join('')}
       </div>
 
-      <div style="display: flex; align-items: center; gap: 10px; margin: 6px 0 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 14px; width: 100%;">
         ${paymentIconsHtml}
       </div>
 
