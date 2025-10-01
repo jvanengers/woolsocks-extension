@@ -216,7 +216,9 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
     let voucherAvailable = false
     const categories: Category[] = []
 
+    // We'll first collect voucher candidates and then filter them using the giftcard details endpoint (usageType)
     const vouchers: any[] = []
+    const voucherCandidates: Array<{ id: string; item: any }> = []
     const cashback: any[] = []
     const autorewards: any[] = []
 
@@ -231,10 +233,43 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
         dealType: d?.dealType,
       }
       const cls = classify(d?.dealType)
-      if (cls === 'VOUCHERS') vouchers.push(item)
+      if (cls === 'VOUCHERS') {
+        // Extract a product id for the details endpoint
+        const explicitId = (d as any)?.providerReferenceId || (d as any)?.productId || (d as any)?.id
+        let productId: string | null = explicitId || null
+        if (!productId && item.dealUrl) {
+          const m = String(item.dealUrl).match(/products\/([A-Za-z0-9-]{8,})/)
+          productId = m ? m[1] : null
+        }
+        if (productId) {
+          voucherCandidates.push({ id: productId, item })
+        }
+      }
       else if (cls === 'ONLINE_CASHBACK') cashback.push(item)
       else if (cls === 'AUTOREWARDS') autorewards.push(item)
     }
+
+    // Helper to fetch giftcard product details and filter by ONLINE usage
+    async function filterVoucherCandidatesOnlineOnly(cands: Array<{ id: string; item: any }>): Promise<any[]> {
+      if (!cands.length) return []
+      const results = await Promise.all(cands.map(async (c) => {
+        try {
+          const res = await fetchViaSiteProxy<any>(`/giftcards/api/v0.0.2/products/${encodeURIComponent(c.id)}`)
+          const product = (res?.data && (res.data.data?.product || res.data.product)) || null
+          const usageType = (product?.usageType || '').toString().toUpperCase()
+          const normalized = usageType.replace(/[^A-Z]/g, '')
+          const include = normalized === 'ALL' || normalized.includes('ONLINE')
+          return include ? c.item : null
+        } catch {
+          return null
+        }
+      }))
+      return results.filter(Boolean) as any[]
+    }
+
+    // Only include vouchers that are usable ONLINE
+    const filteredVouchers = await filterVoucherCandidatesOnlineOnly(voucherCandidates)
+    for (const v of filteredVouchers) vouchers.push(v)
 
     if (autorewards.length) {
       const max = Math.max(...autorewards.map(d => d.rate || 0))

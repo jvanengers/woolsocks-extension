@@ -523,7 +523,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     <div style="padding: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
-        <button id="ws-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666; line-height: 1;">×</button>
+        <button id="ws-close" style="background: none; border: none; font-size: 40px; cursor: pointer; color: #666; line-height: 1;">×</button>
       </div>
 
       <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
@@ -690,7 +690,10 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
       const separator = dealUrl.includes('?') ? '&' : '?'
       dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
     }
-    chrome.runtime.sendMessage({ type: 'OPEN_URL', url: dealUrl })
+    try {
+      // In MAIN world, chrome.runtime is not available. Use page → content bridge.
+      window.postMessage({ type: 'WS_OPEN_URL', url: dealUrl }, window.location.origin)
+    } catch {}
     markVoucherDismissed(5 * 60 * 1000)
     prompt.remove()
   })

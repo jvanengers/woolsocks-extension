@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { createRoot } from 'react-dom/client'
 
 type WsProfile = any
 type WsTransaction = any
@@ -45,7 +44,6 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
     const json = await resp.json()
     try { console.debug('[WS] transactions raw', json) } catch {}
 
-    // The API envelope can vary a bit; try common shapes
     let list: any[] = []
     if (Array.isArray(json?.data?.transactions)) list = json.data.transactions
     else if (Array.isArray(json?.transactions)) list = json.transactions
@@ -53,14 +51,12 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
     else if (Array.isArray(json)) list = json
     else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
 
-    // Normalize a few key fields we need in the UI
     const normalized = list.map((t) => {
       const merchant = t?.merchant || t?.merchantInfo || {}
       const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
       const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate
       const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
 
-      // Amount may be plain number, cents, or nested
       const rawAmount =
         typeof t?.amount === 'number' ? t.amount :
         typeof t?.amount?.amount === 'number' ? t.amount.amount :
@@ -81,7 +77,6 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
       }
     })
 
-    // Sort newest first and return top 5
     normalized.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     return normalized.slice(0, 5)
   } catch {
@@ -89,7 +84,7 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
   }
 }
 
-function Options() {
+export default function SettingsPanel({ variant = 'options', onBalance }: { variant?: 'popup' | 'options'; onBalance?: (balance: number) => void }) {
   const [session, setSession] = useState<boolean | null>(null)
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
@@ -125,14 +120,9 @@ function Options() {
     setTransactions(tx)
   }
 
-  const openLogin = () => {
-    chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
-  }
-
   const firstName: string | undefined =
     profile?.data?.firstName || profile?.firstName || profile?.user?.firstName
 
-  // Try to read a sensible sock/cashback balance from the profile payload
   const sockValueRaw: number | undefined =
     profile?.data?.sockValue ??
     profile?.data?.cashback?.sockValue ??
@@ -143,12 +133,14 @@ function Options() {
 
   const sockValue = typeof sockValueRaw === 'number' ? sockValueRaw : 0
 
+  // Notify parent (popup) about balance
+  useEffect(() => {
+    try { onBalance && onBalance(sockValue) } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sockValue])
+
   return (
     <div style={{ width: 320, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>Woolsocks</h2>
-        <div style={{ fontSize: 12, color: '#666' }}>Options</div>
-      </div>
 
       {session === null && (
         <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>Checking session…</div>
@@ -158,7 +150,7 @@ function Options() {
         <div style={{ marginTop: 24 }}>
           <div style={{ fontSize: 14, marginBottom: 12 }}>No active session found.</div>
           <button
-            onClick={openLogin}
+            onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })}
             style={{
               background: '#211940', color: 'white', border: 'none', borderRadius: 6,
               padding: '10px 14px', fontSize: 13, cursor: 'pointer'
@@ -170,28 +162,29 @@ function Options() {
       )}
 
       {session === true && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
-          <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>Cashback sock</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>€{sockValue.toFixed(2)}</div>
-          <div style={{ marginTop: 16 }}>
-            <button
-              onClick={() => { loadProfile(); loadTransactions() }}
-              style={{ background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}
-            >
-              Refresh
-            </button>
-          </div>
+        <div style={{ marginTop: variant === 'popup' ? 8 : 24 }}>
+          {variant === 'popup' ? (
+            <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>Hi {firstName || 'there'},</div>
+              <div style={{ marginTop: 8, fontSize: 16, color: '#6b7280' }}>Recent transactions</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
+              <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>Cashback sock</div>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#000000' }}>€{sockValue.toFixed(2)}</div>
+            </>
+          )}
 
           {/* Recent transactions */}
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: variant === 'popup' ? 12 : 24 }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Recent transactions</div>
             {transactions.length === 0 && (
               <div style={{ fontSize: 12, color: '#666' }}>No recent transactions found.</div>
             )}
             <div>
               {transactions.map((t) => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderTop: '1px solid #f0f0f0' }}>
+                <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
                   <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', background: '#f6f6f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {t.logo ? (
                       <img src={t.logo} alt={t.merchantName} style={{ width: 28, height: 28, objectFit: 'contain' }} />
@@ -240,8 +233,5 @@ function Options() {
     </div>
   )
 }
-
-const root = createRoot(document.getElementById('root')!)
-root.render(<Options />)
 
 

@@ -9,6 +9,18 @@ import type { CheckoutInfo } from '../shared/types'
 
 try { console.log('[Woolsocks] Checkout detection script loaded on:', window.location.hostname) } catch {}
 
+// Bridge: listen for page (MAIN world) requests to open URLs and relay to background
+window.addEventListener('message', (event) => {
+  try {
+    if (event.source !== window) return
+    const data = event.data as any
+    if (!data || typeof data !== 'object') return
+    if (data.type === 'WS_OPEN_URL' && typeof data.url === 'string') {
+      try { chrome.runtime.sendMessage({ type: 'OPEN_URL', url: data.url }) } catch {}
+    }
+  } catch {}
+})
+
 // Merchant support check (non-blocking)
 let __wsSupportChecked = false
 
@@ -392,6 +404,7 @@ const coolblueDetector: CheckoutDetector = {
     const url = window.location.href
     return url.includes('/cart') || 
            url.includes('/checkout') ||
+           url.includes('/winkelmandje') ||
            document.querySelector('.checkout-summary') !== null
   },
   extractTotal: () => {
@@ -514,10 +527,8 @@ const ikeaDetector: CheckoutDetector = {
 const hemaDetector: CheckoutDetector = {
   isCheckoutPage: () => {
     const url = window.location.href
-    return url.includes('/cart') || 
-           url.includes('/checkout') ||
-           document.querySelector('[class*="cart"]') !== null ||
-           document.querySelector('[class*="winkelmand"]') !== null
+    // Only trigger on the specific cart page URL
+    return url === 'https://www.hema.nl/cart' || url.endsWith('/cart')
   },
   extractTotal: () => {
     // HEMA specific selectors - target the actual total row in the cart
@@ -554,13 +565,28 @@ const hemaDetector: CheckoutDetector = {
     
     // Fallback: search for "totaal" patterns in the whole page
     const bodyText = document.body.textContent || ''
-    const totalMatch = bodyText.match(/totaal\s*€?\s*([\d]+[.,]?-?\d*)/i)
+    const totalMatch = bodyText.match(/totaal\s*€?\s*([\d]+[.,]?\d*)/i)
     if (totalMatch) {
       let amount = totalMatch[1].replace(',', '.').replace('-', '')
       if (amount.endsWith('.')) amount += '00'
       const parsed = parseFloat(amount)
       if (!isNaN(parsed) && parsed > 0) {
         return parsed
+      }
+    }
+    
+    // Additional fallback: look for the final total amount in the order summary
+    // Based on the HEMA cart page, look for the largest Euro amount that appears to be a total
+    const euroMatches = bodyText.match(/€\s*([\d.,]+)/g) || []
+    if (euroMatches.length > 0) {
+      const amounts = euroMatches.map(match => {
+        const amount = match.replace('€', '').trim()
+        return parseFloat(amount.replace('.', '').replace(',', '.'))
+      }).filter(amount => !isNaN(amount) && amount > 0)
+      
+      if (amounts.length > 0) {
+        // Return the largest amount (likely the total)
+        return Math.max(...amounts)
       }
     }
     
