@@ -2,6 +2,7 @@
 import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
+import { t, translate, initLanguage } from '../shared/i18n'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -78,11 +79,11 @@ const ICONS: Record<IconState, IconPaths> = {
 function setIcon(state: IconState, tabId?: number) {
   const path = ICONS[state] || ICONS.neutral
   const titleMap: Record<IconState, string> = {
-    neutral: 'No deals on this site',
-    available: 'Cashback available — click to activate',
-    active: 'Cashback activated',
-    voucher: 'Voucher deal available',
-    error: 'Attention needed',
+    neutral: t().icons.noDeals,
+    available: t().icons.cashbackAvailable,
+    active: t().icons.cashbackActive,
+    voucher: t().icons.voucherAvailable,
+    error: t().icons.attentionNeeded,
   }
   // Pass multi-size path map when available; Chrome will pick best size
   chrome.action.setIcon({ path: path as any, tabId })
@@ -90,6 +91,9 @@ function setIcon(state: IconState, tabId?: number) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  // Initialize language
+  await initLanguage()
+  
   // Initialize defaults
   const defaultUser: AnonymousUser = {
     totalEarnings: 0,
@@ -151,7 +155,7 @@ async function evaluateTab(tabId: number, url?: string | null) {
           files: ['content/checkout.js']
         })
         injectedScripts.add(tabId)
-        console.log(`[WS] Universal checkout script injected for tab ${tabId} on ${u.hostname}`)
+        console.log(translate('debug.scriptInjected', { tabId: String(tabId), hostname: u.hostname }))
       } catch (error) {
         console.log('[WS] Script injection skipped:', error)
       }
@@ -258,8 +262,11 @@ chrome.action.onClicked.addListener(async (tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon-48.png',
-        title: 'Cashback Activated!',
-        message: `You'll earn ${partner.cashbackRate}% cashback on ${partner.name} purchases`
+        title: t().notifications.cashbackActivated,
+        message: translate('notifications.cashbackActivatedMessage', { 
+          rate: String(partner.cashbackRate), 
+          partner: partner.name 
+        })
       })
 
       // Voucher offers will be shown automatically when checkout is detected
@@ -350,7 +357,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   if (!tabId) return
   
   // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
-  console.log(`[DEBUG] Checkout detected for merchant: ${checkoutInfo.merchant}`)
+  console.log(translate('debug.checkoutDetected', { merchant: checkoutInfo.merchant }))
   
   // Check user settings first (fast check before API call)
   const result = await chrome.storage.local.get('user')
@@ -360,28 +367,37 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 
   // Search for merchant via API (works for any merchant)
   const partner = await getPartnerByHostname(checkoutInfo.merchant)
-  console.log(`[DEBUG] Partner data:`, partner)
+  console.log(t().debug.partnerData, partner)
   
   if (!partner) {
-    console.log(`[DEBUG] No merchant found in Woolsocks system for: ${checkoutInfo.merchant}`)
+    console.log(translate('debug.noMerchant', { merchant: checkoutInfo.merchant }))
     return
   }
   
   // Check if vouchers are available for this merchant
   if (!partner.voucherAvailable) {
-    console.log(`[DEBUG] No vouchers available for merchant: ${partner.name}`)
+    console.log(translate('debug.noVouchers', { name: partner.name }))
     return
   }
 
   const checkoutTotal = checkoutInfo.total
   
-  console.log(`[DEBUG] Showing voucher offer for ${partner.name} with ${partner.cashbackRate}% cashback`)
+  console.log(translate('debug.showingOffer', { name: partner.name, rate: String(partner.cashbackRate) }))
   
-  // Render single voucher view with USPs
+  // Inject translations into page context first
   chrome.scripting.executeScript({
     target: { tabId },
-    func: showVoucherDetailWithUsps,
-    args: [partner, checkoutTotal]
+    func: (translations) => {
+      (window as any).__wsTranslations = translations
+    },
+    args: [t().voucher]
+  }).then(() => {
+    // Then render the voucher panel
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: showVoucherDetailWithUsps,
+      args: [partner, checkoutTotal]
+    })
   })
 }
 
@@ -401,6 +417,23 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   // Prevent multiple instances
   const existing = document.getElementById('woolsocks-voucher-prompt')
   if (existing) return
+
+  // Get translations (injected from background script)
+  const translations = (window as any).__wsTranslations || {
+    voucher: {
+      title: 'Voucher',
+      purchaseAmount: 'Purchase amount',
+      cashbackText: "You'll get ",
+      cashbackSuffix: ' of cashback',
+      viewDetails: 'View voucher details',
+      usps: {
+        instantDelivery: 'Instant delivery',
+        cashbackOnPurchase: '% cashback on purchase',
+        useOnlineAtCheckout: 'Use online at checkout',
+      },
+      instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
+    }
+  }
 
   function markVoucherDismissed(ms: number) {
     const host = window.location.hostname
@@ -462,9 +495,9 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   // USPs with unified checkmark icon
   const uspIconUrl = (() => { try { return chrome.runtime.getURL('public/icons/Circle checkmark.svg') } catch { return '' } })()
   const usps: Array<{ text: string }> = [
-    { text: 'Instant delivery' },
-    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}% cashback on purchase` }] : []),
-    { text: 'Use online at checkout' },
+    { text: translations.voucher.usps.instantDelivery },
+    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${translations.voucher.usps.cashbackOnPurchase}` }] : []),
+    { text: translations.voucher.usps.useOnlineAtCheckout },
   ]
 
   const image = best?.imageUrl || partner.merchantImageUrl || ''
@@ -507,7 +540,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
 
       <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
         <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">Purchase amount</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
           <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
         </div>
         <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
@@ -516,7 +549,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
               ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
             </div>
             <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">Voucher</div>
+              <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">${translations.voucher.title}</div>
               <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
             </div>
             ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
@@ -524,14 +557,14 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
         </div>
 
         <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">You'll get </span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
           <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;"> of cashback</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
         </div>
 
         <div style="display: flex; align-items: center;">
           <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
-            <span>View voucher details</span>
+            <span>${translations.voucher.viewDetails}</span>
             ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
           </button>
         </div>
@@ -552,7 +585,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
       </div>
 
       <div style="font-size: 13px; color: #3A2B00; opacity: 0.9; text-align: center; line-height: 1.4; margin: 6px 0 10px;">
-        Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.
+        ${translations.voucher.instructions}
       </div>
 
       ${wsLogoUrl ? `
