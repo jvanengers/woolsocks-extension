@@ -7,6 +7,8 @@
 
 import type { CheckoutInfo } from '../shared/types'
 
+try { console.log('[Woolsocks] Checkout detection script loaded on:', window.location.hostname) } catch {}
+
 // Merchant support check (non-blocking)
 let __wsSupportChecked = false
 

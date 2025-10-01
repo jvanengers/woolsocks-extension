@@ -6,19 +6,8 @@ import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
-let wsCookieHeader = ''
-let wsXsrfToken: string | null = null
 
-async function refreshWsCookies() {
-  try {
-    const all = await chrome.cookies.getAll({ domain: 'woolsocks.eu', secure: true })
-    wsCookieHeader = all.map(c => `${c.name}=${c.value}`).join('; ')
-    wsXsrfToken =
-      all.find(c => c.name === 'XSRF-TOKEN')?.value ??
-      all.find(c => c.name === 'csrfToken')?.value ??
-      null
-  } catch {}
-}
+async function refreshWsCookies() {}
 
 chrome.runtime.onInstalled.addListener(refreshWsCookies)
 // @ts-ignore - onStartup exists in MV3 service workers
@@ -29,39 +18,26 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
   }
 })
 
-chrome.webRequest.onBeforeSendHeaders.addListener(
-  (details) => {
-    if (!details.url.startsWith(WS_ORIGIN)) return undefined
-
-    const headers = details.requestHeaders ? [...details.requestHeaders] : []
-    const lower = (name: string) => name.toLowerCase()
-
-    // Cookie
-    if (wsCookieHeader) {
-      const i = headers.findIndex(h => lower(h.name) === 'cookie')
-      if (i >= 0) headers[i].value = wsCookieHeader
-      else headers.push({ name: 'Cookie', value: wsCookieHeader })
-    }
-
-    // CSRF header if present in cookies
-    if (wsXsrfToken && !headers.some(h => lower(h.name) === 'x-xsrf-token')) {
-      headers.push({ name: 'x-xsrf-token', value: wsXsrfToken })
-    }
-
-    // Same-origin hints
-    if (!headers.some(h => lower(h.name) === 'origin')) headers.push({ name: 'Origin', value: WS_ORIGIN })
-    if (!headers.some(h => lower(h.name) === 'referer')) headers.push({ name: 'Referer', value: WS_ORIGIN + '/' })
-
-    // Accept JSON by default
-    if (!headers.some(h => lower(h.name) === 'accept')) headers.push({ name: 'Accept', value: 'application/json, */*;q=0.8' })
-
-    return { requestHeaders: headers }
-  },
-  { urls: [WS_ORIGIN + '/*'] },
-  ['blocking', 'requestHeaders', 'extraHeaders']
-)
+// Note: MV3 non-enterprise extensions cannot use blocking webRequest listeners.
+// We keep a non-blocking observer for diagnostics only and rely on API relays for auth.
+try {
+  chrome.webRequest.onBeforeSendHeaders.addListener(
+    (_details) => undefined,
+    { urls: [WS_ORIGIN + '/*'] },
+    ['requestHeaders', 'extraHeaders']
+  )
+} catch {}
 
 let tokenSavedOnce = false
+
+// Ensure language is loaded from storage when the service worker wakes
+let __wsLanguageInitialized = false
+async function ensureLanguageInitialized() {
+  if (!__wsLanguageInitialized) {
+    try { await initLanguage() } catch {}
+    __wsLanguageInitialized = true
+  }
+}
 
 type IconPaths = string | { 16: string; 32: string; 48: string }
 
@@ -92,7 +68,7 @@ function setIcon(state: IconState, tabId?: number) {
 
 chrome.runtime.onInstalled.addListener(async () => {
   // Initialize language from storage (fallback)
-  await initLanguage()
+  await initLanguage(); __wsLanguageInitialized = true
   
   // Fetch user's language from API and apply it
   const apiLang = await getUserLanguage()
@@ -121,7 +97,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Also fetch language on startup (when browser restarts)
 chrome.runtime.onStartup?.addListener(async () => {
-  await initLanguage()
+  await initLanguage(); __wsLanguageInitialized = true
   const apiLang = await getUserLanguage()
   if (apiLang) {
     const lang = setLanguageFromAPI(apiLang)
@@ -149,6 +125,7 @@ function isExcludedDomain(hostname: string): boolean {
 }
 
 async function evaluateTab(tabId: number, url?: string | null) {
+  await ensureLanguageInitialized()
   if (!url) {
     setIcon('neutral', tabId)
     return
@@ -350,6 +327,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // Removed unused handleShowProfile function
 
 async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
+  await ensureLanguageInitialized()
   if (!tabId) return
   
   // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
@@ -380,20 +358,39 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   
   console.log(translate('debug.showingOffer', { name: partner.name, rate: String(partner.cashbackRate) }))
   
-  // Inject translations into page context first
+  // Inject translations into page context first (MAIN world)
+  const asset = (p: string) => chrome.runtime.getURL(p)
+  const paymentIconFiles = [
+    'public/icons/Payment method icon_VISA.png',
+    'public/icons/Payment method icon_mastercard.png',
+    'public/icons/Payment method icon_IDEAL.png',
+    'public/icons/Payment method icon_APPLEPAY.png',
+    'public/icons/Payment method icon_GPAY.png',
+  ]
+  const assets = {
+    uspIconUrl: asset('public/icons/Circle checkmark.svg'),
+    wsLogoUrl: asset('public/icons/Woolsocks-logo-large.svg'),
+    externalIconUrl: asset('public/icons/External-link.svg'),
+    paymentIconUrls: paymentIconFiles.map(asset),
+  }
+
   chrome.scripting.executeScript({
     target: { tabId },
+    world: 'MAIN',
     func: (translations) => {
-      (window as any).__wsTranslations = translations
+      try { (window as any).__wsTranslations = translations } catch {}
     },
-    args: [t().voucher]
+    args: [t().voucher],
   }).then(() => {
-    // Then render the voucher panel
-    chrome.scripting.executeScript({
+    // Then render the voucher panel in MAIN world to avoid isolation issues
+    return chrome.scripting.executeScript({
       target: { tabId },
+      world: 'MAIN',
       func: showVoucherDetailWithUsps,
-      args: [partner, checkoutTotal]
+      args: [partner, checkoutTotal, assets],
     })
+  }).catch((e) => {
+    console.warn('[WS] Failed to inject/render voucher panel:', e)
   })
 }
 
@@ -409,27 +406,30 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 
 // Removed unused showProfileScreen function
 
-function showVoucherDetailWithUsps(partner: any, amount: number) {
+function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }) {
   // Prevent multiple instances
   const existing = document.getElementById('woolsocks-voucher-prompt')
   if (existing) return
 
-  // Get translations (injected from background script)
-  const translations = (window as any).__wsTranslations || {
-    voucher: {
-      title: 'Voucher',
-      purchaseAmount: 'Purchase amount',
-      cashbackText: "You'll get ",
-      cashbackSuffix: ' of cashback',
-      viewDetails: 'View voucher details',
-      usps: {
-        instantDelivery: 'Instant delivery',
-        cashbackOnPurchase: '% cashback on purchase',
-        useOnlineAtCheckout: 'Use online at checkout',
-      },
-      instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
-    }
+  // Get translations (injected from background script) with safe fallback.
+  // Some builds inject only the voucher object (not wrapped). Normalize shape.
+  const injected = (window as any).__wsTranslations
+  const fallbackVoucher = {
+    title: 'Voucher',
+    purchaseAmount: 'Purchase amount',
+    cashbackText: "You'll get ",
+    cashbackSuffix: ' of cashback',
+    viewDetails: 'View voucher details',
+    usps: {
+      instantDelivery: 'Instant delivery',
+      cashbackOnPurchase: '% cashback on purchase',
+      useOnlineAtCheckout: 'Use online at checkout',
+    },
+    instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
   }
+  const translations = (injected && injected.voucher)
+    ? injected
+    : { voucher: injected || fallbackVoucher }
 
   function markVoucherDismissed(ms: number) {
     const host = window.location.hostname
@@ -489,11 +489,16 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
 
   // USPs with unified checkmark icon
-  const uspIconUrl = (() => { try { return chrome.runtime.getURL('public/icons/Circle checkmark.svg') } catch { return '' } })()
+  const uspIconUrl = assets?.uspIconUrl || ''
+  const safeUsps = (translations && translations.voucher && translations.voucher.usps) || {
+    instantDelivery: 'Instant delivery',
+    cashbackOnPurchase: '% cashback on purchase',
+    useOnlineAtCheckout: 'Use online at checkout',
+  }
   const usps: Array<{ text: string }> = [
-    { text: translations.voucher.usps.instantDelivery },
-    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${translations.voucher.usps.cashbackOnPurchase}` }] : []),
-    { text: translations.voucher.usps.useOnlineAtCheckout },
+    { text: safeUsps.instantDelivery },
+    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${safeUsps.cashbackOnPurchase}` }] : []),
+    { text: safeUsps.useOnlineAtCheckout },
   ]
 
   const image = best?.imageUrl || partner.merchantImageUrl || ''
@@ -503,20 +508,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   // Details (optional): omitted here as they are not available in current partner payload
 
   // Payment methods row (from extension assets)
-  const paymentIconFiles = [
-    'public/icons/Payment method icon_VISA.png',
-    'public/icons/Payment method icon_mastercard.png',
-    'public/icons/Payment method icon_IDEAL.png',
-    'public/icons/Payment method icon_APPLEPAY.png',
-    'public/icons/Payment method icon_GPAY.png',
-  ]
-  const paymentIconUrls = paymentIconFiles.map((p) => {
-    try {
-      return chrome.runtime.getURL(p)
-    } catch {
-      return ''
-    }
-  }).filter(Boolean)
+  const paymentIconUrls = (assets?.paymentIconUrls || []).filter(Boolean)
   const paymentIconsHtml = paymentIconUrls.map((src) => `
     <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0;">
       <img src="${src}" alt="payment" style="height: 36px; width: auto; display: block; max-width: 100%; object-fit: contain;" />
@@ -524,8 +516,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   `).join('')
 
   // Woolsocks logo (brand)
-  const wsLogoUrl = (() => { try { return chrome.runtime.getURL('public/icons/Woolsocks-logo-large.svg') } catch { return '' } })()
-  const externalIconUrl = (() => { try { return chrome.runtime.getURL('public/icons/External-link.svg') } catch { return '' } })()
+  const wsLogoUrl = assets?.wsLogoUrl || ''
+  const externalIconUrl = assets?.externalIconUrl || ''
 
   prompt.innerHTML = `
     <div style="padding: 16px;">
