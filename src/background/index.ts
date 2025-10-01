@@ -129,9 +129,6 @@ chrome.runtime.onStartup?.addListener(async () => {
   }
 })
 
-// Track injected scripts to prevent duplicates
-const injectedScripts = new Set<number>()
-
 // Domains where the extension should never trigger
 const EXCLUDED_DOMAINS = [
   'woolsocks.eu',
@@ -166,20 +163,9 @@ async function evaluateTab(tabId: number, url?: string | null) {
       return
     }
     
-    // Inject checkout detector on ALL non-excluded domains for universal detection
-    if (!injectedScripts.has(tabId)) {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ['content/checkout.js']
-        })
-        injectedScripts.add(tabId)
-        console.log(translate('debug.scriptInjected', { tabId: String(tabId), hostname: u.hostname }))
-      } catch (error) {
-        console.log('[WS] Script injection skipped:', error)
-      }
-    }
-
+    // Content script is auto-injected via manifest.json on all pages
+    // No manual injection needed - it runs automatically
+    
     // Check if this merchant is supported via API (async, non-blocking)
     // The checkout detector will handle the actual voucher display if needed
     const partner = await getPartnerByHostname(u.hostname)
@@ -220,16 +206,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   await evaluateTab(activeInfo.tabId, tab.url)
 })
 
-// Clean up injected scripts when tabs are removed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  injectedScripts.delete(tabId)
-  console.log(`Cleaned up script tracking for tab ${tabId}`)
-})
-
-// Clean up when extension is disabled/uninstalled
-chrome.runtime.onSuspend.addListener(() => {
-  injectedScripts.clear()
-})
+// No cleanup needed - content scripts are managed by manifest
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !tab.url) return
