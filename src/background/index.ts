@@ -1,7 +1,43 @@
 // Background service worker: URL detection, icon state, messaging
-import { findPartnerByHostname } from '../shared/partners'
-import type { IconState, MockUser, ActivationRecord } from '../shared/types'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage } from './api.ts'
+import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
+import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
+
+// --- First-party header injection for woolsocks.eu -------------------------
+const WS_ORIGIN = 'https://woolsocks.eu'
+
+async function refreshWsCookies() {}
+
+chrome.runtime.onInstalled.addListener(refreshWsCookies)
+// @ts-ignore - onStartup exists in MV3 service workers
+chrome.runtime.onStartup?.addListener(refreshWsCookies)
+chrome.cookies.onChanged.addListener(({ cookie }) => {
+  if (cookie?.domain && cookie.domain.includes('woolsocks.eu')) {
+    refreshWsCookies()
+  }
+})
+
+// Note: MV3 non-enterprise extensions cannot use blocking webRequest listeners.
+// We keep a non-blocking observer for diagnostics only and rely on API relays for auth.
+try {
+  chrome.webRequest.onBeforeSendHeaders.addListener(
+    (_details) => undefined,
+    { urls: [WS_ORIGIN + '/*'] },
+    ['requestHeaders', 'extraHeaders']
+  )
+} catch {}
+
+let tokenSavedOnce = false
+
+// Ensure language is loaded from storage when the service worker wakes
+let __wsLanguageInitialized = false
+async function ensureLanguageInitialized() {
+  if (!__wsLanguageInitialized) {
+    try { await initLanguage() } catch {}
+    __wsLanguageInitialized = true
+  }
+}
 
 type IconPaths = string | { 16: string; 32: string; 48: string }
 
@@ -19,21 +55,32 @@ const ICONS: Record<IconState, IconPaths> = {
 function setIcon(state: IconState, tabId?: number) {
   const path = ICONS[state] || ICONS.neutral
   const titleMap: Record<IconState, string> = {
-    neutral: 'No deals on this site',
-    available: 'Cashback available — click to activate',
-    active: 'Cashback activated',
-    voucher: 'Voucher deal available',
-    error: 'Attention needed',
+    neutral: t().icons.noDeals,
+    available: t().icons.cashbackAvailable,
+    active: t().icons.cashbackActive,
+    voucher: t().icons.voucherAvailable,
+    error: t().icons.attentionNeeded,
   }
   // Pass multi-size path map when available; Chrome will pick best size
   chrome.action.setIcon({ path: path as any, tabId })
   chrome.action.setTitle({ title: titleMap[state], tabId })
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
+  // Initialize language from storage (fallback)
+  await initLanguage(); __wsLanguageInitialized = true
+  
+  // Fetch user's language from API and apply it
+  const apiLang = await getUserLanguage()
+  if (apiLang) {
+    const lang = setLanguageFromAPI(apiLang)
+    console.log(`[WS] Language set from API: ${lang}`)
+  } else {
+    console.log('[WS] Using cached/default language')
+  }
+  
   // Initialize defaults
-  const defaultUser: MockUser = {
-    isLoggedIn: false,
+  const defaultUser: AnonymousUser = {
     totalEarnings: 0,
     activationHistory: [],
     settings: {
@@ -42,12 +89,43 @@ chrome.runtime.onInstalled.addListener(() => {
     },
   }
   chrome.storage.local.set({ user: defaultUser })
+  
+  // Initialize deals scraper
+  await initializeScraper()
+  setupScrapingSchedule()
 })
 
-// Track injected scripts to prevent duplicates
-const injectedScripts = new Set<number>()
+// Also fetch language on startup (when browser restarts)
+chrome.runtime.onStartup?.addListener(async () => {
+  await initLanguage(); __wsLanguageInitialized = true
+  const apiLang = await getUserLanguage()
+  if (apiLang) {
+    const lang = setLanguageFromAPI(apiLang)
+    console.log(`[WS] Language refreshed from API on startup: ${lang}`)
+  }
+})
+
+// Domains where the extension should never trigger
+const EXCLUDED_DOMAINS = [
+  'woolsocks.eu',
+  'scoupy.nl', 
+  'scoupy.com',
+  'ok.nl',
+  'ok.com',
+  'shopbuddies.nl',
+  'shopbuddies.com'
+]
+
+// Check if a hostname should be excluded from extension functionality
+function isExcludedDomain(hostname: string): boolean {
+  const cleanHostname = hostname.replace(/^www\./, '').toLowerCase()
+  return EXCLUDED_DOMAINS.some(domain => 
+    cleanHostname === domain || cleanHostname.endsWith('.' + domain)
+  )
+}
 
 async function evaluateTab(tabId: number, url?: string | null) {
+  await ensureLanguageInitialized()
   if (!url) {
     setIcon('neutral', tabId)
     return
@@ -55,41 +133,38 @@ async function evaluateTab(tabId: number, url?: string | null) {
   
   try {
     const u = new URL(url)
-    const partner = findPartnerByHostname(u.hostname)
     
+    // Check if this domain should be excluded
+    if (isExcludedDomain(u.hostname)) {
+      setIcon('neutral', tabId)
+      return
+    }
+    
+    // Content script is auto-injected via manifest.json on all pages
+    // No manual injection needed - it runs automatically
+    
+    // Check if this merchant is supported via API (async, non-blocking)
+    // The checkout detector will handle the actual voucher display if needed
+    const partner = await getPartnerByHostname(u.hostname)
+
     if (partner) {
-      // Only inject script if not already injected for this tab
-      if (!injectedScripts.has(tabId)) {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ['content/checkout.js']
-        })
-          injectedScripts.add(tabId)
-          console.log(`Checkout script injected for tab ${tabId}`)
-      } catch (error) {
-        // Script might already be injected, ignore
-        console.log('Script injection skipped:', error)
-        }
-      }
-      
-      // Check if cashback is already active (no automatic prompts)
+      // Check if cashback is already active
       const result = await chrome.storage.local.get('user')
-      const user: MockUser = result.user || { isLoggedIn: false, totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+      const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
       
       const activeActivation = user.activationHistory.find(
-        activation => activation.partner === partner.name && activation.status === 'active'
+        (activation: ActivationRecord) => activation.partner === partner.name && activation.status === 'active'
       )
       
       if (activeActivation) {
         setIcon('active', tabId)
-  } else if (partner.voucherAvailable && u.pathname.includes('checkout')) {
-        // Keep icon as 'available' (yellow) at checkout until voucher is actually purchased
+      } else if (partner.voucherAvailable && u.pathname.includes('checkout')) {
         setIcon('available', tabId)
       } else {
         setIcon('available', tabId)
       }
     } else {
+      // No partner found - icon stays neutral, but checkout detection still works
       setIcon('neutral', tabId)
     }
   } catch {
@@ -108,23 +183,21 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   await evaluateTab(activeInfo.tabId, tab.url)
 })
 
-// Clean up injected scripts when tabs are removed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  injectedScripts.delete(tabId)
-  console.log(`Cleaned up script tracking for tab ${tabId}`)
-})
-
-// Clean up when extension is disabled/uninstalled
-chrome.runtime.onSuspend.addListener(() => {
-  injectedScripts.clear()
-})
+// No cleanup needed - content scripts are managed by manifest
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab.id || !tab.url) return
   
   try {
     const u = new URL(tab.url)
-    const partner = findPartnerByHostname(u.hostname)
+    
+    // Check if this domain should be excluded
+    if (isExcludedDomain(u.hostname)) {
+      setIcon('neutral', tab.id)
+      return
+    }
+    
+    const partner = await getPartnerByHostname(u.hostname)
     
     if (!partner) {
       setIcon('neutral', tab.id)
@@ -133,11 +206,11 @@ chrome.action.onClicked.addListener(async (tab) => {
     
     // Get current user state
     const result = await chrome.storage.local.get('user')
-    const user: MockUser = result.user || { isLoggedIn: false, totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+    const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
     
     // Check if already active
     const activeActivation = user.activationHistory.find(
-      activation => activation.partner === partner.name && activation.status === 'active'
+      (activation: ActivationRecord) => activation.partner === partner.name && activation.status === 'active'
     )
     
     if (activeActivation) {
@@ -162,8 +235,11 @@ chrome.action.onClicked.addListener(async (tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon-48.png',
-        title: 'Cashback Activated!',
-        message: `You'll earn ${partner.cashbackRate}% cashback on ${partner.name} purchases`
+        title: t().notifications.cashbackActivated,
+        message: translate('notifications.cashbackActivatedMessage', { 
+          rate: String(partner.cashbackRate), 
+          partner: partner.name 
+        })
       })
 
       // Voucher offers will be shown automatically when checkout is detected
@@ -176,579 +252,460 @@ chrome.action.onClicked.addListener(async (tab) => {
 })
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'SET_ICON' && typeof message.state === 'string') {
+  if (message?.type === 'WS_CAPTURE_TOKEN' && typeof message.token === 'string' && message.token.length > 10) {
+    (async () => {
+      await chrome.storage.local.set({ apiToken: message.token })
+      if (!tokenSavedOnce) {
+        tokenSavedOnce = true
+        console.log('[WS] Captured and stored API token')
+      }
+      sendResponse({ ok: true })
+    })()
+    return true
+  } else if (message?.type === 'SET_ICON' && typeof message.state === 'string') {
     setIcon(message.state as IconState)
     sendResponse({ ok: true })
+    return false
   } else if (message?.type === 'CHECKOUT_DETECTED') {
     handleCheckoutDetected(message.checkoutInfo, _sender.tab?.id)
     sendResponse({ ok: true })
+    return false
   } else if (message?.type === 'ACTIVATE_CASHBACK') {
     // coerce to any to satisfy handler signature expecting string; it's safe internally
     handleActivateCashback(message.partner, _sender.tab?.id, setIcon as unknown as (state: string, tabId?: number) => void)
     sendResponse({ ok: true })
+    return false
+  } else if (message?.type === 'CHECK_MERCHANT_SUPPORT') {
+    ;(async () => {
+      const partner = await getPartnerByHostname(message.hostname)
+      sendResponse({ supported: !!partner, partner })
+    })()
+    return true
+  } else if (message?.type === 'CHECK_CASHBACK_STATUS') {
+    ;(async () => {
+      const result = await chrome.storage.local.get('user')
+      const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+      const activeActivation = user.activationHistory.find(
+        (activation: ActivationRecord) => activation.partner === message.partnerName && activation.status === 'active'
+      )
+      sendResponse({ active: !!activeActivation })
+    })()
+    return true
+  } else if (message?.type === 'OPEN_VOUCHER_PRODUCT') {
+    const { url } = message
+    if (url && typeof url === 'string') {
+      chrome.tabs.create({ url })
+      sendResponse({ ok: true })
+    } else {
+      sendResponse({ ok: false, error: 'Missing URL' })
+    }
+    return false
+  } else if (message?.type === 'OPEN_URL') {
+    const { url } = message
+    if (url && typeof url === 'string') {
+      chrome.tabs.create({ url })
+      sendResponse({ ok: true })
+    } else {
+      sendResponse({ ok: false, error: 'Missing URL' })
+    }
+    return false
+  } else if (message?.type === 'GET_ALL_PARTNERS') {
+    ;(async () => {
+      const data = await getAllPartners()
+      sendResponse(data)
+    })()
+    return true
+  } else if (message?.type === 'REFRESH_PARTNERS') {
+    ;(async () => {
+      const deals = await refreshDeals()
+      sendResponse({ partners: deals, lastUpdated: new Date() })
+    })()
+    return true
   }
 })
 
 // Removed unused handleShowProfile function
 
 async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
+  await ensureLanguageInitialized()
   if (!tabId) return
   
-  // checkoutInfo.merchant is already a hostname (e.g., "zalando.com"),
-  // so we should not wrap it in new URL(...)
-  const partner = findPartnerByHostname(checkoutInfo.merchant)
-  if (!partner || !partner.voucherAvailable) return
+  // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
+  console.log(translate('debug.checkoutDetected', { merchant: checkoutInfo.merchant }))
   
-  // Check user settings
+  // Check user settings first (fast check before API call)
   const result = await chrome.storage.local.get('user')
-  const user: MockUser = result.user || { isLoggedIn: false, totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+  const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
   
   if (!user.settings.showVoucherPrompt) return
-  
-  // Find the best voucher for this order total
-  const availableVouchers = partner.vouchers.filter(v => v.available)
-  if (availableVouchers.length === 0) return
-  
-  // Find voucher (supports fixed and flex types)
-  function computeBestVoucherAmount(v: any, orderTotal: number): number {
-    if (v.type === 'fixed') return v.denomination
-    const step = v.step || 1
-    const capped = Math.min(orderTotal, v.maxAmount)
-    const stepped = Math.floor(capped / step) * step
-    return Math.max(v.minAmount, stepped)
-  }
 
-  // Choose the voucher that yields the highest applicable amount without exceeding the order total
-  let bestVoucher = availableVouchers[0]
-  let bestAmount = computeBestVoucherAmount(bestVoucher, checkoutInfo.total)
-  for (const v of availableVouchers) {
-    const amount = computeBestVoucherAmount(v, checkoutInfo.total)
-    if (amount > bestAmount) {
-      bestVoucher = v
-      bestAmount = amount
-    }
+  // Search for merchant via API (works for any merchant)
+  const partner = await getPartnerByHostname(checkoutInfo.merchant)
+  console.log(t().debug.partnerData, partner)
+  
+  if (!partner) {
+    console.log(translate('debug.noMerchant', { merchant: checkoutInfo.merchant }))
+    return
+  }
+  
+  // Check if vouchers are available for this merchant
+  if (!partner.voucherAvailable) {
+    console.log(translate('debug.noVouchers', { name: partner.name }))
+    return
   }
 
   const checkoutTotal = checkoutInfo.total
   
-  // Inject voucher offer prompt with checkout total prefilled
+  console.log(translate('debug.showingOffer', { name: partner.name, rate: String(partner.cashbackRate) }))
+  
+  // Inject translations into page context first (MAIN world)
+  const asset = (p: string) => chrome.runtime.getURL(p)
+  const paymentIconFiles = [
+    'public/icons/Payment method icon_VISA.png',
+    'public/icons/Payment method icon_mastercard.png',
+    'public/icons/Payment method icon_IDEAL.png',
+    'public/icons/Payment method icon_APPLEPAY.png',
+    'public/icons/Payment method icon_GPAY.png',
+  ]
+  const assets = {
+    uspIconUrl: asset('public/icons/Circle checkmark.svg'),
+    wsLogoUrl: asset('public/icons/Woolsocks-logo-large.svg'),
+    externalIconUrl: asset('public/icons/External-link.svg'),
+    paymentIconUrls: paymentIconFiles.map(asset),
+  }
+
   chrome.scripting.executeScript({
     target: { tabId },
-    func: showVoucherOffer,
-    args: [partner, bestVoucher, checkoutTotal]
+    world: 'MAIN',
+    func: (translations) => {
+      try { (window as any).__wsTranslations = translations } catch {}
+    },
+    args: [t().voucher],
+  }).then(() => {
+    // Then render the voucher panel in MAIN world to avoid isolation issues
+    return chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: showVoucherDetailWithUsps,
+      args: [partner, checkoutTotal, assets],
+    })
+  }).catch((e) => {
+    console.warn('[WS] Failed to inject/render voucher panel:', e)
   })
 }
 
-function showVoucherOffer(partner: any, voucher: any, amount: number) {
-  // Prevent multiple instances - check if already exists
-  const existing = document.getElementById('woolsocks-voucher-prompt')
-  if (existing) {
-    console.log('Voucher prompt already exists, skipping creation')
-    return
-  }
-  
-  // Check if we already have a voucher offer flag
-  if ((window as any).showVoucherOfferInjected) {
-    console.log('Voucher offer already injected, skipping creation')
-    return
-  }
-  
-  console.log('Creating new voucher prompt')
-  
-  // Set flag to prevent multiple instances
-  ;(window as any).showVoucherOfferInjected = true
-  
-  // Global cleanup function for easy access
-  ;(window as any).closeVoucherDialog = () => {
-    console.log('Global close function called')
-    const prompt = document.getElementById('woolsocks-voucher-prompt')
-    if (prompt) {
-      // Add fade out animation
-      prompt.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out'
-      prompt.style.opacity = '0'
-      prompt.style.transform = 'scale(0.95) translateY(-10px)'
-      
-      setTimeout(() => {
-        prompt.remove()
-        // Keep flag set for a cooldown period to prevent immediate recreation
-        setTimeout(() => {
-          ;(window as any).showVoucherOfferInjected = false
-          console.log('Dialog cooldown ended, can create new dialog')
-        }, 1000) // 1 second cooldown
-      }, 300) // Wait for animation to complete
-    }
-  }
-  
-  // Initialize global variables for current amount and cashback
-  ;(window as any).currentAmount = amount
-  ;(window as any).currentCashback = amount * (voucher.cashbackRate / 100)
-  
-  // Avoid overlap with cashback prompt by removing it when voucher appears
-  const existingCashback = document.getElementById('woolsocks-cashback-prompt')
-  if (existingCashback) {
-    const cloned = existingCashback.cloneNode(true)
-    existingCashback.parentNode?.replaceChild(cloned, existingCashback)
-    existingCashback.remove()
-  }
-  
-  const prompt = document.createElement('div')
-  prompt.id = 'woolsocks-voucher-prompt'
-  prompt.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 310px;
-    height: 602px;
-    background: #FDC408;
-    border: 4px solid #FDC408;
-    border-radius: 16px;
-    box-shadow: -2px 2px 4px rgba(0,0,0,0.08);
-    z-index: 10000;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    display: flex;
-    opacity: 0;
-    transform: scale(0.95) translateY(-10px);
-    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
-    flex-direction: column;
-    overflow: hidden;
-  `
-
-  // Calculate cashback percentage based on current amount
-  const cashback = amount * (voucher.cashbackRate / 100)
-  const cashbackPercentage = Math.round((cashback / amount) * 100)
-  
-      // Get merchant logo from partner data or fallback
-      const getMerchantLogo = (partner: any) => {
-        if (partner.logo) {
-          return `<img src="${partner.logo}" alt="${partner.name}" style="width: 48px; height: 48px; object-fit: contain; border-radius: 8px;" />`
-        }
-        // Fallback to CSS-generated logo
-        const logos: { [key: string]: string } = {
-          'MediaMarkt': `
-            <div style="width: 32px; height: 32px; background: #E60012; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-              <div style="width: 20px; height: 20px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                <span style="color: #E60012; font-weight: bold; font-size: 14px;">M</span>
-              </div>
-            </div>
-          `,
-          'Zalando': `
-            <div style="width: 24px; height: 24px; background: #FF6900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px; position: relative;">
-              <div style="width: 12px; height: 12px; background: white; border-radius: 2px; transform: rotate(45deg);"></div>
-            </div>
-          `,
-          'Amazon': `
-            <div style="width: 24px; height: 24px; background: #FF9900; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
-              <span style="color: white; font-weight: bold; font-size: 10px;">A</span>
-            </div>
-          `,
-          'Coolblue': `
-            <div style="width: 24px; height: 24px; background: #0032FF; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 8px;">
-              <span style="color: white; font-weight: bold; font-size: 10px;">C</span>
-            </div>
-          `
-        }
-        return logos[partner.name] || logos['MediaMarkt']
-      }
-  
-      const getVoucherImage = (voucher: any) => {
-        if (voucher.imageUrl) {
-          // Voucher card with overlaid percentage pill matching Figma
-          return `
-            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 0; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.08); display: flex; align-items: center; justify-content: center;">
-                <img src="${voucher.imageUrl}" alt="${partner.name} voucher" style="max-width: 100%; max-height: 100%; object-fit: contain; display: block;">
-              </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: 0; transform: translateX(-50%); width: 140px; background: rgba(253,196,8,0.2); border: 0; border-radius: 0 0 8px 8px; padding: 8px 0 6px 0; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 12px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-              </div>
-            </div>
-          `
-        }
-        // Fallback to CSS-generated voucher image
-        const images: { [key: string]: string } = {
-          'MediaMarkt': `
-            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: #E60012; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: white; font-weight: bold; font-size: 10px;">M</span>
-                </div>
-              </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -16px; transform: translateX(-50%); width: 140px; background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 0 0 8px 8px; padding: 8px 0 4px 0; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-              </div>
-            </div>
-          `,
-          'Zalando': `
-            <div style="position: relative; width: 140px; height: 120px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 2px; display: flex; align-items: center; justify-content: center; transform: rotate(45deg);"></div>
-              </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: 0; transform: translateX(-50%); width: 140px; background: rgba(253,196,8,0.2); border: 0; border-radius: 0 0 8px 8px; padding: 8px 0 6px 0; height: 32px; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 8px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 12px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-              </div>
-            </div>
-          `,
-          'Amazon': `
-            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: #FF9900; font-weight: bold; font-size: 10px;">A</span>
-                </div>
-              </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-              </div>
-            </div>
-          `,
-          'Coolblue': `
-            <div style="position: relative; width: 140px; height: 112px; display: flex; align-items: flex-start; justify-content: center;">
-              <div style="position: relative; z-index: 1; width: 140px; height: 88px; background: #FFFFFF; border: 1px solid #E8E8E8; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                  <span style="color: #0032FF; font-weight: bold; font-size: 10px;">C</span>
-                </div>
-              </div>
-              <div style="position: absolute; z-index: 0; left: 50%; bottom: -12px; transform: translateX(-50%); background: #F9EFD0; border: 1px solid #F3E1A8; border-radius: 8px; padding: 8px 16px 4px 16px; height: 36px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
-                <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; letter-spacing: 0.1px;">${cashbackPercentage}%</span>
-              </div>
-            </div>
-          `
-        }
-        return images[partner.name] || images['MediaMarkt']
-      }
-
-  prompt.innerHTML = `
-        <!-- Header with Woolsocks logo and controls -->
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; height: 33px;">
-          <!-- Woolsocks Logo -->
-          <div style="display: flex; align-items: center; color: #100B1C;">
-            <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; font-size: 14px;">Woolsocks</span>
-          </div>
-          
-          <!-- Controls -->
-          <div style="display: flex; gap: 0;">
-            <div style="width: 33px; height: 33px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#100B1C" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </div>
-            <div style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0D0E0F" stroke-width="2">
-                <circle cx="12" cy="12" r="3"></circle>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-              </svg>
-            </div>
-            <div id="close-voucher" style="width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s ease;" onmouseover="this.style.backgroundColor='rgba(0,0,0,0.1)'" onmouseout="this.style.backgroundColor='transparent'">
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#0D0E0F" stroke-width="1.33" stroke-linecap="round">
-                <path d="M1 1L7 7M7 1L1 7"></path>
-              </svg>
-            </div>
-          </div>
-        </div>
-
-    <!-- Main Content -->
-    <div style="flex: 1; background: white; margin: 0 0 25px 0; display: flex; flex-direction: column; border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: visible; position: relative;">
-          <!-- Partner Header -->
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 4px 16px; height: 32px;">
-            <div style="display: flex; align-items: center;">
-              <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">${partner.name}</span>
-            </div>
-            <div id="service-switch" style="display: flex; align-items: center; background: #E5F2FF; border-radius: 8px; padding: 8px; height: 32px; cursor: pointer;">
-              <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 12px; color: #0084FF; margin-right: 4px;">Vouchers</span>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <path d="M2.5 3.75L5 6.25L7.5 3.75" stroke="#0084FF" stroke-width="1.43" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-          </div>
-
-          <!-- Merchant Logo -->
-          <div style="display: flex; justify-content: center; position: relative; top: -48px; margin: 0 0 32px 0;">
-            <div style="width: 48px; height: 48px; background: white; border: 7px solid #FDC408; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-              ${getMerchantLogo(partner)}
-            </div>
-          </div>
-
-          <!-- Dynamic Voucher Card -->
-          <div style="display: flex; flex-direction: column; align-items: center; margin: 0 20px;">
-            <!-- Dynamic Voucher Image -->
-            ${getVoucherImage(voucher)}
-            
-            <!-- Cashback Percentage Display moved into card overlay -->
-        
-        <!-- Dynamic Voucher Info -->
-        <div style="text-align: center; margin-top: 16px;">
-          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C; margin-bottom: 4px;">${partner.name} Cadeaukaart</div>
-          <div style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 14px; color: #020B0F; opacity: 0.5;">Geldig ${Math.floor(voucher.validityDays / 365)} jaar na aankoop</div>
-        </div>
-      </div>
-
-      <!-- Amount Input (Editable) -->
-      <div style="padding: 16px;">
-        <div style="margin-bottom: 8px;">
-          <label style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 14px; color: #100B1C;">How much is the purchase?</label>
-        </div>
-        <div style="background: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 6px; height: 56px; display: flex; align-items: center; padding: 0 16px; transition: all 0.2s ease;">
-          <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 17px; color: #100B1C; margin-right: 4px;">€</span>
-          <input id="amount-input" type="text" inputmode="decimal" value="${amount}" style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 17px; color: #100B1C; background: transparent; border: none; outline: none; flex: 1; text-align: right;" placeholder="0.00" title="Enter amount between €${voucher.minAmount || 1} and €${voucher.maxAmount || 10000}" autocomplete="off">
-        </div>
-        <div style="margin-top: 4px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 12px; color: #666; text-align: right;">
-          Min: €${voucher.minAmount || 1} • Max: €${voucher.maxAmount || 10000}
-        </div>
-      </div>
-
-      <!-- Dynamic Cashback Info -->
-      <div style="padding: 0 16px; margin-bottom: 12px;">
-        <div id="cashback-display" style="display: flex; align-items: baseline; justify-content: center; gap: 4px; height: 43px; padding: 8px 16px; border-radius: 8px; background: transparent;">
-          <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 16px; color: #8564FF;">You'll get</span>
-          <div style="background: #8564FF; border-radius: 6px; padding: 2px 4px;">
-            <span id="cashback-amount" style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 16px; color: white;">€${cashback.toFixed(2).replace('.', ',')}</span>
-          </div>
-          <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 16px; color: #8564FF;">of cashback</span>
-        </div>
-      </div>
-
-      <!-- Buy Button -->
-      <div style="padding: 0 16px 16px 16px;">
-        <button id="buy-voucher" style="width: 100%; height: 40px; background: #211940; color: white; border: none; border-radius: 4px; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 500; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-          Continue
-        </button>
-      </div>
-    </div>
-
-    <!-- Collapsible Footer Links - HIDDEN FOR NOW -->
-    <!--
-    <div style="background: white; display: flex; flex-direction: column;">
-      <div id="conditions-toggle" style="display: flex; justify-content: space-between; align-items: center; padding: 16px; cursor: pointer;">
-        <span style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 700; font-size: 12px; color: #100B1C;">Conditions</span>
-        <svg id="conditions-arrow" width="14" height="14" viewBox="0 0 14 14" fill="none" style="transform: rotate(0deg); transition: transform 0.2s;">
-          <path d="M5 3L10 7L5 11" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div id="conditions-content" style="display: none; padding: 0 16px 16px 16px; background: #FAFAFA;">
-        <p style="font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 400; font-size: 12px; color: #666; margin: 0; line-height: 1.4;">${voucher.conditions}</p>
-      </div>
-    </div>
-    -->
-  `
-
-  document.body.appendChild(prompt)
-
-  // Trigger appear animation
-  setTimeout(() => {
-    prompt.style.opacity = '1'
-    prompt.style.transform = 'scale(1) translateY(0)'
-  }, 10) // Small delay to ensure DOM is ready
-
-  // Event listener cleanup function
-  const cleanupPrompt = () => {
-    console.log('Cleaning up voucher prompt')
-    
-    // Use the global close function for consistency
-    if ((window as any).closeVoucherDialog) {
-      (window as any).closeVoucherDialog()
-    } else {
-      // Fallback cleanup
-      if (prompt) {
-        prompt.style.display = 'none'
-        setTimeout(() => prompt.remove(), 100)
-      }
-      ;(window as any).showVoucherOfferInjected = false
-    }
-    
-    // Clear global variables
-    ;(window as any).currentAmount = undefined
-    ;(window as any).currentCashback = undefined
-    
-    console.log('Cleanup completed')
-  }
-
-  // Wait for DOM to be fully rendered before adding event listeners
-  setTimeout(() => {
-    // Event listeners with proper cleanup
-    const closeBtn = document.getElementById('close-voucher')
-    console.log('Close button found:', closeBtn)
-    
-    if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
-        console.log('Close button clicked!')
-        e.preventDefault()
-        e.stopPropagation()
-        // Use global close function
-        if ((window as any).closeVoucherDialog) {
-          (window as any).closeVoucherDialog()
-        } else {
-          cleanupPrompt()
-        }
-      })
-    } else {
-      console.error('Close button not found!')
-    }
-    // Amount input functionality with debugging
-    const amountInput = document.getElementById('amount-input') as HTMLInputElement
-    const cashbackAmountSpan = document.getElementById('cashback-amount')
-    
-    console.log('Setting up amount input:', amountInput)
-    
-    const updateCashback = () => {
-      console.log('updateCashback called, input value:', amountInput?.value)
-      if (amountInput && cashbackAmountSpan) {
-        const inputValue = amountInput.value
-        
-        // Allow empty input for typing
-        if (inputValue === '') {
-          cashbackAmountSpan.textContent = '€0,00'
-          ;(window as any).currentCashback = 0
-          ;(window as any).currentAmount = 0
-          return
-        }
-        
-        const newAmount = parseFloat(inputValue)
-        
-        // Only validate if we have a valid number
-        if (isNaN(newAmount)) {
-          return // Don't interfere with typing
-        }
-        
-        // Validate amount against voucher limits
-        const minAmount = voucher.minAmount || 1
-        const maxAmount = voucher.maxAmount || 10000
-        
-        // Only auto-correct on blur, not while typing
-        const newCashback = newAmount * (voucher.cashbackRate / 100)
-        cashbackAmountSpan.textContent = `€${newCashback.toFixed(2).replace('.', ',')}`
-        
-        // Update the global cashback variable for the buy button
-        ;(window as any).currentCashback = newCashback
-        ;(window as any).currentAmount = newAmount
-        
-        // Visual feedback for valid input
-        const inputContainer = amountInput.parentElement
-        if (inputContainer) {
-          if (newAmount >= minAmount && newAmount <= maxAmount) {
-            inputContainer.style.borderColor = '#E0E0E0'
-            inputContainer.style.backgroundColor = '#FAFAFA'
-          } else {
-            inputContainer.style.borderColor = '#FF6B6B'
-            inputContainer.style.backgroundColor = '#FFF5F5'
-          }
-        }
-      }
-    }
-    
-    const validateAndCorrect = () => {
-      console.log('validateAndCorrect called, input value:', amountInput?.value)
-      if (amountInput) {
-        const inputValue = amountInput.value
-        const newAmount = parseFloat(inputValue)
-        
-        // Only validate and correct if we have a number
-        if (!isNaN(newAmount)) {
-          const minAmount = voucher.minAmount || 1
-          const maxAmount = voucher.maxAmount || 10000
-          
-          if (newAmount < minAmount) {
-            console.log('Correcting to min amount:', minAmount)
-            amountInput.value = minAmount.toString()
-            updateCashback()
-          } else if (newAmount > maxAmount) {
-            console.log('Correcting to max amount:', maxAmount)
-            amountInput.value = maxAmount.toString()
-            updateCashback()
-          }
-        }
-      }
-    }
-    
-    // Add input event listeners with debugging
-    amountInput?.addEventListener('input', (e) => {
-      console.log('Input event:', (e.target as HTMLInputElement)?.value)
-      updateCashback()
-    })
-    amountInput?.addEventListener('change', (e) => {
-      console.log('Change event:', (e.target as HTMLInputElement)?.value)
-      updateCashback()
-    })
-    amountInput?.addEventListener('blur', (e) => {
-      console.log('Blur event:', (e.target as HTMLInputElement)?.value)
-      validateAndCorrect()
-    })
-    
-    // Also add keydown to debug and filter input
-    amountInput?.addEventListener('keydown', (e) => {
-      console.log('Keydown event:', e.key, 'current value:', (e.target as HTMLInputElement)?.value)
-      
-      // Allow: backspace, delete, tab, escape, enter, home, end, left, right, up, down
-      if ([8, 9, 27, 13, 46, 35, 36, 37, 38, 39, 40].indexOf(e.keyCode) !== -1 ||
-          // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-          (e.keyCode === 65 && e.ctrlKey === true) ||
-          (e.keyCode === 67 && e.ctrlKey === true) ||
-          (e.keyCode === 86 && e.ctrlKey === true) ||
-          (e.keyCode === 88 && e.ctrlKey === true)) {
-        return
-      }
-      
-      // Ensure that it is a number or decimal point and stop the keypress
-      if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105) && e.keyCode !== 190 && e.keyCode !== 110) {
-        e.preventDefault()
-      }
-    })
-    
-    // Prevent paste of non-numeric content
-    amountInput?.addEventListener('paste', (e) => {
-      const paste = (e.clipboardData || (window as any).clipboardData).getData('text')
-      if (!/^\d*\.?\d*$/.test(paste)) {
-        e.preventDefault()
-      }
-    })
-    // Service switch (Vouchers <-> Online Cashback)
-    const serviceSwitch = document.getElementById('service-switch')
-    serviceSwitch?.addEventListener('click', () => {
-      // This would switch between voucher and cashback modes
-      // For now, just show an alert
-      alert('Switch to Online Cashback mode - Coming soon!')
-    })
-    
-    // Collapsible sections
-    const conditionsToggle = document.getElementById('conditions-toggle')
-    conditionsToggle?.addEventListener('click', () => {
-      const content = document.getElementById('conditions-content')
-      const arrow = document.getElementById('conditions-arrow')
-      if (content && arrow) {
-        const isVisible = content.style.display !== 'none'
-        content.style.display = isVisible ? 'none' : 'block'
-        arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(90deg)'
-      }
-    })
-    
-    const buyBtn = document.getElementById('buy-voucher')
-    buyBtn?.addEventListener('click', () => {
-      cleanupPrompt()
-      
-      // Get current values from input or fallback to original values
-      const finalAmount = (window as any).currentAmount ?? amount
-      const finalCashback = (window as any).currentCashback ?? (finalAmount * (voucher.cashbackRate / 100))
-      
-      // Simulate voucher purchase
-      const voucherCode = Math.random().toString(36).substring(2, 15).toUpperCase()
-      alert(`🎉 Voucher purchased!\n\nVoucher ID: ${voucher.voucherId}\nCode: ${voucherCode}\nAmount: €${finalAmount.toFixed(2)}\nCashback: €${finalCashback.toFixed(2)}\n\nConditions: ${voucher.conditions}\nValid for: ${voucher.validityDays} days\n\nCopy this code and use it at checkout!`)
-      // After voucher purchase, set icon to green (active)
-      chrome.runtime.sendMessage({ type: 'SET_ICON', state: 'active' })
-    })
-
-    // Auto-dismiss after 30 seconds with cleanup
-    const autoDismissTimer = setTimeout(cleanupPrompt, 30000)
-    
-    // Cleanup on page navigation
-    const beforeUnloadHandler = () => {
-      clearTimeout(autoDismissTimer)
-      cleanupPrompt()
-    }
-    window.addEventListener('beforeunload', beforeUnloadHandler)
-  }, 100)
-}
+// MVP: Removed old complex voucher offer function - replaced with simplified version
 
 // Removed showCashbackPrompt function - no longer using automatic cashback prompts
 
 // Removed unused showProfileScreen function
+
+// (Removed old simplified voucher list renderer)
+
+// Removed showCashbackPrompt function - no longer using automatic cashback prompts
+
+// Removed unused showProfileScreen function
+
+function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }) {
+  // Prevent multiple instances
+  const existing = document.getElementById('woolsocks-voucher-prompt')
+  if (existing) return
+
+  // Get translations (injected from background script) with safe fallback.
+  // Some builds inject only the voucher object (not wrapped). Normalize shape.
+  const injected = (window as any).__wsTranslations
+  const fallbackVoucher = {
+    title: 'Voucher',
+    purchaseAmount: 'Purchase amount',
+    cashbackText: "You'll get ",
+    cashbackSuffix: ' of cashback',
+    viewDetails: 'View voucher details',
+    usps: {
+      instantDelivery: 'Instant delivery',
+      cashbackOnPurchase: '% cashback on purchase',
+      useOnlineAtCheckout: 'Use online at checkout',
+    },
+    instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
+  }
+  const translations = (injected && injected.voucher)
+    ? injected
+    : { voucher: injected || fallbackVoucher }
+
+  function markVoucherDismissed(ms: number) {
+    const host = window.location.hostname
+    const until = Date.now() + ms
+    try {
+      const raw = window.localStorage.getItem('__wsVoucherDismissals')
+      const map = raw ? (JSON.parse(raw) as Record<string, number>) : {}
+      map[host] = until
+      window.localStorage.setItem('__wsVoucherDismissals', JSON.stringify(map))
+    } catch {
+      try { document.documentElement.setAttribute('data-ws-voucher-dismissed-until', String(until)) } catch {}
+    }
+  }
+
+  type VoucherDeal = { name?: string; cashbackRate?: number; imageUrl?: string; url?: string }
+  const collected: VoucherDeal[] = []
+  const voucherCategory = Array.isArray(partner.categories)
+    ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
+    : null
+
+  if (voucherCategory && Array.isArray(voucherCategory.deals)) {
+    for (const d of voucherCategory.deals) {
+      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: d?.imageUrl, url: d?.dealUrl })
+    }
+  } else if (Array.isArray(partner.allVouchers)) {
+    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: v.imageUrl, url: v.url })
+  } else if (partner.voucherProductUrl) {
+    collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: partner.merchantImageUrl, url: partner.voucherProductUrl })
+  }
+
+  const best = collected
+    .filter(v => typeof v.cashbackRate === 'number' && (v.cashbackRate as number) > 0)
+    .sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))[0]
+
+  const prompt = document.createElement('div')
+  prompt.id = 'woolsocks-voucher-prompt'
+  prompt.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 380px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border-radius: 16px;
+    border: 4px solid var(--brand, #FDC408);
+    background: var(--brand, #FDC408);
+    box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.08);
+    z-index: 2147483647;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    cursor: move;
+  `
+
+  const effectiveRate = typeof (best?.cashbackRate ?? partner.cashbackRate) === 'number' ? (best?.cashbackRate ?? partner.cashbackRate) : 0
+  const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
+
+  // USPs with unified checkmark icon
+  const uspIconUrl = assets?.uspIconUrl || ''
+  const safeUsps = (translations && translations.voucher && translations.voucher.usps) || {
+    instantDelivery: 'Instant delivery',
+    cashbackOnPurchase: '% cashback on purchase',
+    useOnlineAtCheckout: 'Use online at checkout',
+  }
+  const usps: Array<{ text: string }> = [
+    { text: safeUsps.instantDelivery },
+    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${safeUsps.cashbackOnPurchase}` }] : []),
+    { text: safeUsps.useOnlineAtCheckout },
+  ]
+
+  const image = best?.imageUrl || partner.merchantImageUrl || ''
+  const title = best?.name || partner.name || 'Gift Card'
+  const rateBadge = typeof effectiveRate === 'number' && effectiveRate > 0 ? `${effectiveRate.toFixed(0)}%` : ''
+
+  // Details (optional): omitted here as they are not available in current partner payload
+
+  // Payment methods row (from extension assets)
+  const paymentIconUrls = (assets?.paymentIconUrls || []).filter(Boolean)
+  const paymentIconsHtml = paymentIconUrls.map((src) => `
+    <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0;">
+      <img src="${src}" alt="payment" style="height: 36px; width: auto; display: block; max-width: 100%; object-fit: contain;" />
+    </div>
+  `).join('')
+
+  // Woolsocks logo (brand)
+  const wsLogoUrl = assets?.wsLogoUrl || ''
+  const externalIconUrl = assets?.externalIconUrl || ''
+
+  prompt.innerHTML = `
+    <div style="padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
+        <button id="ws-close" style="background: none; border: none; font-size: 40px; cursor: pointer; color: #666; line-height: 1;">×</button>
+      </div>
+
+      <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
+        <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
+        </div>
+        <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
+          <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
+            <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+              ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">${translations.voucher.title}</div>
+              <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
+            </div>
+            ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
+          </div>
+        </div>
+
+        <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
+          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
+        </div>
+
+        <div style="display: flex; align-items: center;">
+          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
+            <span>${translations.voucher.viewDetails}</span>
+            ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
+          </button>
+        </div>
+      </div>
+
+
+      <div style="display: flex; width: 100%; padding: 16px; box-sizing: border-box; flex-direction: column; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 8px; border: 1px solid var(--semantic-green-75, #B0F6D7); background: rgba(255, 255, 255, 0.50); margin: 12px 0;">
+        ${usps.map(u => `
+          <div style=\"display: flex; align-items: center; gap: 8px;\">
+            ${uspIconUrl ? `<img src=\"${uspIconUrl}\" alt=\"check\" style=\"width:16px;height:16px;display:block;\" />` : ''}
+            <span style=\"font-size: 13px; color: #111827;\">${u.text}</span>
+          </div>
+        `).join('')}
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 14px; width: 100%;">
+        ${paymentIconsHtml}
+      </div>
+
+      <div style="font-size: 13px; color: #3A2B00; opacity: 0.9; text-align: center; line-height: 1.4; margin: 6px 0 10px;">
+        ${translations.voucher.instructions}
+      </div>
+
+      ${wsLogoUrl ? `
+        <div style="display:flex; align-items:center; justify-content:center; padding-top: 8px;">
+          <img src="${wsLogoUrl}" alt="Woolsocks" style="height: 36px; width: auto; display: block;" />
+        </div>
+      ` : ''}
+    </div>
+  `
+
+  document.body.appendChild(prompt)
+
+  // Drag and snap functionality
+  let isDragging = false
+  let startX = 0
+  let startY = 0
+  let initialX = 0
+  let initialY = 0
+
+  prompt.addEventListener('mousedown', (e: MouseEvent) => {
+    // Don't drag if clicking on buttons
+    const target = e.target as HTMLElement
+    if (target.tagName === 'BUTTON' || target.closest('button')) return
+
+    isDragging = true
+    startX = e.clientX
+    startY = e.clientY
+
+    const rect = prompt.getBoundingClientRect()
+    initialX = rect.left
+    initialY = rect.top
+
+    prompt.style.transition = 'opacity 0.3s ease'
+    prompt.style.cursor = 'grabbing'
+  })
+
+  document.addEventListener('mousemove', (e: MouseEvent) => {
+    if (!isDragging) return
+
+    const deltaX = e.clientX - startX
+    const deltaY = e.clientY - startY
+
+    const newX = initialX + deltaX
+    const newY = initialY + deltaY
+
+    // Clear all positioning
+    prompt.style.top = 'auto'
+    prompt.style.bottom = 'auto'
+    prompt.style.left = 'auto'
+    prompt.style.right = 'auto'
+
+    // Set absolute position
+    prompt.style.left = newX + 'px'
+    prompt.style.top = newY + 'px'
+  })
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return
+    isDragging = false
+    prompt.style.cursor = 'move'
+
+    // Calculate final position
+    const rect = prompt.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    // Determine which corner is closest
+    const isLeft = centerX < viewportWidth / 2
+    const isTop = centerY < viewportHeight / 2
+
+    // Snap to corner with smooth transition
+    prompt.style.transition = 'top 0.3s ease, bottom 0.3s ease, left 0.3s ease, right 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
+
+    prompt.style.top = 'auto'
+    prompt.style.bottom = 'auto'
+    prompt.style.left = 'auto'
+    prompt.style.right = 'auto'
+
+    if (isTop) {
+      prompt.style.top = '20px'
+    } else {
+      prompt.style.bottom = '20px'
+    }
+
+    if (isLeft) {
+      prompt.style.left = '20px'
+    } else {
+      prompt.style.right = '20px'
+    }
+  })
+
+  setTimeout(() => {
+    (prompt as HTMLElement).style.opacity = '1'
+    ;(prompt as HTMLElement).style.transform = 'translateY(0) scale(1)'
+  }, 100)
+
+  document.getElementById('ws-close')?.addEventListener('click', () => {
+    markVoucherDismissed(5 * 60 * 1000)
+    ;(prompt as HTMLElement).style.opacity = '0'
+    ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
+    setTimeout(() => prompt.remove(), 300)
+  })
+
+  const cta = document.getElementById('ws-use-voucher')
+  cta?.addEventListener('click', () => {
+    const voucherUrl = best?.url || partner.voucherProductUrl
+    if (!voucherUrl) return
+    let dealUrl = voucherUrl
+    if (dealUrl.includes('/products/') && !dealUrl.includes('amount=')) {
+      const amountInCents = Math.round(amount * 100)
+      const separator = dealUrl.includes('?') ? '&' : '?'
+      dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
+    }
+    try {
+      // In MAIN world, chrome.runtime is not available. Use page → content bridge.
+      window.postMessage({ type: 'WS_OPEN_URL', url: dealUrl }, window.location.origin)
+    } catch {}
+    markVoucherDismissed(5 * 60 * 1000)
+    prompt.remove()
+  })
+
+  setTimeout(() => {
+    if (document.body.contains(prompt)) {
+      markVoucherDismissed(5 * 60 * 1000)
+      ;(prompt as HTMLElement).style.opacity = '0'
+      ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
+      setTimeout(() => prompt.remove(), 300)
+    }
+  }, 30000)
+}
 
 

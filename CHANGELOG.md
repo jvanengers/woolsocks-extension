@@ -5,13 +5,13 @@ All notable changes to the Woolsocks Browser Extension will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- Comprehensive documentation suite
-- Development guide for contributors
-- Contributing guidelines
-- Changelog tracking
+## Unreleased
+- Voucher URLs now use `providerReferenceId` (fallbacks to `productId`, `id`, or UUID in `links.webLink`)
+- Hide `GIFTCARD_PAY_LATER` (0%) vouchers; deduplicate and sort by rate
+- Added Airbnb checkout detection
+- Disabled entrance banner to avoid duplicate panels
+- Simplified Options page: session-aware login/greeting + sock value
+- Documentation overhaul (README, TESTING)
 
 ## [1.0.0] - 2024-01-XX
 

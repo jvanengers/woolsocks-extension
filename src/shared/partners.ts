@@ -27,8 +27,9 @@ export const PARTNERS: Partner[] = [
     cashbackRate: 2.5,
     voucherAvailable: true,
     logo: 'https://pbs.twimg.com/profile_images/705724583794630656/Id7jmjPO_400x400.jpg',
+    voucherProductUrl: 'https://woolsocks.eu/nl-NL/giftcards-shop/products/10b8c66c-b483-41dd-b3fe-3772b52adf5c',
     vouchers: [
-      { voucherId: 'zyx321abc987', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Apply the code in the "Gift card or promo code" field at checkout.', conditions: 'Valid on Zalando.nl; not combinable with some promotions; cannot be exchanged for cash.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
+      { voucherId: 'zyx321abc987', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 12.0, available: true, howToUse: 'Apply the code in the "Gift card or promo code" field at checkout.', conditions: 'Valid on Zalando.nl; not combinable with some promotions; cannot be exchanged for cash.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
     ],
   },
   {
@@ -38,7 +39,7 @@ export const PARTNERS: Partner[] = [
     voucherAvailable: true,
     logo: 'https://pbs.twimg.com/profile_images/705724583794630656/Id7jmjPO_400x400.jpg',
     vouchers: [
-      { voucherId: 'pqr555lmn888', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Enter the gift code in the designated field during checkout.', conditions: 'Valid on Zalando.de; some brands excluded; non-refundable.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
+      { voucherId: 'pqr555lmn888', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 12.0, available: true, howToUse: 'Enter the gift code in the designated field during checkout.', conditions: 'Valid on Zalando.de; some brands excluded; non-refundable.', validityDays: 1095, imageUrl: 'https://www.cadeaubon.nl/sites/default/files/2021-11/zalando-1500px_1.jpg?v=w500' },
     ],
   },
   {
@@ -104,6 +105,15 @@ export const PARTNERS: Partner[] = [
     cashbackRate: 0.5,
     voucherAvailable: false,
     vouchers: [],
+  },
+  {
+    domain: 'hema.nl',
+    name: 'HEMA',
+    cashbackRate: 4.0,
+    voucherAvailable: true,
+    vouchers: [
+      { voucherId: 'hema123abc456', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Enter the voucher code in the "kortingscode" field at checkout.', conditions: 'Valid on HEMA.nl; cannot be exchanged for cash.', validityDays: 1095 },
+    ],
   },
 ]
 
