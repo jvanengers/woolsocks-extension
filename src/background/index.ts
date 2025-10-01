@@ -1,8 +1,8 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
-import { t, translate, initLanguage } from '../shared/i18n'
+import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -91,8 +91,17 @@ function setIcon(state: IconState, tabId?: number) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
-  // Initialize language
+  // Initialize language from storage (fallback)
   await initLanguage()
+  
+  // Fetch user's language from API and apply it
+  const apiLang = await getUserLanguage()
+  if (apiLang) {
+    const lang = setLanguageFromAPI(apiLang)
+    console.log(`[WS] Language set from API: ${lang}`)
+  } else {
+    console.log('[WS] Using cached/default language')
+  }
   
   // Initialize defaults
   const defaultUser: AnonymousUser = {
@@ -108,6 +117,16 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Initialize deals scraper
   await initializeScraper()
   setupScrapingSchedule()
+})
+
+// Also fetch language on startup (when browser restarts)
+chrome.runtime.onStartup?.addListener(async () => {
+  await initLanguage()
+  const apiLang = await getUserLanguage()
+  if (apiLang) {
+    const lang = setLanguageFromAPI(apiLang)
+    console.log(`[WS] Language refreshed from API on startup: ${lang}`)
+  }
 })
 
 // Track injected scripts to prevent duplicates

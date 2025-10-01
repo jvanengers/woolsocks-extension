@@ -289,4 +289,21 @@ export async function refreshDeals(): Promise<PartnerLite[]> {
 export async function initializeScraper() {}
 export function setupScrapingSchedule() {}
 
+// Fetch user's language preference from Woolsocks API
+export async function getUserLanguage(): Promise<string | null> {
+  try {
+    const response = await fetchViaSiteProxy<{ data?: { language?: string; locale?: string } }>('/user-info/api/v0')
+    
+    if (response.status === 200 && response.data?.data) {
+      // Try language field first, then locale as fallback
+      return response.data.data.language || response.data.data.locale || null
+    }
+    
+    return null
+  } catch (error) {
+    console.warn('[WS API] Failed to fetch user language:', error)
+    return null
+  }
+}
+
 

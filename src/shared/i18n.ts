@@ -1,7 +1,7 @@
 // Internationalization (i18n) system for Woolsocks extension
 // Supports multiple languages with fallback to English
 
-export type Language = 'en' | 'nl' | 'de' | 'fr'
+export type Language = 'en' | 'nl' | 'de' | 'fr' | 'it' | 'es'
 
 export interface Translations {
   // Voucher Panel
@@ -200,21 +200,102 @@ const translations: Record<Language, Translations> = {
       scriptInjected: 'Script de paiement universel injecté pour l\'onglet {tabId} sur {hostname}',
     },
   },
+  
+  it: {
+    voucher: {
+      title: 'Voucher',
+      purchaseAmount: 'Importo dell\'acquisto',
+      cashbackText: 'Riceverai ',
+      cashbackSuffix: ' di cashback',
+      viewDetails: 'Visualizza dettagli voucher',
+      notNow: 'Non ora',
+      usps: {
+        instantDelivery: 'Consegna istantanea',
+        cashbackOnPurchase: '% di cashback sull\'acquisto',
+        useOnlineAtCheckout: 'Usa online al momento del pagamento',
+      },
+      instructions: 'Acquista il voucher su Woolsocks.eu e inserisci il codice voucher al momento del pagamento.',
+      footer: 'Woolsocks - l\'app del denaro',
+    },
+    notifications: {
+      cashbackActivated: 'Cashback attivato!',
+      cashbackActivatedMessage: 'Guadagnerai {rate}% di cashback sugli acquisti {partner}',
+      error: 'Errore',
+    },
+    icons: {
+      noDeals: 'Nessuna offerta su questo sito',
+      cashbackAvailable: 'Cashback disponibile — clicca per attivare',
+      cashbackActive: 'Cashback attivato',
+      voucherAvailable: 'Offerta voucher disponibile',
+      attentionNeeded: 'Attenzione richiesta',
+    },
+    debug: {
+      checkoutDetected: 'Checkout rilevato per il commerciante: {merchant}',
+      partnerData: 'Dati del partner:',
+      noMerchant: 'Nessun commerciante trovato nel sistema Woolsocks per: {merchant}',
+      noVouchers: 'Nessun voucher disponibile per il commerciante: {name}',
+      showingOffer: 'Visualizzazione offerta voucher per {name} con {rate}% di cashback',
+      scriptInjected: 'Script di checkout universale iniettato per la scheda {tabId} su {hostname}',
+    },
+  },
+  
+  es: {
+    voucher: {
+      title: 'Cupón',
+      purchaseAmount: 'Importe de la compra',
+      cashbackText: 'Recibirás ',
+      cashbackSuffix: ' de cashback',
+      viewDetails: 'Ver detalles del cupón',
+      notNow: 'Ahora no',
+      usps: {
+        instantDelivery: 'Entrega instantánea',
+        cashbackOnPurchase: '% de cashback en la compra',
+        useOnlineAtCheckout: 'Usar online al pagar',
+      },
+      instructions: 'Compra el cupón en Woolsocks.eu e introduce el código del cupón al pagar.',
+      footer: 'Woolsocks - la app del dinero',
+    },
+    notifications: {
+      cashbackActivated: '¡Cashback activado!',
+      cashbackActivatedMessage: 'Ganarás {rate}% de cashback en compras de {partner}',
+      error: 'Error',
+    },
+    icons: {
+      noDeals: 'No hay ofertas en este sitio',
+      cashbackAvailable: 'Cashback disponible — haz clic para activar',
+      cashbackActive: 'Cashback activado',
+      voucherAvailable: 'Oferta de cupón disponible',
+      attentionNeeded: 'Atención necesaria',
+    },
+    debug: {
+      checkoutDetected: 'Checkout detectado para el comerciante: {merchant}',
+      partnerData: 'Datos del socio:',
+      noMerchant: 'No se encontró comerciante en el sistema Woolsocks para: {merchant}',
+      noVouchers: 'No hay cupones disponibles para el comerciante: {name}',
+      showingOffer: 'Mostrando oferta de cupón para {name} con {rate}% de cashback',
+      scriptInjected: 'Script de checkout universal inyectado para la pestaña {tabId} en {hostname}',
+    },
+  },
 }
 
-// Get browser language preference
-function getBrowserLanguage(): Language {
-  const browserLang = navigator.language.toLowerCase()
+// Normalize API language code to our Language type
+function normalizeLanguage(apiLang: string | undefined | null): Language {
+  if (!apiLang) return 'en'
   
-  if (browserLang.startsWith('nl')) return 'nl'
-  if (browserLang.startsWith('de')) return 'de'
-  if (browserLang.startsWith('fr')) return 'fr'
+  const normalized = apiLang.toLowerCase().trim()
+  
+  if (normalized === 'nl' || normalized.startsWith('nl-')) return 'nl'
+  if (normalized === 'de' || normalized.startsWith('de-')) return 'de'
+  if (normalized === 'fr' || normalized.startsWith('fr-')) return 'fr'
+  if (normalized === 'it' || normalized.startsWith('it-')) return 'it'
+  if (normalized === 'es' || normalized.startsWith('es-')) return 'es'
+  if (normalized === 'en' || normalized.startsWith('en-')) return 'en'
   
   return 'en' // Default fallback
 }
 
-// Current language (can be overridden by user preference)
-let currentLanguage: Language = getBrowserLanguage()
+// Current language (will be set from API on startup)
+let currentLanguage: Language = 'en'
 
 // Get translations for current language
 export function t(): Translations {
@@ -269,7 +350,20 @@ export function getLanguage(): Language {
   return currentLanguage
 }
 
-// Initialize language from storage
+// Set language from API response
+export function setLanguageFromAPI(apiLang: string | undefined | null): Language {
+  const lang = normalizeLanguage(apiLang)
+  currentLanguage = lang
+  
+  // Store in chrome storage for persistence
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.local.set({ language: lang }).catch(() => {})
+  }
+  
+  return lang
+}
+
+// Initialize language from storage (fallback only)
 export async function initLanguage(): Promise<void> {
   if (typeof chrome !== 'undefined' && chrome.storage) {
     try {
