@@ -106,6 +106,15 @@ export const PARTNERS: Partner[] = [
     voucherAvailable: false,
     vouchers: [],
   },
+  {
+    domain: 'hema.nl',
+    name: 'HEMA',
+    cashbackRate: 4.0,
+    voucherAvailable: true,
+    vouchers: [
+      { voucherId: 'hema123abc456', type: 'flex', minAmount: 10, maxAmount: 250, step: 5, currency: 'EUR', cashbackRate: 4.0, available: true, howToUse: 'Enter the voucher code in the "kortingscode" field at checkout.', conditions: 'Valid on HEMA.nl; cannot be exchanged for cash.', validityDays: 1095 },
+    ],
+  },
 ]
 
 export function findPartnerByDomain(domain: string): Partner | null {

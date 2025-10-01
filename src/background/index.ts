@@ -143,25 +143,26 @@ async function evaluateTab(tabId: number, url?: string | null) {
       return
     }
     
-    const partner = await getPartnerByHostname(u.hostname)
-    
-    if (partner) {
-      // Only inject script if not already injected for this tab
-      if (!injectedScripts.has(tabId)) {
+    // Inject checkout detector on ALL non-excluded domains for universal detection
+    if (!injectedScripts.has(tabId)) {
       try {
         await chrome.scripting.executeScript({
           target: { tabId },
           files: ['content/checkout.js']
         })
-          injectedScripts.add(tabId)
-          console.log(`Checkout script injected for tab ${tabId}`)
+        injectedScripts.add(tabId)
+        console.log(`[WS] Universal checkout script injected for tab ${tabId} on ${u.hostname}`)
       } catch (error) {
-        // Script might already be injected, ignore
-        console.log('Script injection skipped:', error)
-        }
+        console.log('[WS] Script injection skipped:', error)
       }
-      
-      // Check if cashback is already active (no automatic prompts)
+    }
+
+    // Check if this merchant is supported via API (async, non-blocking)
+    // The checkout detector will handle the actual voucher display if needed
+    const partner = await getPartnerByHostname(u.hostname)
+
+    if (partner) {
+      // Check if cashback is already active
       const result = await chrome.storage.local.get('user')
       const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
       
@@ -171,13 +172,13 @@ async function evaluateTab(tabId: number, url?: string | null) {
       
       if (activeActivation) {
         setIcon('active', tabId)
-  } else if (partner.voucherAvailable && u.pathname.includes('checkout')) {
-        // Keep icon as 'available' (yellow) at checkout until voucher is actually purchased
+      } else if (partner.voucherAvailable && u.pathname.includes('checkout')) {
         setIcon('available', tabId)
       } else {
         setIcon('available', tabId)
       }
     } else {
+      // No partner found - icon stays neutral, but checkout detection still works
       setIcon('neutral', tabId)
     }
   } catch {
@@ -348,28 +349,29 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   if (!tabId) return
   
-  // checkoutInfo.merchant is already a hostname (e.g., "zalando.com"),
-  // so we should not wrap it in new URL(...)
+  // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
   console.log(`[DEBUG] Checkout detected for merchant: ${checkoutInfo.merchant}`)
+  
+  // Check user settings first (fast check before API call)
+  const result = await chrome.storage.local.get('user')
+  const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+  
+  if (!user.settings.showVoucherPrompt) return
+
+  // Search for merchant via API (works for any merchant)
   const partner = await getPartnerByHostname(checkoutInfo.merchant)
   console.log(`[DEBUG] Partner data:`, partner)
   
   if (!partner) {
-    console.log(`[DEBUG] No partner found for merchant:`, checkoutInfo.merchant)
+    console.log(`[DEBUG] No merchant found in Woolsocks system for: ${checkoutInfo.merchant}`)
     return
   }
   
   // Check if vouchers are available for this merchant
   if (!partner.voucherAvailable) {
-    console.log(`[DEBUG] No vouchers available for partner:`, partner.name)
+    console.log(`[DEBUG] No vouchers available for merchant: ${partner.name}`)
     return
   }
-  
-  // Check user settings
-  const result = await chrome.storage.local.get('user')
-          const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
-  
-  if (!user.settings.showVoucherPrompt) return
 
   const checkoutTotal = checkoutInfo.total
   
@@ -437,19 +439,21 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   prompt.id = 'woolsocks-voucher-prompt'
   prompt.style.cssText = `
     position: fixed;
-    top: 20px;
+    bottom: 20px;
     right: 20px;
     width: 380px;
     max-height: 80vh;
     overflow-y: auto;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    border-radius: 16px;
+    border: 4px solid var(--brand, #FDC408);
+    background: var(--brand, #FDC408);
+    box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.08);
     z-index: 2147483647;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     opacity: 0;
-    transform: translateY(-10px) scale(0.95);
+    transform: translateY(10px) scale(0.95);
     transition: opacity 0.3s ease, transform 0.3s ease;
+    cursor: move;
   `
 
   const effectiveRate = typeof (best?.cashbackRate ?? partner.cashbackRate) === 'number' ? (best?.cashbackRate ?? partner.cashbackRate) : 0
@@ -490,35 +494,55 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
     </div>
   `).join('')
 
+  // Woolsocks logo (brand)
+  const wsLogoUrl = (() => { try { return chrome.runtime.getURL('public/icons/Woolsocks-logo-large.svg') } catch { return '' } })()
+  const externalIconUrl = (() => { try { return chrome.runtime.getURL('public/icons/External-link.svg') } catch { return '' } })()
+
   prompt.innerHTML = `
-    <div style="padding: 20px;">
+    <div style="padding: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
         <button id="ws-close" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666; line-height: 1;">×</button>
       </div>
 
-      <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
-        <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-          ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
+      <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
+        <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">Purchase amount</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">Voucher</div>
-          <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
+        <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
+          <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
+            <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+              ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
+            </div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">Voucher</div>
+              <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
+            </div>
+            ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
+          </div>
         </div>
-        ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
+
+        <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">You'll get </span>
+          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;"> of cashback</span>
+        </div>
+
+        <div style="display: flex; align-items: center;">
+          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
+            <span>View voucher details</span>
+            ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
+          </button>
+        </div>
       </div>
 
-      <div style="margin-bottom: 16px; padding: 12px; background: #F0F8FF; border-radius: 10px;">
-        <div style="font-size: 13px; color: #1D4ED8; font-weight: 600;">You’ll get cashback</div>
-        <div style="font-size: 18px; color: #111827; font-weight: 700; margin-top: 2px;">€${cashbackAmount}</div>
-        <div style="font-size: 12px; color: #6B7280; margin-top: 2px;">Purchase amount: €${amount.toFixed(2)}</div>
-      </div>
 
-      <div style="margin-bottom: 16px;">
+      <div style="display: flex; width: 100%; padding: 16px; box-sizing: border-box; flex-direction: column; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 8px; border: 1px solid var(--semantic-green-75, #B0F6D7); background: rgba(255, 255, 255, 0.50); margin: 12px 0;">
         ${usps.map(u => `
-          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #F3F4F6;">
-            ${uspIconUrl ? `<img src="${uspIconUrl}" alt="check" style="width:16px;height:16px;display:block;" />` : ''}
-            <span style="font-size: 13px; color: #111827;">${u.text}</span>
+          <div style=\"display: flex; align-items: center; gap: 8px;\">
+            ${uspIconUrl ? `<img src=\"${uspIconUrl}\" alt=\"check\" style=\"width:16px;height:16px;display:block;\" />` : ''}
+            <span style=\"font-size: 13px; color: #111827;\">${u.text}</span>
           </div>
         `).join('')}
       </div>
@@ -527,20 +551,101 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
         ${paymentIconsHtml}
       </div>
 
-      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-        <button id="ws-use-voucher" style="flex: 1; padding: 10px 14px; background: #211940; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;">
-          Use voucher
-        </button>
-        <button id="ws-dismiss" style="padding: 10px 12px; background: #F3F4F6; color: #374151; border: 1px solid #E5E7EB; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;">
-          Not now
-        </button>
+      <div style="font-size: 13px; color: #3A2B00; opacity: 0.9; text-align: center; line-height: 1.4; margin: 6px 0 10px;">
+        Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.
       </div>
 
-      
+      ${wsLogoUrl ? `
+        <div style="display:flex; align-items:center; justify-content:center; padding-top: 8px;">
+          <img src="${wsLogoUrl}" alt="Woolsocks" style="height: 36px; width: auto; display: block;" />
+        </div>
+      ` : ''}
     </div>
   `
 
   document.body.appendChild(prompt)
+
+  // Drag and snap functionality
+  let isDragging = false
+  let startX = 0
+  let startY = 0
+  let initialX = 0
+  let initialY = 0
+
+  prompt.addEventListener('mousedown', (e: MouseEvent) => {
+    // Don't drag if clicking on buttons
+    const target = e.target as HTMLElement
+    if (target.tagName === 'BUTTON' || target.closest('button')) return
+
+    isDragging = true
+    startX = e.clientX
+    startY = e.clientY
+
+    const rect = prompt.getBoundingClientRect()
+    initialX = rect.left
+    initialY = rect.top
+
+    prompt.style.transition = 'opacity 0.3s ease'
+    prompt.style.cursor = 'grabbing'
+  })
+
+  document.addEventListener('mousemove', (e: MouseEvent) => {
+    if (!isDragging) return
+
+    const deltaX = e.clientX - startX
+    const deltaY = e.clientY - startY
+
+    const newX = initialX + deltaX
+    const newY = initialY + deltaY
+
+    // Clear all positioning
+    prompt.style.top = 'auto'
+    prompt.style.bottom = 'auto'
+    prompt.style.left = 'auto'
+    prompt.style.right = 'auto'
+
+    // Set absolute position
+    prompt.style.left = newX + 'px'
+    prompt.style.top = newY + 'px'
+  })
+
+  document.addEventListener('mouseup', () => {
+    if (!isDragging) return
+    isDragging = false
+    prompt.style.cursor = 'move'
+
+    // Calculate final position
+    const rect = prompt.getBoundingClientRect()
+    const centerX = rect.left + rect.width / 2
+    const centerY = rect.top + rect.height / 2
+
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+
+    // Determine which corner is closest
+    const isLeft = centerX < viewportWidth / 2
+    const isTop = centerY < viewportHeight / 2
+
+    // Snap to corner with smooth transition
+    prompt.style.transition = 'top 0.3s ease, bottom 0.3s ease, left 0.3s ease, right 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
+
+    prompt.style.top = 'auto'
+    prompt.style.bottom = 'auto'
+    prompt.style.left = 'auto'
+    prompt.style.right = 'auto'
+
+    if (isTop) {
+      prompt.style.top = '20px'
+    } else {
+      prompt.style.bottom = '20px'
+    }
+
+    if (isLeft) {
+      prompt.style.left = '20px'
+    } else {
+      prompt.style.right = '20px'
+    }
+  })
 
   setTimeout(() => {
     (prompt as HTMLElement).style.opacity = '1'
@@ -550,13 +655,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
   document.getElementById('ws-close')?.addEventListener('click', () => {
     markVoucherDismissed(5 * 60 * 1000)
     ;(prompt as HTMLElement).style.opacity = '0'
-    ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
-    setTimeout(() => prompt.remove(), 300)
-  })
-  document.getElementById('ws-dismiss')?.addEventListener('click', () => {
-    markVoucherDismissed(5 * 60 * 1000)
-    ;(prompt as HTMLElement).style.opacity = '0'
-    ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
+    ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
     setTimeout(() => prompt.remove(), 300)
   })
 
@@ -579,7 +678,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number) {
     if (document.body.contains(prompt)) {
       markVoucherDismissed(5 * 60 * 1000)
       ;(prompt as HTMLElement).style.opacity = '0'
-      ;(prompt as HTMLElement).style.transform = 'translateY(-10px) scale(0.95)'
+      ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
       setTimeout(() => prompt.remove(), 300)
     }
   }, 30000)

@@ -1,4 +1,10 @@
-// Content script for checkout detection and price parsing
+// Universal checkout detection content script
+// This script runs on ALL websites (except excluded domains) and detects checkout/cart pages.
+// When a checkout is detected, it sends a message to the background script which:
+// 1. Queries the Woolsocks API to check if the merchant has vouchers available
+// 2. If vouchers are found, displays the voucher offer panel
+// This approach works for ANY merchant that Woolsocks supports, without needing a hardcoded partners list.
+
 import type { CheckoutInfo } from '../shared/types'
 
 // Merchant support check (non-blocking)
@@ -508,32 +514,54 @@ const hemaDetector: CheckoutDetector = {
     const url = window.location.href
     return url.includes('/cart') || 
            url.includes('/checkout') ||
-           document.querySelector('[class*="cart"]') !== null
+           document.querySelector('[class*="cart"]') !== null ||
+           document.querySelector('[class*="winkelmand"]') !== null
   },
   extractTotal: () => {
+    // HEMA specific selectors - target the actual total row in the cart
     const selectors = [
-      '[class*="total"] [class*="price"]',
-      '[class*="cart"] [class*="total"]',
-      '.checkout-summary .total'
+      // Look for elements with "totaal" text followed by price
+      '[class*="total"]',
+      '[class*="totaal"]',
+      '[data-testid*="total"]',
+      '[class*="cart-summary"]',
+      '[class*="order-summary"]'
     ]
     
+    // First try to find elements containing "totaal" keyword
     for (const selector of selectors) {
-      const element = document.querySelector(selector)
-      if (element) {
+      const elements = document.querySelectorAll(selector)
+      for (const element of elements) {
         const text = element.textContent || ''
-        const match = text.match(/€\s*([\d.,]+)/)
-        if (match) {
-          return parseFloat(match[1].replace('.', '').replace(',', '.'))
+        // Look for "totaal" followed by amount
+        if (/totaal/i.test(text)) {
+          const match = text.match(/€?\s*([\d]+[.,]?\d*)/)
+          if (match) {
+            // Parse amount - HEMA uses format like "13,-" or "27,99"
+            let amount = match[1].replace(',', '.')
+            // Handle "13,-" format (should be 13.00)
+            if (amount.endsWith('.')) amount += '00'
+            const parsed = parseFloat(amount)
+            if (!isNaN(parsed) && parsed > 0) {
+              return parsed
+            }
+          }
         }
       }
     }
     
-    // Fallback: search for total patterns
+    // Fallback: search for "totaal" patterns in the whole page
     const bodyText = document.body.textContent || ''
-    const totalMatch = bodyText.match(/(?:totaal|total)[^\n€]*€\s*([\d.,]+)/i)
+    const totalMatch = bodyText.match(/totaal\s*€?\s*([\d]+[.,]?-?\d*)/i)
     if (totalMatch) {
-      return parseFloat(totalMatch[1].replace('.', '').replace(',', '.'))
+      let amount = totalMatch[1].replace(',', '.').replace('-', '')
+      if (amount.endsWith('.')) amount += '00'
+      const parsed = parseFloat(amount)
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed
+      }
     }
+    
     return null
   },
   getCurrency: () => 'EUR'
