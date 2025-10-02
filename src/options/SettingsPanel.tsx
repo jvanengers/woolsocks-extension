@@ -88,6 +88,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [session, setSession] = useState<boolean | null>(null)
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
+  const [qaBypass, setQaBypass] = useState<boolean>(false)
 
   useEffect(() => {
     checkSession().then((has) => {
@@ -95,6 +96,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       if (has) {
         loadProfile()
         loadTransactions()
+        loadQaBypass()
       }
     })
   }, [])
@@ -118,6 +120,21 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   async function loadTransactions() {
     const tx = await fetchTransactions()
     setTransactions(tx)
+  }
+
+  async function loadQaBypass() {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { settings: {} }
+    setQaBypass(!!user.settings?.qaBypassVoucherDismissal)
+  }
+
+  async function saveQaBypass(next: boolean) {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
+    user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true }
+    user.settings.qaBypassVoucherDismissal = next
+    await chrome.storage.local.set({ user })
+    setQaBypass(next)
   }
 
   const firstName: string | undefined =
@@ -163,6 +180,17 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
       {session === true && (
         <div style={{ marginTop: variant === 'popup' ? 8 : 24 }}>
+          {/* QA toggle */}
+          <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>QA: Always show voucher (ignore dismissals)</div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={qaBypass} onChange={(e) => saveQaBypass(e.target.checked)} />
+                <span style={{ fontSize: 12, color: '#6B7280' }}>{qaBypass ? 'Enabled' : 'Disabled'}</span>
+              </label>
+            </div>
+          </div>
+
           {variant === 'popup' ? (
             <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>Hi {firstName || 'there'},</div>

@@ -53,6 +53,8 @@ export interface AnonymousUser {
   settings: {
     showCashbackPrompt: boolean
     showVoucherPrompt: boolean
+    // QA toggle: when true, content script ignores dismissal cooldowns
+    qaBypassVoucherDismissal?: boolean
   }
 }
 

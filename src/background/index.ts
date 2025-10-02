@@ -134,6 +134,19 @@ async function evaluateTab(tabId: number, url?: string | null) {
   try {
     const u = new URL(url)
     
+    // Skip browser internal pages
+    if (url.startsWith('chrome://') || 
+        url.startsWith('chrome-extension://') || 
+        url.startsWith('brave://') || 
+        url.startsWith('edge://') || 
+        url.startsWith('firefox://') || 
+        url.startsWith('moz-extension://') || 
+        url.startsWith('about:') || 
+        url.startsWith('file://')) {
+      setIcon('neutral', tabId)
+      return
+    }
+    
     // Check if this domain should be excluded
     if (isExcludedDomain(u.hostname)) {
       setIcon('neutral', tabId)
@@ -190,6 +203,19 @@ chrome.action.onClicked.addListener(async (tab) => {
   
   try {
     const u = new URL(tab.url)
+    
+    // Skip browser internal pages
+    if (tab.url.startsWith('chrome://') || 
+        tab.url.startsWith('chrome-extension://') || 
+        tab.url.startsWith('brave://') || 
+        tab.url.startsWith('edge://') || 
+        tab.url.startsWith('firefox://') || 
+        tab.url.startsWith('moz-extension://') || 
+        tab.url.startsWith('about:') || 
+        tab.url.startsWith('file://')) {
+      setIcon('neutral', tab.id)
+      return
+    }
     
     // Check if this domain should be excluded
     if (isExcludedDomain(u.hostname)) {
@@ -331,6 +357,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   if (!tabId) return
   
   // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
+  console.log('[WS] handleCheckoutDetected called with:', checkoutInfo)
   console.log(translate('debug.checkoutDetected', { merchant: checkoutInfo.merchant }))
   
   // Check user settings first (fast check before API call)
@@ -338,6 +365,78 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
   
   if (!user.settings.showVoucherPrompt) return
+
+  // Special case: bol.com always returns Woolsocks All-in-One voucher (bypass API entirely)
+  if (checkoutInfo.merchant.includes('bol.com')) {
+    console.log('[WS] Special case: bol.com detected, showing Woolsocks All-in-One voucher')
+    const bolPartner = {
+      name: 'Woolsocks All-in-One',
+      cashbackRate: 4,
+      voucherAvailable: true,
+      voucherProductUrl: 'https://woolsocks.eu/nl-NL/giftcards-shop/products/3bb42619-ac4c-4934-a5c2-eec7a7530afe',
+      merchantImageUrl: '',
+      categories: [{
+        name: 'Vouchers',
+        deals: [{
+          name: 'Woolsocks All-in-One',
+          rate: 4,
+          description: '1 voucher, vele merken',
+          imageUrl: '',
+          dealUrl: 'https://woolsocks.eu/nl-NL/giftcards-shop/products/3bb42619-ac4c-4934-a5c2-eec7a7530afe'
+        }],
+        maxRate: 4
+      }]
+    }
+    
+    // Use a default amount if total is 0 or invalid
+    const checkoutTotal = checkoutInfo.total > 0 ? checkoutInfo.total : 50
+    console.log('[WS] Using checkout total:', checkoutTotal, '(original was:', checkoutInfo.total, ')')
+    
+    console.log(translate('debug.showingOffer', { name: bolPartner.name, rate: String(bolPartner.cashbackRate) }))
+    
+    // Inject translations into page context first (MAIN world)
+    const asset = (p: string) => chrome.runtime.getURL(p)
+    const paymentIconFiles = [
+      'public/icons/Payment method icon_VISA.png',
+      'public/icons/Payment method icon_mastercard.png',
+      'public/icons/Payment method icon_IDEAL.png',
+      'public/icons/Payment method icon_APPLEPAY.png',
+      'public/icons/Payment method icon_GPAY.png',
+    ]
+    const assets = {
+      uspIconUrl: asset('public/icons/Circle checkmark.svg'),
+      wsLogoUrl: asset('public/icons/Woolsocks-logo-large.svg'),
+      externalIconUrl: asset('public/icons/External-link.svg'),
+      paymentIconUrls: paymentIconFiles.map(asset),
+    }
+
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (translations) => {
+        try { (window as any).__wsTranslations = translations } catch {}
+      },
+      args: [t().voucher],
+    }).then(() => {
+      // Then render the voucher panel in MAIN world to avoid isolation issues
+      return chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: showVoucherDetailWithUsps,
+        args: [bolPartner, checkoutTotal, assets],
+      })
+    }).catch((e) => {
+      console.warn('[WS] Failed to inject/render voucher panel:', e)
+    })
+    
+    return
+  }
+
+  // Add extra delay for slow-loading sites like Thuisbezorgd
+  if (checkoutInfo.merchant.includes('thuisbezorgd')) {
+    console.log('[WS] Adding extra delay for Thuisbezorgd to ensure page is fully loaded')
+    await new Promise(resolve => setTimeout(resolve, 2000))
+  }
 
   // Search for merchant via API (works for any merchant)
   const partner = await getPartnerByHostname(checkoutInfo.merchant)
@@ -407,9 +506,11 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 // Removed unused showProfileScreen function
 
 function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }) {
-  // Prevent multiple instances
+  // Always reflect the latest detected amount by re-rendering the prompt
   const existing = document.getElementById('woolsocks-voucher-prompt')
-  if (existing) return
+  if (existing) {
+    try { existing.remove() } catch {}
+  }
 
   // Get translations (injected from background script) with safe fallback.
   // Some builds inject only the voucher object (not wrapped). Normalize shape.
@@ -446,18 +547,29 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
 
   type VoucherDeal = { name?: string; cashbackRate?: number; imageUrl?: string; url?: string }
   const collected: VoucherDeal[] = []
+  const normalizeImageUrl = (u?: string) => {
+    if (!u || typeof u !== 'string') return undefined
+    try {
+      // Prefer https to avoid mixed-content blocks
+      const fixed = u.replace(/^http:/i, 'https:')
+      return fixed
+    } catch {
+      return undefined
+    }
+  }
+
   const voucherCategory = Array.isArray(partner.categories)
     ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
     : null
 
   if (voucherCategory && Array.isArray(voucherCategory.deals)) {
     for (const d of voucherCategory.deals) {
-      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: d?.imageUrl, url: d?.dealUrl })
+      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: normalizeImageUrl(d?.imageUrl), url: d?.dealUrl })
     }
   } else if (Array.isArray(partner.allVouchers)) {
-    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: v.imageUrl, url: v.url })
+    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: normalizeImageUrl(v.imageUrl), url: v.url })
   } else if (partner.voucherProductUrl) {
-    collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: partner.merchantImageUrl, url: partner.voucherProductUrl })
+    collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: normalizeImageUrl(partner.merchantImageUrl), url: partner.voucherProductUrl })
   }
 
   const best = collected
@@ -501,9 +613,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     { text: safeUsps.useOnlineAtCheckout },
   ]
 
-  const image = best?.imageUrl || partner.merchantImageUrl || ''
+  const image = normalizeImageUrl(best?.imageUrl || partner.merchantImageUrl) || ''
   const title = best?.name || partner.name || 'Gift Card'
-  const rateBadge = typeof effectiveRate === 'number' && effectiveRate > 0 ? `${effectiveRate.toFixed(0)}%` : ''
 
   // Details (optional): omitted here as they are not available in current partner payload
 
@@ -523,7 +634,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     <div style="padding: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
-        <button id="ws-close" style="background: none; border: none; font-size: 40px; cursor: pointer; color: #666; line-height: 1;">×</button>
+        <button id="ws-close" style="background: none; border: none; font-size: 28px; cursor: pointer; color: #0F0B1C; line-height: 1;">×</button>
       </div>
 
       <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
@@ -534,13 +645,12 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
         <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
           <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
             <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-              ${image ? `<img src="${image}" alt="${title}" style="width: 100%; height: 100%; object-fit: cover;">` : `<div style="font-size: 12px; color: #666;">Gift</div>`}
+              ${image ? `<img src="${image}" alt="${title}" referrerpolicy="no-referrer" decoding="async" loading="eager" onerror="console.warn('[WS] Image failed to load:', '${image}'); this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: contain;"><div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #F3F4F6; border-radius: 8px; font-size: 12px; color: #666;">Voucher</div>` : `${assets?.wsLogoUrl ? `<img src='${assets.wsLogoUrl}' alt="${title}" style="width: 100%; height: 100%; object-fit: contain;">` : `<div style=\"font-size: 12px; color: #666;\">Voucher</div>`}`}
             </div>
             <div style="flex: 1; min-width: 0;">
-              <div style="font-size: 13px; color: #6B7280; margin-bottom: 2px;">${translations.voucher.title}</div>
+              <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 4px; background: #ECEBED; font-size: 13px; color: #6B7280; margin-bottom: 2px; width: fit-content;">${effectiveRate}% cashback</div>
               <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
             </div>
-            ${rateBadge ? `<div style="background: #E6F0FF; color: #1D4ED8; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 6px 10px;">${rateBadge}</div>` : ''}
           </div>
         </div>
 
@@ -585,6 +695,177 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
   `
 
   document.body.appendChild(prompt)
+
+  // --- Minimize/Expand helpers -------------------------------------------------
+  let minimizedBanner: HTMLElement | null = null
+
+  function showMinimizedBanner() {
+    if (minimizedBanner && document.body.contains(minimizedBanner)) return
+
+    const hostForLabel = ((): string => {
+      try { 
+        const hostname = window.location.hostname
+        return hostname.startsWith('www.') ? hostname.substring(4) : hostname
+      } catch { return 'this site' }
+    })()
+
+    minimizedBanner = document.createElement('div')
+    minimizedBanner.id = 'woolsocks-voucher-minimized'
+    minimizedBanner.style.cssText = [
+      'position: fixed',
+      'top: 20px',
+      'right: 20px',
+      'z-index: 2147483647',
+      'display: flex',
+      'min-width: 200px',
+      'max-width: 80vw',
+      'max-height: 775px',
+      'padding: 4px 8px',
+      'flex-direction: column',
+      'align-items: center',
+      'border-radius: 8px',
+      'background: var(--brand, #FDC408)',
+      'box-shadow: -2px 2px 4px 0 rgba(0, 0, 0, 0.08)',
+      'cursor: pointer',
+      'color: #0F0B1C',
+      'box-sizing: border-box'
+    ].join(';') + ';'
+
+    minimizedBanner.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding-left: 0; padding-right: 8px; padding-top: 0; padding-bottom: 0; width: 100%; height: 32px;">
+        <div style="display: flex; gap: 4px; align-items: center; padding: 0 2px;">
+          <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; font-family: Woolsocks, sans-serif; font-size: 16px; font-weight: 400; line-height: 1.45; white-space: nowrap;">€${cashbackAmount}</div>
+          <div style="font-family: Woolsocks, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.45; color: #100B1C; letter-spacing: 0.1px; white-space: nowrap;">Savings available at ${hostForLabel}</div>
+        </div>
+        <div aria-hidden="true" style="display:flex; align-items:center; justify-content:center; width: 32px; height: 32px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M11.9999 13.5858L17.2928 8.29289L18.707 9.70711L12.707 15.7071C12.3165 16.0976 11.6833 16.0976 11.2928 15.7071L5.29282 9.70711L6.70703 8.29289L11.9999 13.5858Z" fill="#0F0B1C"/>
+          </svg>
+        </div>
+      </div>
+    `
+
+    // Drag & snap for minimized banner
+    let bannerDragging = false
+    let bStartX = 0
+    let bStartY = 0
+    let bInitialX = 0
+    let bInitialY = 0
+    let moved = false
+
+    minimizedBanner.addEventListener('mousedown', (e: MouseEvent) => {
+      bannerDragging = true
+      moved = false
+      bStartX = e.clientX
+      bStartY = e.clientY
+      const rect = minimizedBanner!.getBoundingClientRect()
+      bInitialX = rect.left
+      bInitialY = rect.top
+      minimizedBanner!.style.cursor = 'grabbing'
+    })
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!bannerDragging) return
+      const deltaX = e.clientX - bStartX
+      const deltaY = e.clientY - bStartY
+      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) moved = true
+      const newX = bInitialX + deltaX
+      const newY = bInitialY + deltaY
+      minimizedBanner!.style.top = 'auto'
+      minimizedBanner!.style.bottom = 'auto'
+      minimizedBanner!.style.left = 'auto'
+      minimizedBanner!.style.right = 'auto'
+      minimizedBanner!.style.left = newX + 'px'
+      minimizedBanner!.style.top = newY + 'px'
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (!bannerDragging) return
+      bannerDragging = false
+      minimizedBanner!.style.cursor = 'pointer'
+
+      const rect = minimizedBanner!.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const isLeft = centerX < viewportWidth / 2
+      const isTop = centerY < viewportHeight / 2
+
+      minimizedBanner!.style.transition = 'top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease'
+      minimizedBanner!.style.top = 'auto'
+      minimizedBanner!.style.bottom = 'auto'
+      minimizedBanner!.style.left = 'auto'
+      minimizedBanner!.style.right = 'auto'
+      if (isTop) minimizedBanner!.style.top = '20px'; else minimizedBanner!.style.bottom = '20px'
+      if (isLeft) minimizedBanner!.style.left = '20px'; else minimizedBanner!.style.right = '20px'
+      setTimeout(() => { minimizedBanner && (minimizedBanner.style.transition = '') }, 250)
+    })
+
+    minimizedBanner.addEventListener('click', () => {
+      if (moved) return // treat as drag end, not expand
+      
+      // Capture banner position before removing it
+      const bannerRect = minimizedBanner!.getBoundingClientRect()
+      const centerX = bannerRect.left + bannerRect.width / 2
+      const centerY = bannerRect.top + bannerRect.height / 2
+      const isLeft = centerX < window.innerWidth / 2
+      const isTop = centerY < window.innerHeight / 2
+      
+      try {
+        // Remove banner
+        if (minimizedBanner && minimizedBanner.parentNode) minimizedBanner.parentNode.removeChild(minimizedBanner)
+      } finally {
+        minimizedBanner = null
+      }
+
+      // Restore main prompt in same corner as banner was
+      prompt.style.display = 'block'
+      prompt.style.top = 'auto'
+      prompt.style.left = 'auto'
+      prompt.style.right = 'auto'
+      prompt.style.bottom = 'auto'
+      if (isTop) { prompt.style.top = '20px' } else { prompt.style.bottom = '20px' }
+      if (isLeft) { prompt.style.left = '20px' } else { prompt.style.right = '20px' }
+      prompt.style.opacity = '0'
+      prompt.style.transform = 'translateY(10px) scale(0.95)'
+      requestAnimationFrame(() => {
+        prompt.style.opacity = '1'
+        prompt.style.transform = 'translateY(0) scale(1)'
+      })
+    })
+
+    document.body.appendChild(minimizedBanner)
+  }
+
+  function minimizePrompt() {
+    // Mark as dismissed for a short while, but keep a minimized reminder visible
+    markVoucherDismissed(5 * 60 * 1000)
+
+    // Animate out and then hide the full panel
+    ;(prompt as HTMLElement).style.opacity = '0'
+    ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
+    setTimeout(() => {
+      // Determine current corner of the prompt to position minimized banner there
+      const rect = prompt.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const isLeft = centerX < window.innerWidth / 2
+      const isTop = centerY < window.innerHeight / 2
+
+      ;(prompt as HTMLElement).style.display = 'none'
+      showMinimizedBanner()
+      // After creation, snap banner to same corner
+      if (minimizedBanner) {
+        minimizedBanner.style.top = 'auto'
+        minimizedBanner.style.bottom = 'auto'
+        minimizedBanner.style.left = 'auto'
+        minimizedBanner.style.right = 'auto'
+        if (isTop) minimizedBanner.style.top = '20px'; else minimizedBanner.style.bottom = '20px'
+        if (isLeft) minimizedBanner.style.left = '20px'; else minimizedBanner.style.right = '20px'
+      }
+    }, 300)
+  }
 
   // Drag and snap functionality
   let isDragging = false
@@ -674,10 +955,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
   }, 100)
 
   document.getElementById('ws-close')?.addEventListener('click', () => {
-    markVoucherDismissed(5 * 60 * 1000)
-    ;(prompt as HTMLElement).style.opacity = '0'
-    ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
-    setTimeout(() => prompt.remove(), 300)
+    minimizePrompt()
   })
 
   const cta = document.getElementById('ws-use-voucher')
@@ -699,11 +977,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
   })
 
   setTimeout(() => {
-    if (document.body.contains(prompt)) {
-      markVoucherDismissed(5 * 60 * 1000)
-      ;(prompt as HTMLElement).style.opacity = '0'
-      ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
-      setTimeout(() => prompt.remove(), 300)
+    if (document.body.contains(prompt) && (prompt as HTMLElement).style.display !== 'none') {
+      minimizePrompt()
     }
   }, 30000)
 }

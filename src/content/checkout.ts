@@ -94,8 +94,10 @@ function parseAmount(text: string | null | undefined): number | null {
 
   // Correction: If original looked like "77,26" (comma-decimal with 1-3 digits before comma)
   // but parsing path treated it as 7726 (due to site-specific quirks), adjust by /100.
+  // BUT: Don't apply this correction if the amount was already correctly parsed as comma-decimal
   const simpleCommaDecimal = /^\s*\d{1,3}\s*,\s*\d{2}\s*$/
-  if (parsed >= 1000 && simpleCommaDecimal.test(originalRaw.replace(/€|eur|euro/gi, '').trim())) {
+  const wasCommaDecimal = lastComma > lastDot && lastComma !== -1 && /,\s*\d{1,2}(\D|$)/.test(amount)
+  if (parsed >= 1000 && simpleCommaDecimal.test(originalRaw.replace(/€|eur|euro/gi, '').trim()) && !wasCommaDecimal) {
     const corrected = parsed / 100
     if (Number.isFinite(corrected)) return corrected
   }
@@ -427,24 +429,62 @@ const zalandoDetector: CheckoutDetector = {
 const bolDetector: CheckoutDetector = {
   isCheckoutPage: () => {
     const url = window.location.href
-    return url.includes('/checkout') ||
+    const isCheckout = url.includes('/checkout') ||
            url.includes('/cart') ||
+           url.includes('/basket') ||
            document.querySelector('.checkout-summary') !== null
+    console.log('[Woolsocks] bolDetector.isCheckoutPage for URL:', url, 'result:', isCheckout)
+    return isCheckout
   },
   extractTotal: () => {
-    const selectors = [
-      '.checkout-summary .total-price',
-      '.order-summary .price',
-      '[data-testid="total-price"]'
-    ]
+    console.log('[Woolsocks] bolDetector.extractTotal called')
     
-    for (const selector of selectors) {
-      const element = document.querySelector(selector)
-      if (element) {
-        const amount = parseAmount(element.textContent)
-        if (amount && amount > 0) return amount
+    // Highly targeted: totals highlight banner that contains "Nog te betalen"
+    const banners = Array.from(document.querySelectorAll('div.p-4.my-4.bg-accent1-background-low, div[class*="bg-accent1-background-low"], div[aria-live]')) as HTMLElement[]
+    for (const banner of banners) {
+      const text = (banner.textContent || '').toLowerCase()
+      if (/nog\s*te\s*betalen/.test(text)) {
+        // pick the last <strong> that contains a euro value
+        const strongs = Array.from(banner.querySelectorAll('strong')) as HTMLElement[]
+        const euroStrong = strongs.reverse().find(el => /€\s*[\d.,\u00A0\s]+/.test(el.textContent || ''))
+        if (euroStrong) {
+          const amt = parseAmount(euroStrong.textContent)
+          console.log('[Woolsocks] Parsed from banner strong:', euroStrong.textContent, '=>', amt)
+          if (amt && amt > 0) return amt
+        }
       }
     }
+
+    // Label-based: "Nog te betalen" container → sibling/right value
+    const labelNodes = Array.from(document.querySelectorAll('span, div, strong, p'))
+      .filter(el => /nog\s*te\s*betalen/i.test((el.textContent || '')))
+    for (const node of labelNodes) {
+      let scope: Element | null = (node as HTMLElement).closest('div, section, article, aside, tr')
+      for (let i = 0; i < 6 && scope; i++) {
+        const cands = Array.from(scope.querySelectorAll('strong, span, div')) as HTMLElement[]
+        const withEuro = cands.filter(e => /€\s*[\d.,\u00A0\s]+/.test(e.textContent || ''))
+        // Prefer the rightmost/last
+        const pick = withEuro[withEuro.length - 1]
+        if (pick) {
+          const amt = parseAmount(pick.textContent)
+          console.log('[Woolsocks] Parsed near label:', pick.textContent, '=>', amt)
+          if (amt && amt > 0) return amt
+        }
+        scope = scope.parentElement
+      }
+    }
+
+    // Fallback: largest euro amount in the summary area
+    const summary = document.querySelector('#mainContent') || document.body
+    const euroMatches = (summary.textContent || '').match(/€\s*[\d.,\u00A0\s]+/g) || []
+    const parsed = euroMatches.map(m => parseAmount(m)).filter((n): n is number => typeof n === 'number' && n > 0)
+    if (parsed.length) {
+      const max = Math.max(...parsed)
+      console.log('[Woolsocks] Fallback max euro amount:', max)
+      return max
+    }
+
+    console.log('[Woolsocks] No total found, returning null')
     return null
   },
   getCurrency: () => 'EUR'
@@ -1337,11 +1377,26 @@ const thuisbezorgdDetector: CheckoutDetector = {
     const url = window.location.href
     return url.includes('thuisbezorgd.nl') && 
            (url.includes('/checkout') || 
-            document.querySelector('[class*="checkout"], [class*="order"], [class*="payment"]') !== null)
+            url.includes('/basket') ||
+            document.querySelector('[class*="checkout"], [class*="order"], [class*="payment"], [data-qa*="order-summary"], [data-qa*="total"]') !== null)
   },
   extractTotal: () => {
-    // Primary: exact node for final total
-    const exact = document.querySelector('strong.order-summary-item_price__8ivVo, [data-qa="order-summary-item-total-amount"]') as HTMLElement | null
+    // Primary: resolve pair using explicit label and amount in the same container
+    const labelEl = document.querySelector('[data-qa="order-summary-item-total-label"]')
+    if (labelEl) {
+      let scope: Element | null = (labelEl as HTMLElement).closest('div, section, li')
+      for (let i = 0; i < 4 && scope; i++) {
+        const amountEl = scope.querySelector('[data-qa="order-summary-item-total-amount"]') as HTMLElement | null
+        if (amountEl) {
+          const amt = parseAmount(amountEl.textContent)
+          if (amt && amt > 0) return amt
+        }
+        scope = scope.parentElement
+      }
+    }
+
+    // Secondary: exact node for final total (only by data-qa to avoid matching subtotal rows)
+    const exact = document.querySelector('[data-qa="order-summary-item-total-amount"]') as HTMLElement | null
     if (exact) {
       const amt = parseAmount(exact.textContent)
       if (amt && amt > 0) return amt
@@ -1357,6 +1412,14 @@ const thuisbezorgdDetector: CheckoutDetector = {
           const amt = parseAmount(row.textContent)
           if (amt && amt > 0) return amt
         }
+      }
+      // If label is separate from amount, find the closest amount element in the same row
+      const totalLabel = Array.from(rows).find((el) => /\btotaal\b/i.test((el.textContent || '')))
+      if (totalLabel) {
+        const container = totalLabel.closest('div, section, li') || orderSummary
+        const priceEl = container?.querySelector('[data-qa="order-summary-item-total-amount"], strong, span') as HTMLElement | null
+        const amt = parseAmount(priceEl?.textContent)
+        if (amt && amt > 0) return amt
       }
     }
 
@@ -1400,20 +1463,47 @@ function detectCheckout(): CheckoutInfo | null {
   // Kick off support check in the background but do not block detection
   if (!__wsSupportChecked) requestMerchantSupportCheck()
 
-  const detector = getDetector(window.location.hostname)
-  if (!detector.isCheckoutPage()) return null
+  const hostname = window.location.hostname
+  const url = window.location.href
+  
+  // Skip browser internal pages
+  if (url.startsWith('chrome://') || 
+      url.startsWith('chrome-extension://') || 
+      url.startsWith('brave://') || 
+      url.startsWith('edge://') || 
+      url.startsWith('firefox://') || 
+      url.startsWith('moz-extension://') || 
+      url.startsWith('about:') || 
+      url.startsWith('file://')) {
+    console.log('[Woolsocks] Skipping browser internal page:', url)
+    return null
+  }
+  
+  console.log('[Woolsocks] detectCheckout called for hostname:', hostname, 'url:', url)
+
+  const detector = getDetector(hostname)
+  console.log('[Woolsocks] Using detector for hostname:', hostname)
+  const isCheckout = detector.isCheckoutPage()
+  console.log('[Woolsocks] isCheckoutPage result:', isCheckout)
+  
+  if (!isCheckout) return null
 
   const extracted = detector.extractTotal()
+  console.log('[Woolsocks] detector.extractTotal() returned:', extracted)
   let total = extracted && extracted > 0 ? extracted : 0
+  console.log('[Woolsocks] final total after processing:', total)
 
   // Do not auto-normalize amounts >= 100; sites like Zalando legitimately have totals ≥ 100
 
-  return {
+  const checkoutInfo = {
     total,
     currency: detector.getCurrency(),
-    merchant: window.location.hostname,
+    merchant: hostname,
     timestamp: Date.now()
   }
+  
+  console.log('[Woolsocks] returning checkoutInfo:', checkoutInfo)
+  return checkoutInfo
 }
 
 // Throttle function to prevent excessive calls
@@ -1440,20 +1530,41 @@ function throttle(func: Function, delay: number) {
 const debouncedCheckForCheckout = throttle(() => {
   const checkoutInfo = detectCheckout()
   if (checkoutInfo) {
-    if (isVoucherDismissed(window.location.hostname)) return
-    if (checkoutInfo.total && checkoutInfo.total > 0) {
-      if (__wsLastSentTotal !== checkoutInfo.total) {
-        chrome.runtime.sendMessage({
-          type: 'CHECKOUT_DETECTED',
-          checkoutInfo
-        })
-        __wsLastSentTotal = checkoutInfo.total
-        __wsClearRetry()
-        const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
-        if (cashbackPrompt) cashbackPrompt.remove()
+    // Respect user setting: QA bypass dismissal
+    try {
+      chrome.storage.local.get('user', (res) => {
+        const qaBypass = !!res?.user?.settings?.qaBypassVoucherDismissal
+        if (!qaBypass) {
+          if (isVoucherDismissed(window.location.hostname)) return
+        }
+        if (checkoutInfo.total && checkoutInfo.total > 0) {
+          if (__wsLastSentTotal !== checkoutInfo.total) {
+            chrome.runtime.sendMessage({
+              type: 'CHECKOUT_DETECTED',
+              checkoutInfo
+            })
+            __wsLastSentTotal = checkoutInfo.total
+            __wsClearRetry()
+            const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
+            if (cashbackPrompt) cashbackPrompt.remove()
+          }
+        } else {
+          __wsScheduleRetry(debouncedCheckForCheckout)
+        }
+      })
+    } catch {
+      if (isVoucherDismissed(window.location.hostname)) return
+      if (checkoutInfo.total && checkoutInfo.total > 0) {
+        if (__wsLastSentTotal !== checkoutInfo.total) {
+          chrome.runtime.sendMessage({ type: 'CHECKOUT_DETECTED', checkoutInfo })
+          __wsLastSentTotal = checkoutInfo.total
+          __wsClearRetry()
+          const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
+          if (cashbackPrompt) cashbackPrompt.remove()
+        }
+      } else {
+        __wsScheduleRetry(debouncedCheckForCheckout)
       }
-    } else {
-      __wsScheduleRetry(debouncedCheckForCheckout)
     }
   }
 }, 500) // Throttle to max once per 500ms

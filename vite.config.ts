@@ -42,7 +42,7 @@ const manifest = {
         'https://woolsocks.eu/*',
         'https://*.woolsocks.eu/*',
         'http://woolsocks.eu/*',
-        'http://*.woolsocks.eu/*'
+        'http://*.woolsocks.eu/*',
       ]
     },
     {
@@ -53,7 +53,7 @@ const manifest = {
         'https://woolsocks.eu/*',
         'https://*.woolsocks.eu/*',
         'http://woolsocks.eu/*',
-        'http://*.woolsocks.eu/*'
+        'http://*.woolsocks.eu/*',
       ]
     },
     {

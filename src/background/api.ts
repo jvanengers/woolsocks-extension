@@ -24,7 +24,9 @@ async function getHeaders(): Promise<HeadersInit> {
 }
 
 let relayAttempts = 0
-const MAX_RELAY_ATTEMPTS = 2
+const MAX_RELAY_ATTEMPTS = 3
+const API_RETRY_DELAY = 1000 // 1 second
+const MAX_API_RETRIES = 2
 
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
   return new Promise(async (resolve) => {
@@ -78,24 +80,39 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
   })
 }
 
-async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {
   const headers = await getHeaders()
+  const fullUrl = `${SITE_BASE}/api/wsProxy${endpoint}`
+  console.log(`[WS API] fetchViaSiteProxy: ${fullUrl}`)
+  console.log(`[WS API] Headers:`, headers)
+  
   try {
-    const resp = await fetch(`${SITE_BASE}/api/wsProxy${endpoint}`, {
+    const resp = await fetch(fullUrl, {
       credentials: 'include',
       ...init,
       headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
       method: init?.method || 'GET',
     })
     const status = resp.status
+    console.log(`[WS API] Response status: ${status}, ok: ${resp.ok}`)
+    
     if (!resp.ok) {
+      console.log(`[WS API] Response not ok, trying relay for ${endpoint}`)
       // Fallback to relay via page context when cookies are not included
       return await relayFetchViaTab<T>(endpoint, init)
     }
     const json = (await resp.json()) as T
+    console.log(`[WS API] Response data:`, json)
     return { data: json, status }
   } catch (e) {
-    // Network error from background → try relay
+    console.log(`[WS API] Fetch error for ${endpoint}:`, e)
+    // Network error from background → try relay or retry
+    if (retryCount < MAX_API_RETRIES) {
+      console.log(`[WS API] Retrying fetch (${retryCount + 1}/${MAX_API_RETRIES}) for ${endpoint}`)
+      await new Promise(resolve => setTimeout(resolve, API_RETRY_DELAY * (retryCount + 1)))
+      return await fetchViaSiteProxy<T>(endpoint, init, retryCount + 1)
+    }
+    console.log(`[WS API] Max retries reached, trying relay for ${endpoint}`)
     return await relayFetchViaTab<T>(endpoint, init)
   }
 }
@@ -105,6 +122,16 @@ function buildNameCandidates(hostnameOrName: string): string[] {
   const parts = raw.split('.')
   const core = parts.length >= 2 ? parts[parts.length - 2] : parts[0]
   const candidates = new Set<string>()
+  
+  // Special case for bol.com - use more specific candidates
+  if (raw === 'bol.com' || core === 'bol') {
+    candidates.add('bol.com')
+    candidates.add('bol')
+    candidates.add('Bol')
+    candidates.add('BOL')
+    return Array.from(candidates).filter(Boolean)
+  }
+  
   candidates.add(core)
   candidates.add(core.replace(/[-_]/g, ' '))
   candidates.add(raw) // hema.nl
@@ -117,10 +144,38 @@ function buildNameCandidates(hostnameOrName: string): string[] {
 function pickBestMerchant(query: string, list: any[]): any | null {
   if (!Array.isArray(list) || list.length === 0) return null
   const q = query.toLowerCase().replace(/\s+/g, '')
-  const exact = list.find((m) => (m?.data?.name || m?.name || '').toLowerCase().replace(/\s+/g, '') === q)
-  if (exact) return exact.data || exact
-  const starts = list.find((m) => (m?.data?.name || m?.name || '').toLowerCase().startsWith(q))
-  if (starts) return starts.data || starts
+  
+  // Score each merchant based on how well it matches the query
+  const scored = list.map((m) => {
+    const name = (m?.data?.name || m?.name || '').toLowerCase().replace(/\s+/g, '')
+    let score = 0
+    
+    // Exact match gets highest score
+    if (name === q) score = 100
+    // Query is exact start of merchant name gets high score
+    else if (name.startsWith(q) && name.length === q.length + 1) score = 90
+    // Query is start of merchant name gets medium-high score
+    else if (name.startsWith(q)) score = 70
+    // Query is contained in merchant name gets lower score
+    else if (name.includes(q)) score = 50
+    // Special case: if query is "bol" and merchant is "bol" (not "bolero"), prioritize it
+    else if (q === 'bol' && name === 'bol') score = 95
+    
+    return { merchant: m, score, name }
+  })
+  
+  // Sort by score (highest first), then by name length (shorter first for ties)
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.name.length - b.name.length
+  })
+  
+  const best = scored[0]
+  if (best && best.score > 0) {
+    return best.merchant.data || best.merchant
+  }
+  
+  // Fallback to first merchant if no good match
   const first = list[0]
   return first?.data || first || null
 }
@@ -197,13 +252,24 @@ function classify(dealType: string | undefined): 'VOUCHERS' | 'ONLINE_CASHBACK' 
 
 export async function searchMerchantByName(name: string, country: string = 'NL'): Promise<PartnerLite | null> {
   const candidates = buildNameCandidates(name)
+  console.log(`[WS API] searchMerchantByName called with name: "${name}", country: "${country}"`)
+  console.log(`[WS API] Generated candidates:`, candidates)
+  
   for (const candidate of candidates) {
     const params = new URLSearchParams({ name: candidate, country })
-    const searchRes = await fetchViaSiteProxy<MerchantsOverviewResponse>(`/merchants-overview/api/v0.0.1/merchants?${params.toString()}`)
+    const apiUrl = `/merchants-overview/api/v0.0.1/merchants?${params.toString()}`
+    console.log(`[WS API] Searching API with URL: ${apiUrl}`)
+    
+    const searchRes = await fetchViaSiteProxy<MerchantsOverviewResponse>(apiUrl)
+    console.log(`[WS API] API response status: ${searchRes.status}, data:`, searchRes.data)
+    
     const data = searchRes.data?.data
     if (!data || !data.merchants || data.merchants.length === 0) {
+      console.log(`[WS API] No merchants found for candidate: "${candidate}"`)
       continue
     }
+    
+    console.log(`[WS API] Found ${data.merchants.length} merchants for candidate: "${candidate}"`)
 
     const chosen = pickBestMerchant(candidate, data.merchants)
     const apiMerchant = chosen
@@ -306,10 +372,21 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
 
 export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
   const candidates = buildNameCandidates(hostname)
+  console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates)
+  
   for (const c of candidates) {
-    const res = await searchMerchantByName(c)
-    if (res) return res
+    try {
+      const res = await searchMerchantByName(c)
+      if (res) {
+        console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
+        return res
+      }
+    } catch (error) {
+      console.warn(`[WS API] Error searching for candidate ${c}:`, error)
+    }
   }
+  
+  console.warn(`[WS API] No merchant found for hostname: ${hostname} with candidates:`, candidates)
   return null
 }
 
