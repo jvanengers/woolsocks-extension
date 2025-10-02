@@ -56,6 +56,12 @@ const manifest = {
         'http://*.woolsocks.eu/*'
       ]
     },
+    {
+      // Relay script runs only on Woolsocks pages to enable API proxying via page context
+      matches: ['https://woolsocks.eu/*', 'https://*.woolsocks.eu/*'],
+      js: ['src/content/relay.ts'],
+      run_at: 'document_start'
+    },
     // Intentionally do not inject any content scripts on woolsocks.eu
   ],
   web_accessible_resources: [
@@ -80,6 +86,7 @@ export default defineConfig({
         background: 'src/background/index.ts',
         content: 'src/content/checkout.ts',
         entrance: 'src/content/entrance.ts',
+        relay: 'src/content/relay.ts',
       },
     },
   },

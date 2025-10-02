@@ -313,6 +313,62 @@ npm run build:prod
 3. Create ZIP file of `dist/` folder
 4. Upload to Chrome Web Store Developer Dashboard
 
+### Releasing Updates
+
+Automatic updates: once a new version is approved in the store, existing users will receive it automatically (usually within hours). Developers can force an immediate update locally via `chrome://extensions` → Developer mode → Update.
+
+#### Where to bump the version
+- Update the manifest `version` in `vite.config.ts` (CRXJS builds the manifest from here). Optionally add `version_name` for a human-friendly label.
+
+```ts
+// vite.config.ts
+const manifest = {
+  manifest_version: 3,
+  name: 'Woolsocks: Cashback & Vouchers',
+  version: '1.0.1',
+  // version_name: '1.0.1 (hotfix)'
+  // ...
+}
+```
+
+#### Release steps
+1. Update `CHANGELOG.md` (move entries from Unreleased to the new version).
+2. Bump `version` in `vite.config.ts`.
+3. Build: `npm run build`.
+4. Verify `dist/manifest.json` reflects the new version.
+5. Zip the `dist/` contents.
+6. Upload the ZIP to the Chrome Web Store listing, add concise release notes, submit for review.
+7. (Optional) Publish the same build to Microsoft Edge Add-ons if supported.
+8. Create a git tag for the version.
+
+#### Gotchas and best practices
+- Do not set `update_url` when publishing to Chrome Web Store; the store manages updates.
+- Keep the extension ID stable: upload new versions to the same store listing (don’t create a new item).
+- Permission changes (`permissions`, `host_permissions`) trigger extra review and may prompt users. Prefer `optional_permissions` and request them at runtime.
+- Plan storage/data migrations for updates; avoid breaking existing user data.
+
+#### Optional: update hooks and migrations
+Use these events in the background service worker to handle migrations and apply updates immediately when they’re ready:
+
+```ts
+chrome.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
+  if (reason === 'update') {
+    // Run storage/schema migrations here based on previousVersion
+    // e.g., migrateUserSettings(previousVersion)
+
+    // Optionally open a one-time "What’s new" page for major releases
+    // chrome.tabs.create({ url: chrome.runtime.getURL('src/options/index.html?whats-new=1') })
+  }
+})
+
+chrome.runtime.onUpdateAvailable.addListener(() => {
+  // Apply the new version immediately instead of waiting for the next restart
+  chrome.runtime.reload()
+})
+```
+
+Keep “What’s new” pages rare (only for major updates) to avoid spamming users.
+
 ## 🔒 Security Considerations
 
 ### Content Security Policy
