@@ -461,6 +461,193 @@ const dilleKamilleDetector: CheckoutDetector = {
   getCurrency: () => 'EUR'
 }
 
+// Uber (m.uber.com) checkout detection
+const uberDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    try {
+      const url = window.location.href
+      // mobile flow URLs typically under /go/
+      if (!/https?:\/\/m\.uber\.com\//i.test(url)) return false
+      return /\/go\//i.test(url)
+    } catch { return false }
+  },
+  extractTotal: () => {
+    // Try explicit selector from the report
+    const candidates: Element[] = []
+    const sel1 = '#wrapper > div.css-dqxzrQ > div > main > div > section > div.css-kirxzG > div > ul > li.css-hqmvdp'
+    const listItem = document.querySelector(sel1) as HTMLElement | null
+    if (listItem) candidates.push(listItem)
+    const prices = Array.from(document.querySelectorAll('p.css-iQlrzm'))
+    candidates.push(...prices)
+    for (const el of candidates) {
+      const text = (el.textContent || '').trim()
+      const amt = parseAmount(text)
+      if (amt && amt > 0) return amt
+      // Look for nested price span
+      const nested = el.querySelector('p.css-iQlrzm, .price, span') as HTMLElement | null
+      const nestedAmt = parseAmount(nested?.textContent || '')
+      if (nestedAmt && nestedAmt > 0) return nestedAmt
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Efteling checkout detection
+const eftelingDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    const host = window.location.hostname.toLowerCase()
+    const path = window.location.pathname
+    return host.includes('efteling.com') && /tickets\/bestellen\/afronden\/betalen/i.test(path)
+  },
+  extractTotal: () => {
+    const selectors = [
+      '#content > section > div > div > div:nth-child(2) > div > div > div.BasketSummary_basketLine__T2kYv > span',
+      'span.BasketSummary_totalPrice__xKeTE',
+      'span.BasketSummary_price__yHLAW'
+    ]
+    for (const sel of selectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Heuristic: find label "Totaalprijs" and parse following amount
+    const labels = Array.from(document.querySelectorAll('*')) as Element[]
+    for (const node of labels) {
+      const txt = (node.textContent || '').trim().toLowerCase()
+      if (/totaalprijs/.test(txt)) {
+        const container = node.closest('div, section, aside') || node
+        const priceEl = container.querySelector('span') as HTMLElement | null
+        const amt = parseAmount(priceEl?.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Gall & Gall checkout detection
+const gallDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    const host = window.location.hostname.toLowerCase()
+    const path = window.location.pathname.toLowerCase()
+    return host.includes('gall.nl') && /\/winkelmand\/?$/.test(path)
+  },
+  extractTotal: () => {
+    const selectors = [
+      '#content > div:nth-child(2) > div > div:nth-child(3) > div > div > div.o-col-12.o-col-5--lg > section > div > div.cart-summary_grand-total > span',
+      'span.cart-summary_grand-total-sum[data-hook-adjusted-grand-total]'
+    ]
+    for (const sel of selectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Fallback: within summary box find the last bold price span
+    const summary = document.querySelector('.cart-summary_grand-total') || document.querySelector('section [class*="cart-summary"]')
+    if (summary) {
+      const spans = Array.from(summary.querySelectorAll('span'))
+      for (let i = spans.length - 1; i >= 0; i--) {
+        const amt = parseAmount(spans[i].textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Prénatal checkout detection
+const prenatalDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    const host = window.location.hostname.toLowerCase()
+    const path = window.location.pathname.toLowerCase()
+    if (!host.includes('prenatal.nl')) return false
+    return /\/checkout\//.test(path) || /\/checkout\/cart\/index\//.test(path)
+  },
+  extractTotal: () => {
+    // Cart page selector and variants
+    const cartSelectors = [
+      '#cart-totals > div:nth-child(7) > div > div.w-auto > div > div',
+      'div.text-right.text-xl.price.end-total'
+    ]
+    for (const sel of cartSelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Checkout page selector
+    const checkoutSelectors = [
+      '#opc-sidebar > div.opc-block-summary > table > tbody > tr.grand.totals > td > strong > span.price',
+      'tr.grand.totals span.price'
+    ]
+    for (const sel of checkoutSelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Heuristic: find a label containing "Totaal" and parse nearest euro amount, ignoring known labels
+    const notTotal = /(subtotaal|aflevering|verwerking|verzendkosten|btw)/i
+    const all = Array.from(document.querySelectorAll('div, span, td, p, strong'))
+    for (const node of all) {
+      const txt = (node.textContent || '').trim().toLowerCase()
+      if (/totaal\b/i.test(txt) && !notTotal.test(txt)) {
+        const container = node.closest('tr, div, section, aside') || node
+        const priceEl = container.querySelector('span.price, .price, div.price, td, span') as HTMLElement | null
+        const amt = parseAmount(priceEl?.textContent || node.nextElementSibling?.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Cadeaubon.nl cart detection
+const cadeaubonDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    const host = window.location.hostname.toLowerCase()
+    const path = window.location.pathname.toLowerCase()
+    return host.includes('cadeaubon.nl') && /winkelmandje/.test(path)
+  },
+  extractTotal: () => {
+    const selectors = [
+      '#__next > div > div > div > div.LoadingWrapper_loadingWrapper__BiuRg.Layout_fullScreen__1Snsu > div > div > div > div > div > div > div.BasketV2_sideInfoContainer__BUv7x > div.BasketV2_totalOrderAmountWrapper__pGxI7 > div > div:nth-child(3) > div:nth-child(2) > p:nth-child(2)',
+      'div.BasketV2_totalOrderAmountWrapper__pGxI7 p.Typography_root__0otb6.Typography_bodySubText2__FvjML.Typography_primary__GXt_0'
+    ]
+    for (const sel of selectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Fallback: inside the totals wrapper, grab the last euro amount (ignore known labels)
+    const totals = document.querySelector('.BasketV2_totalOrderAmountWrapper__pGxI7') as HTMLElement | null
+    if (totals) {
+      const ignore = /(verzendkosten|digitale\s+cadeaukaarten|totaal\s+excl\.?\s*btw)/i
+      const nodes = Array.from(totals.querySelectorAll('div, p, span'))
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const txt = (nodes[i].textContent || '').trim()
+        if (ignore.test(txt.toLowerCase())) continue
+        const amt = parseAmount(txt)
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
 // Airbnb checkout detection
 const airbnbDetector: CheckoutDetector = {
   isCheckoutPage: () => {
@@ -830,25 +1017,52 @@ const genericDetector: CheckoutDetector = {
 // Nike checkout detection
 const nikeDetector: CheckoutDetector = {
   isCheckoutPage: () => {
-    const url = window.location.href
-    return url.includes('/cart') || 
-           url.includes('/checkout') ||
-           document.querySelector('.checkout-summary') !== null
+    const path = window.location.pathname
+    return /nike\.com/i.test(window.location.hostname) && (
+      /\/cart/i.test(path) || /\/checkout/i.test(path)
+    )
   },
   extractTotal: () => {
-    const selectors = [
-      '.checkout-summary .total-price',
-      '.order-summary .price',
-      '[data-testid="total-price"]'
+    // 1) Explicit selectors from user report (cart and checkout)
+    const explicitSelectors = [
+      // Cart
+      '#maincontent > div > div.css-1k22aut.e1fdruzw1 > div.css-1q08mzu.e1fdruzw3 > aside > div.css-1enpgf9.e103o6nq3 > div > span > span > span',
+      'span.formatted-price',
+      // Checkout
+      "#checkout-wrapper [data-attr='cart-total']",
+      '#checkout-wrapper > div > div > aside > section > div > div.ncss-row > div > div.ncss-row.mt2-sm > div.ncss-col-sm-4.va-sm-t.ta-sm-r'
     ]
-    
-    for (const selector of selectors) {
-      const element = document.querySelector(selector)
-      if (element) {
-        const amount = parseAmount(element.textContent)
-        if (amount && amount > 0) return amount
+
+    for (const sel of explicitSelectors) {
+      const el = document.querySelector(sel) as HTMLElement | null
+      if (el) {
+        const amt = parseAmount(el.textContent)
+        if (amt && amt > 0) return amt
       }
     }
+
+    // 2) Heuristic: find a label containing "Total" and parse the nearest following amount
+    const labels = Array.from(document.querySelectorAll('*, *:before, *:after')) as Element[]
+    for (const node of labels) {
+      const txt = (node.textContent || '').trim().toLowerCase()
+      if (/^total\b|\btotal\b|\(incl\.?\s*btw\)/i.test(txt)) {
+        // search within same container for a currency amount
+        const container = node.closest('aside, section, div, li') || node as Element
+        const priceEl = container.querySelector('span, div, p')
+        const amt = parseAmount(priceEl?.textContent || node.nextElementSibling?.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+
+    // 3) Fallback: pick the last amount inside summary columns that looks like a total
+    const summary = document.querySelector('aside, [class*="summary"], [class*="order"]') as HTMLElement | null
+    if (summary) {
+      const amounts = Array.from(summary.querySelectorAll('span, div, p'))
+        .map((n) => parseAmount(n.textContent || ''))
+        .filter((n): n is number => !!n && n > 0)
+      if (amounts.length) return amounts[amounts.length - 1]
+    }
+
     return null
   },
   getCurrency: () => 'EUR'
@@ -1547,6 +1761,11 @@ function getDetector(hostname: string): CheckoutDetector {
   if (hostname.includes('xenos.nl')) return xenosDetector
   if (hostname.includes('beterbed.nl')) return beterbedDetector
   if (hostname.includes('dille-kamille.nl')) return dilleKamilleDetector
+  if (hostname.includes('m.uber.com')) return uberDetector
+  if (hostname.includes('efteling.com')) return eftelingDetector
+  if (hostname.includes('gall.nl')) return gallDetector
+  if (hostname.includes('prenatal.nl')) return prenatalDetector
+  if (hostname.includes('cadeaubon.nl')) return cadeaubonDetector
   if (hostname.includes('amazon')) return amazonDetector
   if (hostname.includes('airbnb')) return airbnbDetector
   if (hostname.includes('zalando')) return zalandoDetector

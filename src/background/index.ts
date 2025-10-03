@@ -629,7 +629,13 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     { text: safeUsps.useOnlineAtCheckout },
   ]
 
-  const image = normalizeImageUrl(best?.imageUrl || partner.merchantImageUrl) || ''
+  let image = normalizeImageUrl(best?.imageUrl || partner.merchantImageUrl) || ''
+  try {
+    const hn = window.location.hostname.toLowerCase()
+    if (!image && hn.includes('prenatal.nl')) {
+      image = 'https://www.prenatal.nl/favicon.ico'
+    }
+  } catch {}
   const title = best?.name || partner.name || 'Gift Card'
 
   // Details (optional): omitted here as they are not available in current partner payload
@@ -655,8 +661,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
 
       <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
         <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
         </div>
         ${hasMultipleVouchers ? `
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
@@ -706,13 +712,13 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
         `}
 
         <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
-          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
+          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
         </div>
 
         <div style="display: flex; align-items: center;">
-          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
+          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
             <span>${translations.voucher.viewDetails}</span>
             ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
           </button>
@@ -746,6 +752,32 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
   `
 
   document.body.appendChild(prompt)
+
+  // If user previously minimized on this domain and the cooldown is still active, show the minimized banner immediately
+  try {
+    const host = window.location.hostname
+    const raw = window.localStorage.getItem('__wsMinimizedBannerMap')
+    const map = raw ? (JSON.parse(raw) as Record<string, { until: number; cashbackAmount?: string; corner?: string }>) : {}
+    const entry = map[host]
+    if (entry && typeof entry.until === 'number' && Date.now() < entry.until) {
+      // Show minimized banner and position to remembered corner
+      showMinimizedBanner()
+      try {
+        const mb = document.getElementById('woolsocks-voucher-minimized') as HTMLElement | null
+        if (mb && entry.corner) {
+          mb.style.top = 'auto'
+          mb.style.bottom = 'auto'
+          mb.style.left = 'auto'
+          mb.style.right = 'auto'
+          const [v, h] = entry.corner.split('-')
+          if (v === 'top') mb.style.top = '20px'; else mb.style.bottom = '20px'
+          if (h === 'left') mb.style.left = '20px'; else mb.style.right = '20px'
+        }
+      } catch {}
+      // Hide full prompt immediately
+      ;(prompt as HTMLElement).style.display = 'none'
+    }
+  } catch {}
 
   // --- Auto-minimize on inactivity -------------------------------------------
   let inactivityTimer: number | undefined
@@ -1155,7 +1187,31 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
 
   function minimizePrompt() {
     // Mark as dismissed for a short while, but keep a minimized reminder visible
-    markVoucherDismissed(5 * 60 * 1000)
+    const ttl = 5 * 60 * 1000
+    markVoucherDismissed(ttl)
+    // Persist a light-weight minimized state so the banner can reappear on any page of the same domain
+    try {
+      const host = window.location.hostname
+      const until = Date.now() + ttl
+      const raw = window.localStorage.getItem('__wsMinimizedBannerMap')
+      const map = raw ? (JSON.parse(raw) as Record<string, any>) : {}
+      map[host] = {
+        until,
+        cashbackAmount: typeof cashbackAmount === 'string' ? cashbackAmount : String(cashbackAmount),
+        // best-effort remember corner based on current prompt position
+        corner: (() => {
+          try {
+            const rect = prompt.getBoundingClientRect()
+            const centerX = rect.left + rect.width / 2
+            const centerY = rect.top + rect.height / 2
+            const isLeft = centerX < window.innerWidth / 2
+            const isTop = centerY < window.innerHeight / 2
+            return `${isTop ? 'top' : 'bottom'}-${isLeft ? 'left' : 'right'}`
+          } catch { return 'top-right' }
+        })()
+      }
+      window.localStorage.setItem('__wsMinimizedBannerMap', JSON.stringify(map))
+    } catch {}
 
     // Animate out and then hide the full panel
     ;(prompt as HTMLElement).style.opacity = '0'

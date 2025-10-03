@@ -251,8 +251,13 @@ function classify(dealType: string | undefined): 'VOUCHERS' | 'ONLINE_CASHBACK' 
 }
 
 export async function searchMerchantByName(name: string, country: string = 'NL'): Promise<PartnerLite | null> {
-  const candidates = buildNameCandidates(name)
-  console.log(`[WS API] searchMerchantByName called with name: "${name}", country: "${country}"`)
+  // Normalize tricky merchant names before candidate generation
+  let adjusted = name
+  if (/^prenatal$/i.test(adjusted)) adjusted = 'prénatal'
+  if (/^cadeaubon$/i.test(adjusted)) adjusted = 'keuze cadeaukaart'
+
+  const candidates = buildNameCandidates(adjusted)
+  console.log(`[WS API] searchMerchantByName called with name: "${name}" (adjusted: "${adjusted}"), country: "${country}"`)
   console.log(`[WS API] Generated candidates:`, candidates)
   
   for (const candidate of candidates) {
@@ -371,6 +376,11 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
 }
 
 export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
+  try {
+    hostname.replace(/^www\./, '').toLowerCase()
+    // No hard overrides here any more; dynamic search is used for all, with name normalization handled in searchMerchantByName
+  } catch {}
+
   const candidates = buildNameCandidates(hostname)
   console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates)
   

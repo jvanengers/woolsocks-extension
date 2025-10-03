@@ -73,8 +73,13 @@ async function searchCashbackDeals(merchantName: string): Promise<{
   description?: string
 } | null> {
   try {
+    // Custom normalization for some merchants where diacritics matter on search
+    let query = merchantName
+    // Fix for name variants to surface correct brand in results
+    if (/^prenatal$/i.test(query)) query = 'prénatal'
+    if (/^cadeaubon$/i.test(query)) query = 'keuze cadeaukaart'
     // Use the correct search URL format
-    const searchUrl = `https://woolsocks.eu/nl/cashback/search?query=${encodeURIComponent(merchantName)}`
+    const searchUrl = `https://woolsocks.eu/nl/cashback/search?query=${encodeURIComponent(query)}`
     
     const response = await fetch(searchUrl, {
       method: 'GET',
@@ -93,7 +98,7 @@ async function searchCashbackDeals(merchantName: string): Promise<{
     }
     
     const html = await response.text()
-    return await parseCashbackSearchResults(html, merchantName)
+    return await parseCashbackSearchResults(html, query)
   } catch (error) {
     console.warn(`Error searching cashback for ${merchantName}:`, error)
     return null
@@ -116,7 +121,10 @@ async function searchVoucherDeals(merchantName: string): Promise<{
 } | null> {
   try {
     // First try cashback search to find merchant page
-    const cashbackSearchUrl = `https://woolsocks.eu/cashback/search?query=${encodeURIComponent(merchantName)}`
+    let q = merchantName
+    if (/^prenatal$/i.test(q)) q = 'prénatal'
+    if (/^cadeaubon$/i.test(q)) q = 'keuze cadeaukaart'
+    const cashbackSearchUrl = `https://woolsocks.eu/cashback/search?query=${encodeURIComponent(q)}`
     console.log(`Trying cashback search: ${cashbackSearchUrl}`)
     
     const searchResponse = await fetch(cashbackSearchUrl, {
@@ -425,10 +433,28 @@ async function parseCashbackSearchResults(html: string, merchantName: string): P
       'gi'
     )
     
-    const match = merchantCardPattern.exec(html)
+    let match = merchantCardPattern.exec(html)
     if (!match) {
-      console.warn(`No merchant card found for ${merchantName} in search results`)
-      return null
+      // Custom fallback: iterate merchant cards to find closest name match, e.g. accent/spacing variants
+      const cardRegex = /<a[^>]*class="[^"]*MerchantCard[^"]*"[^>]*href="([^"]*)"[^>]*>[\s\S]*?<span[^>]*class="[^"]*MerchantCard_name[^"]*"[^>]*>([^<]+)<\/span>[\s\S]*?<span[^>]*>([^<]*%)<\/span>/gi
+      let candidate: { href: string; rate: string; name: string } | null = null
+      let m: RegExpExecArray | null
+      const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+      const target = norm(merchantName)
+      while ((m = cardRegex.exec(html)) !== null) {
+        const name = m[2]?.trim() || ''
+        if (!name) continue
+        if (norm(name).includes(target)) {
+          candidate = { href: m[1], rate: m[3] || '0%', name }
+          break
+        }
+      }
+      if (candidate) {
+        match = [candidate.href, candidate.href, candidate.rate] as unknown as RegExpExecArray
+      } else {
+        console.warn(`No merchant card found for ${merchantName} in search results`)
+        return null
+      }
     }
     
     const merchantPageUrl = match[1].startsWith('http') ? match[1] : `https://woolsocks.eu${match[1]}`
