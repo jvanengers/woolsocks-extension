@@ -572,9 +572,12 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: normalizeImageUrl(partner.merchantImageUrl), url: partner.voucherProductUrl })
   }
 
-  const best = collected
+  const validVouchers = collected
     .filter(v => typeof v.cashbackRate === 'number' && (v.cashbackRate as number) > 0)
-    .sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))[0]
+    .sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))
+  
+  const best = validVouchers[0]
+  const hasMultipleVouchers = validVouchers.length > 1
 
   const prompt = document.createElement('div')
   prompt.id = 'woolsocks-voucher-prompt'
@@ -597,7 +600,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     cursor: move;
   `
 
-  const effectiveRate = typeof (best?.cashbackRate ?? partner.cashbackRate) === 'number' ? (best?.cashbackRate ?? partner.cashbackRate) : 0
+  let selectedVoucherIndex = 0
+  const effectiveRate = typeof (validVouchers[selectedVoucherIndex]?.cashbackRate ?? partner.cashbackRate) === 'number' ? (validVouchers[selectedVoucherIndex]?.cashbackRate ?? partner.cashbackRate) : 0
   const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
 
   // USPs with unified checkmark icon
@@ -642,6 +646,40 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
           <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
           <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
         </div>
+        ${hasMultipleVouchers ? `
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+          <div id="voucher-carousel" style="display: flex; gap: 8px; overflow-x: hidden; scroll-behavior: smooth; padding: 8px 0;">
+            ${validVouchers.map((voucher, index) => `
+              <div class="voucher-card" data-index="${index}" style="min-width: 259px; background: white; border-radius: 8px; padding: 16px; display: flex; gap: 16px; align-items: flex-start; cursor: pointer; transition: transform 0.2s ease;">
+                <div style="width: 111px; height: 74px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                  ${voucher.imageUrl ? `<img src="${voucher.imageUrl}" alt="${voucher.name}" referrerpolicy="no-referrer" decoding="async" loading="eager" onerror="console.warn('[WS] Image failed to load:', '${voucher.imageUrl}'); this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: contain;"><div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #F3F4F6; border-radius: 8px; font-size: 12px; color: #666;">Voucher</div>` : `${assets?.wsLogoUrl ? `<img src='${assets.wsLogoUrl}' alt="${voucher.name}" style="width: 100%; height: 100%; object-fit: contain;">` : `<div style=\"font-size: 12px; color: #666;\">Voucher</div>`}`}
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 4px; background: #ECEBED; font-size: 13px; color: #6B7280; margin-bottom: 2px; width: fit-content;">${voucher.cashbackRate}% cashback</div>
+                  <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${voucher.name}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          <div id="carousel-navigation" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div id="carousel-left-arrow" class="carousel-arrow" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.5;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M15 18L9 12L15 6" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div id="carousel-indicators" style="display: flex; justify-content: center; gap: 4px;">
+              ${validVouchers.map((_, index) => `
+                <div class="carousel-dot" data-index="${index}" style="width: 6px; height: 6px; border-radius: ${index === 0 ? '3px' : '50%'}; background: ${index === 0 ? '#0F0B1C' : '#D1D5DB'}; cursor: pointer; transition: all 0.2s ease;"></div>
+              `).join('')}
+            </div>
+            <div id="carousel-right-arrow" class="carousel-arrow" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M9 18L15 12L9 6" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        ` : `
         <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
           <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
             <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
@@ -653,6 +691,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
             </div>
           </div>
         </div>
+        `}
 
         <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
           <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
@@ -695,6 +734,270 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
   `
 
   document.body.appendChild(prompt)
+
+  // --- Auto-minimize on inactivity -------------------------------------------
+  let inactivityTimer: number | undefined
+  const INACTIVITY_MS = 30_000
+
+  function scheduleAutoMinimize() {
+    if (inactivityTimer) window.clearTimeout(inactivityTimer)
+    inactivityTimer = window.setTimeout(() => {
+      if (document.body.contains(prompt) && (prompt as HTMLElement).style.display !== 'none') {
+        minimizePrompt()
+      }
+    }, INACTIVITY_MS)
+  }
+
+  function resetInactivity() {
+    scheduleAutoMinimize()
+  }
+
+  // Start inactivity countdown as soon as the widget is shown
+  scheduleAutoMinimize()
+
+  // Any interaction with the prompt should reset the inactivity timer
+  prompt.addEventListener('click', resetInactivity)
+  prompt.addEventListener('pointerdown', resetInactivity)
+  prompt.addEventListener('pointermove', resetInactivity)
+  prompt.addEventListener('wheel', resetInactivity)
+
+  // --- Carousel functionality -------------------------------------------------
+  if (hasMultipleVouchers) {
+    const carousel = document.getElementById('voucher-carousel')
+    const indicators = document.getElementById('carousel-indicators')
+    const leftArrow = document.getElementById('carousel-left-arrow')
+    const rightArrow = document.getElementById('carousel-right-arrow')
+    const cashbackAmountSpan = prompt.querySelector('span[style*="background: #8564FF"]') as HTMLElement
+    
+    if (carousel && indicators && leftArrow && rightArrow && cashbackAmountSpan) {
+      let currentIndex = 0
+      const cardWidth = 259 + 8 // card width + gap
+      const totalCards = validVouchers.length
+      
+      function updateCarousel(index: number) {
+        currentIndex = index
+        
+        // Handle positioning based on number of vouchers
+        if (carousel) {
+          const containerWidth = carousel.offsetWidth
+          let scrollPosition = 0
+          
+          if (totalCards === 2) {
+            // For 2 vouchers: center the selected card
+            const centerOffset = (containerWidth - cardWidth) / 2
+            scrollPosition = (index * cardWidth) - centerOffset
+            scrollPosition = Math.max(0, scrollPosition)
+          } else if (totalCards >= 3) {
+            // For 3+ vouchers: center the selected card with visible edges of adjacent cards
+            const centerOffset = (containerWidth - cardWidth) / 2
+            scrollPosition = (index * cardWidth) - centerOffset
+            scrollPosition = Math.max(0, scrollPosition)
+          }
+          
+          carousel.scrollLeft = scrollPosition
+        }
+      }
+      
+      // Function to detect current position based on scroll position
+      function detectCurrentPosition(): number {
+        if (!carousel) return currentIndex
+        
+        const scrollLeft = carousel.scrollLeft
+        const containerWidth = carousel.offsetWidth
+        
+        if (totalCards === 2) {
+          // For 2 vouchers: determine position based on centered logic (same as 3+)
+          const centerOffset = (containerWidth - cardWidth) / 2
+          const adjustedScroll = scrollLeft + centerOffset
+          const detectedIndex = Math.round(adjustedScroll / cardWidth)
+          const clampedIndex = Math.max(0, Math.min(totalCards - 1, detectedIndex))
+          return clampedIndex
+        } else if (totalCards >= 3) {
+          // For 3+ vouchers: determine position based on centered logic
+          const centerOffset = (containerWidth - cardWidth) / 2
+          const adjustedScroll = scrollLeft + centerOffset
+          const detectedIndex = Math.round(adjustedScroll / cardWidth)
+          const clampedIndex = Math.max(0, Math.min(totalCards - 1, detectedIndex))
+          return clampedIndex
+        }
+        
+        return currentIndex
+      }
+      
+      // Function to sync position indicator with actual scroll position
+      function syncPositionIndicator() {
+        const detectedIndex = detectCurrentPosition()
+        if (detectedIndex !== currentIndex) {
+          currentIndex = detectedIndex
+          
+          // Update indicators with rounded rectangle for selected
+          if (indicators) {
+            const dots = indicators.querySelectorAll('.carousel-dot')
+            dots.forEach((dot, i) => {
+              const dotElement = dot as HTMLElement
+              if (i === currentIndex) {
+                dotElement.style.background = '#0F0B1C'
+                dotElement.style.borderRadius = '3px'
+              } else {
+                dotElement.style.background = '#D1D5DB'
+                dotElement.style.borderRadius = '50%'
+              }
+            })
+          }
+          
+          // Update arrow visibility
+          if (leftArrow) {
+            leftArrow.style.opacity = currentIndex === 0 ? '0.5' : '1'
+            leftArrow.style.pointerEvents = currentIndex === 0 ? 'none' : 'auto'
+          }
+          if (rightArrow) {
+            rightArrow.style.opacity = currentIndex === totalCards - 1 ? '0.5' : '1'
+            rightArrow.style.pointerEvents = currentIndex === totalCards - 1 ? 'none' : 'auto'
+          }
+          
+          // Update cashback amount
+          const selectedVoucher = validVouchers[currentIndex]
+          if (selectedVoucher && cashbackAmountSpan) {
+            const newRate = selectedVoucher.cashbackRate || 0
+            const newAmount = (amount * newRate / 100).toFixed(2)
+            cashbackAmountSpan.textContent = `€${newAmount}`
+          }
+        }
+      }
+      
+      // Touch/swipe handling
+      let startX = 0
+      let startScrollLeft = 0
+      let isDragging = false
+      
+      carousel.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX
+        startScrollLeft = carousel?.scrollLeft || 0
+        isDragging = true
+      })
+      
+      carousel.addEventListener('touchmove', (e) => {
+        if (!isDragging || !carousel) return
+        e.preventDefault()
+        const currentX = e.touches[0].clientX
+        const diff = startX - currentX
+        carousel.scrollLeft = startScrollLeft + diff
+      })
+      
+      carousel.addEventListener('touchend', () => {
+        if (!isDragging || !carousel) return
+        isDragging = false
+        
+        const threshold = cardWidth / 3
+        const diff = startScrollLeft - carousel.scrollLeft
+        
+        if (Math.abs(diff) > threshold) {
+          if (diff > 0 && currentIndex < totalCards - 1) {
+            updateCarousel(currentIndex + 1)
+          } else if (diff < 0 && currentIndex > 0) {
+            updateCarousel(currentIndex - 1)
+          } else {
+            updateCarousel(currentIndex) // Snap back
+          }
+        } else {
+          updateCarousel(currentIndex) // Snap back
+        }
+      })
+      
+      // Add scroll event listener to sync position indicator
+      carousel.addEventListener('scroll', () => {
+        if (!isDragging) {
+          syncPositionIndicator()
+        }
+        scheduleAutoMinimize()
+      })
+      
+      // Handle window resize to maintain position sync
+      window.addEventListener('resize', () => {
+        // Recalculate position after resize
+        setTimeout(() => {
+          syncPositionIndicator()
+        }, 100)
+      })
+      
+      // Mouse drag handling
+      carousel.addEventListener('mousedown', (e) => {
+        startX = e.clientX
+        startScrollLeft = carousel?.scrollLeft || 0
+        isDragging = true
+        if (carousel) carousel.style.cursor = 'grabbing'
+      })
+      
+      carousel.addEventListener('mousemove', (e) => {
+        if (!isDragging || !carousel) return
+        e.preventDefault()
+        const currentX = e.clientX
+        const diff = startX - currentX
+        carousel.scrollLeft = startScrollLeft + diff
+      })
+      
+      carousel.addEventListener('mouseup', () => {
+        if (!isDragging || !carousel) return
+        isDragging = false
+        carousel.style.cursor = 'grab'
+        
+        const threshold = cardWidth / 3
+        const diff = startScrollLeft - carousel.scrollLeft
+        
+        if (Math.abs(diff) > threshold) {
+          if (diff > 0 && currentIndex < totalCards - 1) {
+            updateCarousel(currentIndex + 1)
+          } else if (diff < 0 && currentIndex > 0) {
+            updateCarousel(currentIndex - 1)
+          } else {
+            updateCarousel(currentIndex) // Snap back
+          }
+        } else {
+          updateCarousel(currentIndex) // Snap back
+        }
+      })
+      
+      carousel.addEventListener('mouseleave', () => {
+        if (isDragging && carousel) {
+          isDragging = false
+          carousel.style.cursor = 'grab'
+          updateCarousel(currentIndex) // Snap back
+        }
+      })
+      
+      // Arrow click handling
+      leftArrow.addEventListener('click', () => {
+        if (currentIndex > 0) {
+          updateCarousel(currentIndex - 1)
+        }
+      })
+      
+      rightArrow.addEventListener('click', () => {
+        if (currentIndex < totalCards - 1) {
+          updateCarousel(currentIndex + 1)
+        }
+      })
+      
+      // Indicator click handling
+      indicators.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement
+        if (target.classList.contains('carousel-dot')) {
+          const index = parseInt(target.dataset.index || '0')
+          updateCarousel(index)
+        }
+      })
+      
+      // Voucher card click handling
+      carousel.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement
+        const card = target.closest('.voucher-card') as HTMLElement
+        if (card && !isDragging) {
+          const index = parseInt(card.dataset.index || '0')
+          updateCarousel(index)
+        }
+      })
+    }
+  }
 
   // --- Minimize/Expand helpers -------------------------------------------------
   let minimizedBanner: HTMLElement | null = null
@@ -953,6 +1256,10 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     (prompt as HTMLElement).style.opacity = '1'
     ;(prompt as HTMLElement).style.transform = 'translateY(0) scale(1)'
   }, 100)
+  
+  // Reset inactivity on drag interactions
+  document.addEventListener('mousemove', () => scheduleAutoMinimize(), { passive: true })
+  document.addEventListener('mouseup', () => scheduleAutoMinimize(), { passive: true })
 
   document.getElementById('ws-close')?.addEventListener('click', () => {
     minimizePrompt()
@@ -976,11 +1283,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     prompt.remove()
   })
 
-  setTimeout(() => {
-    if (document.body.contains(prompt) && (prompt as HTMLElement).style.display !== 'none') {
-      minimizePrompt()
-    }
-  }, 30000)
+  // Removed fixed 30s minimize; replaced by inactivity timer above
 }
 
 
