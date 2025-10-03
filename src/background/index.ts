@@ -611,6 +611,18 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     cashbackOnPurchase: '% cashback on purchase',
     useOnlineAtCheckout: 'Use online at checkout',
   }
+
+  // Domain-specific messaging adjustments
+  try {
+    const hn = window.location.hostname.toLowerCase()
+    if (hn.includes('dille-kamille')) {
+      // Dille & Kamille vouchers are in-store only
+      safeUsps.useOnlineAtCheckout = 'Voucher only usable in-store (not online)'
+      if (translations && translations.voucher) {
+        (translations.voucher as any).instructions = 'This voucher can only be used in-store at Dille & Kamille (not online).'
+      }
+    }
+  } catch {}
   const usps: Array<{ text: string }> = [
     { text: safeUsps.instantDelivery },
     ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${safeUsps.cashbackOnPurchase}` }] : []),
