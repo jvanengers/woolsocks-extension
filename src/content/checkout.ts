@@ -354,6 +354,113 @@ const amazonDetector: CheckoutDetector = {
   getCurrency: () => 'EUR'
 }
 
+// Xenos checkout detection
+const xenosDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    try {
+      const url = window.location.href
+      // Do not trigger on home or catalog; only on cart/checkout
+      if (/^https?:\/\/www\.xenos\.nl\//i.test(url) && !/\/checkout\/cart/i.test(url)) return false
+      return /\/checkout\/cart/i.test(url)
+    } catch { return false }
+  },
+  extractTotal: () => {
+    // CSS Selector provided by user
+    const sel = '#solar-app > div.checkout-cart > div > div > div > div.cart__container > div > div.medium-offset-1.medium-8.cell.gray-wrapper--cart > div > div.cart__totals > div.--grand-total'
+    const node = document.querySelector(sel) as HTMLElement | null
+    if (node) {
+      const label = (node.querySelector('span')?.textContent || '').trim().toLowerCase()
+      if (/eindtotaal/i.test(label)) {
+        const amountSpan = node.querySelector('span:nth-of-type(2)') as HTMLElement | null
+        const amt = parseAmount(amountSpan?.textContent)
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Fallback: look for a row with label 'Eindtotaal' and a euro amount
+    const rows = document.querySelectorAll('div.--grand-total, .cart__totals div')
+    for (const el of Array.from(rows)) {
+      const txt = (el.textContent || '').toLowerCase()
+      if (/eindtotaal/.test(txt) && /€/.test(txt)) {
+        const amt = parseAmount(el.textContent)
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Beter Bed checkout detection
+const beterbedDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    try {
+      const url = window.location.href
+      // Only trigger on Winkelwagen page
+      return /https?:\/\/www\.beterbed\.nl\/Winkelwagen/i.test(url)
+    } catch { return false }
+  },
+  extractTotal: () => {
+    // Primary: explicit provided selector
+    const rows = document.querySelectorAll('#cart-form > div.cart-item-footer > div > div.col-lg-8 > table > tfoot > tr')
+    for (const row of Array.from(rows)) {
+      const label = (row.querySelector('td')?.textContent || '').trim().toLowerCase()
+      if (/eindbedrag/.test(label)) {
+        const priceEl = row.querySelector('.pricing-summary__price-text, td:last-of-type, span') as HTMLElement | null
+        const amt = parseAmount(priceEl?.textContent || row.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+      // ignore shipping line explicitly
+      if (/verzendkosten/i.test(label)) continue
+    }
+    // Fallback: find any row with Eindbedrag and an amount
+    const tableRows = document.querySelectorAll('tr')
+    for (const tr of Array.from(tableRows)) {
+      const txt = (tr.textContent || '').toLowerCase()
+      if (/eindbedrag/.test(txt)) {
+        const amt = parseAmount(tr.textContent)
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
+// Dille & Kamille checkout detection
+const dilleKamilleDetector: CheckoutDetector = {
+  isCheckoutPage: () => {
+    try {
+      const url = window.location.href
+      // Only trigger on cart/checkout
+      return /https?:\/\/www\.dille-kamille\.nl\/checkout\/cart\/?$/i.test(url)
+    } catch { return false }
+  },
+  extractTotal: () => {
+    // Primary selector provided
+    const rows = document.querySelectorAll('#cart-totals > div > table > tbody > tr.grand.totals.incl')
+    for (const row of Array.from(rows)) {
+      const label = (row.querySelector('th, .mark')?.textContent || '').trim().toLowerCase()
+      if (/subtotaal|verzending/.test(label)) continue
+      if (/totaal\s*\(incl\.?\s*btw\)/i.test(label) || /totaal/i.test(label)) {
+        const priceEl = row.querySelector('span.price, td.amount, strong, span') as HTMLElement | null
+        const amt = parseAmount(priceEl?.textContent || row.textContent || '')
+        if (amt && amt > 0) return amt
+      }
+    }
+    // Fallback: search any row mentioning Totaal (incl. BTW)
+    const anyRows = document.querySelectorAll('tr')
+    for (const tr of Array.from(anyRows)) {
+      const txt = (tr.textContent || '').toLowerCase()
+      if (/totaal\s*\(incl\.?\s*btw\)/i.test(txt)) {
+        const amt = parseAmount(tr.textContent)
+        if (amt && amt > 0) return amt
+      }
+    }
+    return null
+  },
+  getCurrency: () => 'EUR'
+}
+
 // Airbnb checkout detection
 const airbnbDetector: CheckoutDetector = {
   isCheckoutPage: () => {
@@ -1437,6 +1544,9 @@ const thuisbezorgdDetector: CheckoutDetector = {
 }
 
 function getDetector(hostname: string): CheckoutDetector {
+  if (hostname.includes('xenos.nl')) return xenosDetector
+  if (hostname.includes('beterbed.nl')) return beterbedDetector
+  if (hostname.includes('dille-kamille.nl')) return dilleKamilleDetector
   if (hostname.includes('amazon')) return amazonDetector
   if (hostname.includes('airbnb')) return airbnbDetector
   if (hostname.includes('zalando')) return zalandoDetector
@@ -1466,7 +1576,7 @@ function detectCheckout(): CheckoutInfo | null {
   const hostname = window.location.hostname
   const url = window.location.href
   
-  // Skip browser internal pages
+  // Skip browser internal pages and payment service pages
   if (url.startsWith('chrome://') || 
       url.startsWith('chrome-extension://') || 
       url.startsWith('brave://') || 
@@ -1474,8 +1584,11 @@ function detectCheckout(): CheckoutInfo | null {
       url.startsWith('firefox://') || 
       url.startsWith('moz-extension://') || 
       url.startsWith('about:') || 
-      url.startsWith('file://')) {
-    console.log('[Woolsocks] Skipping browser internal page:', url)
+      url.startsWith('file://') ||
+      url.includes('billing.stripe.com') ||
+      url.includes('checkout.stripe.com') ||
+      url.includes('js.stripe.com')) {
+    console.log('[Woolsocks] Skipping browser internal page or payment service page:', url)
     return null
   }
   
