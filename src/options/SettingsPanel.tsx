@@ -140,6 +140,11 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const firstName: string | undefined =
     profile?.data?.firstName || profile?.firstName || profile?.user?.firstName
 
+  // Determine if user belongs to QA domains
+  const email: string | undefined =
+    (profile as any)?.data?.email || (profile as any)?.email || (profile as any)?.user?.email || (profile as any)?.profile?.email
+  const isQaUser = !!email && /@(woolsocks\.eu|apcreation\.nl)$/i.test(email)
+
   const sockValueRaw: number | undefined =
     profile?.data?.sockValue ??
     profile?.data?.cashback?.sockValue ??
@@ -155,6 +160,14 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     try { onBalance && onBalance(sockValue) } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sockValue])
+
+  // Enforce that non-QA users cannot keep QA bypass enabled
+  useEffect(() => {
+    if (!profile) return
+    if (!isQaUser && qaBypass) {
+      saveQaBypass(false)
+    }
+  }, [profile, isQaUser, qaBypass])
 
   return (
     <div style={{ width: 320, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
@@ -181,15 +194,17 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       {session === true && (
         <div style={{ marginTop: variant === 'popup' ? 8 : 24 }}>
           {/* QA toggle */}
-          <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>QA: Always show voucher (ignore dismissals)</div>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={qaBypass} onChange={(e) => saveQaBypass(e.target.checked)} />
-                <span style={{ fontSize: 12, color: '#6B7280' }}>{qaBypass ? 'Enabled' : 'Disabled'}</span>
-              </label>
+          {isQaUser && (
+            <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>QA: Always show voucher (ignore dismissals)</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={qaBypass} onChange={(e) => saveQaBypass(e.target.checked)} />
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{qaBypass ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
             </div>
-          </div>
+          )}
 
           {variant === 'popup' ? (
             <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
