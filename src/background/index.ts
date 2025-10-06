@@ -3,6 +3,7 @@ import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, 
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
+import { setupOnlineCashbackFlow } from './online-cashback'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -86,6 +87,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     settings: {
       showCashbackPrompt: true,
       showVoucherPrompt: true,
+      autoActivateOnlineCashback: true,
     },
   }
   chrome.storage.local.set({ user: defaultUser })
@@ -93,6 +95,8 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Initialize deals scraper
   await initializeScraper()
   setupScrapingSchedule()
+  // Enable online cashback navigation flow
+  setupOnlineCashbackFlow(setIcon)
 })
 
 // Also fetch language on startup (when browser restarts)
@@ -103,6 +107,8 @@ chrome.runtime.onStartup?.addListener(async () => {
     const lang = setLanguageFromAPI(apiLang)
     console.log(`[WS] Language refreshed from API on startup: ${lang}`)
   }
+  // Ensure online cashback flow is active when service worker wakes up
+  try { setupOnlineCashbackFlow(setIcon) } catch {}
 })
 
 // Domains where the extension should never trigger

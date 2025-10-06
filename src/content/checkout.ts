@@ -7,7 +7,8 @@
 
 import type { CheckoutInfo } from '../shared/types'
 
-try { console.log('[Woolsocks] Checkout detection script loaded on:', window.location.hostname) } catch {}
+// Reduce noisy checkout logs; keep a single breadcrumb
+try { console.debug('[Woolsocks] checkout script') } catch {}
 
 // Universal amount parsing function with validation
 function parseAmount(text: string | null | undefined): number | null {
@@ -727,11 +728,11 @@ const bolDetector: CheckoutDetector = {
            url.includes('/cart') ||
            url.includes('/basket') ||
            document.querySelector('.checkout-summary') !== null
-    console.log('[Woolsocks] bolDetector.isCheckoutPage for URL:', url, 'result:', isCheckout)
+    // console.debug suppressed noisy logs
     return isCheckout
   },
   extractTotal: () => {
-    console.log('[Woolsocks] bolDetector.extractTotal called')
+    
     
     // Highly targeted: totals highlight banner that contains "Nog te betalen"
     const banners = Array.from(document.querySelectorAll('div.p-4.my-4.bg-accent1-background-low, div[class*="bg-accent1-background-low"], div[aria-live]')) as HTMLElement[]
@@ -743,7 +744,7 @@ const bolDetector: CheckoutDetector = {
         const euroStrong = strongs.reverse().find(el => /€\s*[\d.,\u00A0\s]+/.test(el.textContent || ''))
         if (euroStrong) {
           const amt = parseAmount(euroStrong.textContent)
-          console.log('[Woolsocks] Parsed from banner strong:', euroStrong.textContent, '=>', amt)
+          
           if (amt && amt > 0) return amt
         }
       }
@@ -761,7 +762,7 @@ const bolDetector: CheckoutDetector = {
         const pick = withEuro[withEuro.length - 1]
         if (pick) {
           const amt = parseAmount(pick.textContent)
-          console.log('[Woolsocks] Parsed near label:', pick.textContent, '=>', amt)
+          
           if (amt && amt > 0) return amt
         }
         scope = scope.parentElement
@@ -774,11 +775,11 @@ const bolDetector: CheckoutDetector = {
     const parsed = euroMatches.map(m => parseAmount(m)).filter((n): n is number => typeof n === 'number' && n > 0)
     if (parsed.length) {
       const max = Math.max(...parsed)
-      console.log('[Woolsocks] Fallback max euro amount:', max)
+      
       return max
     }
 
-    console.log('[Woolsocks] No total found, returning null')
+    
     return null
   },
   getCurrency: () => 'EUR'
@@ -834,17 +835,7 @@ const genericDetector: CheckoutDetector = {
     )
     
     // Debug logging for troubleshooting (universal)
-    try {
-      console.log('[Woolsocks] URL detection debug:', {
-        hostname,
-        pathname,
-        url,
-        hasCheckoutUrl,
-        matchedKeywords: urlKeywords.filter(keyword => 
-          pathname.includes(keyword) || url.includes(keyword)
-        )
-      })
-    } catch {}
+    // debug suppressed
     
     // If URL clearly indicates checkout, that's sufficient
     if (hasCheckoutUrl) return true
@@ -1811,19 +1802,19 @@ function detectCheckout(): CheckoutInfo | null {
     return null
   }
   
-  console.log('[Woolsocks] detectCheckout called for hostname:', hostname, 'url:', url)
+  
 
   const detector = getDetector(hostname)
-  console.log('[Woolsocks] Using detector for hostname:', hostname)
+  
   const isCheckout = detector.isCheckoutPage()
-  console.log('[Woolsocks] isCheckoutPage result:', isCheckout)
+  
   
   if (!isCheckout) return null
 
   const extracted = detector.extractTotal()
-  console.log('[Woolsocks] detector.extractTotal() returned:', extracted)
+  
   let total = extracted && extracted > 0 ? extracted : 0
-  console.log('[Woolsocks] final total after processing:', total)
+  
 
   // Do not auto-normalize amounts >= 100; sites like Zalando legitimately have totals ≥ 100
 
@@ -1834,7 +1825,7 @@ function detectCheckout(): CheckoutInfo | null {
     timestamp: Date.now()
   }
   
-  console.log('[Woolsocks] returning checkoutInfo:', checkoutInfo)
+  
   return checkoutInfo
 }
 

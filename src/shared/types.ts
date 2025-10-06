@@ -55,6 +55,8 @@ export interface AnonymousUser {
     showVoucherPrompt: boolean
     // QA toggle: when true, content script ignores dismissal cooldowns
     qaBypassVoucherDismissal?: boolean
+    // When false, disables automatic online cashback activation on navigation
+    autoActivateOnlineCashback?: boolean
   }
 }
 
@@ -88,6 +90,24 @@ export interface Deal {
   description?: string
   imageUrl?: string
   dealUrl?: string
+  // Cashback-specific enrichment (optional for vouchers)
+  id?: string
+  amountType?: 'PERCENTAGE' | 'FIXED'
+  currency?: string
+  country?: string
+  usageType?: string
+  requireOptIn?: boolean
+  provider?: string
+  providerMerchantId?: string
+  providerReferenceId?: string
+  affiliateUrl?: string
+  clickId?: string
+  conditions?: {
+    termsCondition?: string
+    additionalInfo?: string
+    siteContents?: string[]
+  }
+  merchantId?: string | number
 }
 
 export interface Category {

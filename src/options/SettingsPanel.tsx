@@ -89,6 +89,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
+  const [autoOc, setAutoOc] = useState<boolean>(true)
 
   useEffect(() => {
     checkSession().then((has) => {
@@ -97,6 +98,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         loadProfile()
         loadTransactions()
         loadQaBypass()
+        loadAutoOc()
       }
     })
   }, [])
@@ -128,6 +130,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     setQaBypass(!!user.settings?.qaBypassVoucherDismissal)
   }
 
+  async function loadAutoOc() {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { settings: {} }
+    const enabled = user.settings?.autoActivateOnlineCashback
+    setAutoOc(enabled !== false)
+  }
+
   async function saveQaBypass(next: boolean) {
     const result = await chrome.storage.local.get('user')
     const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
@@ -135,6 +144,15 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     user.settings.qaBypassVoucherDismissal = next
     await chrome.storage.local.set({ user })
     setQaBypass(next)
+  }
+
+  async function saveAutoOc(next: boolean) {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true } }
+    user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true }
+    user.settings.autoActivateOnlineCashback = next
+    await chrome.storage.local.set({ user })
+    setAutoOc(next)
   }
 
   const firstName: string | undefined =
@@ -205,6 +223,17 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               </div>
             </div>
           )}
+
+              {/* Online cashback auto-activation toggle */}
+              <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Auto-activate online cashback</div>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={autoOc} onChange={(e) => saveAutoOc(e.target.checked)} />
+                    <span style={{ fontSize: 12, color: '#6B7280' }}>{autoOc ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+              </div>
 
           {variant === 'popup' ? (
             <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>

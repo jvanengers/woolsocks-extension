@@ -5,50 +5,90 @@
 // - Adds x-application-name: WOOLSOCKS_WEB and a stable anonymous x-user-id
 // - Falls back to a content-script relay on a woolsocks.eu tab when cookies are not sent from the background
 
-import type { PartnerLite, Category } from '../shared/types'
+import type { PartnerLite, Category, Deal } from '../shared/types'
+
+const DIAG = false
 
 const SITE_BASE = 'https://woolsocks.eu'
 
 async function getHeaders(): Promise<HeadersInit> {
+  const userId = await getUserId()
   const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
   let anonId = wsAnonId as string | undefined
-  if (!anonId) {
-    anonId = crypto.randomUUID()
-    await chrome.storage.local.set({ wsAnonId: anonId })
-  }
+  if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
   return {
     'x-application-name': 'WOOLSOCKS_WEB',
-    'x-user-id': anonId,
+    'x-user-id': userId || anonId,
     'Content-Type': 'application/json',
   }
 }
 
-let relayAttempts = 0
-const MAX_RELAY_ATTEMPTS = 3
+// Try to fetch the real user id from the user-info API (cached for the session)
+let cachedUserId: string | null | undefined
+let resolvingUserId = false
+async function getUserId(): Promise<string | null> {
+  if (typeof cachedUserId !== 'undefined') return cachedUserId
+  if (resolvingUserId) return null
+  resolvingUserId = true
+  try {
+    // Build minimal headers without calling getHeaders (to avoid recursion)
+    const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
+    let anonId = wsAnonId as string | undefined
+    if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
+    const minHeaders: HeadersInit = { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId || '' }
+
+    // Attempt direct background call
+    let json: any = null
+    try {
+      const direct = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, { credentials: 'include', headers: minHeaders as any })
+      if (direct.ok) {
+        try { json = await direct.json() } catch {}
+      }
+    } catch {}
+
+    // Fallback to relay with custom headers (no getHeaders)
+    if (!json) {
+      const rel = await relayFetchViaTabCustomHeaders<{ data?: { id?: string; userId?: string } }>(`/user-info/api/v0`, minHeaders as Record<string, string>)
+      json = rel.data
+    }
+
+    const id = (json?.data?.userId || json?.data?.id || null) as string | null
+    cachedUserId = id
+    resolvingUserId = false
+    return id
+  } catch {
+    cachedUserId = null
+    resolvingUserId = false
+    return null
+  }
+}
+
+// legacy counters removed with ephemeral relay
 const API_RETRY_DELAY = 1000 // 1 second
 const MAX_API_RETRIES = 2
 
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
-  return new Promise(async (resolve) => {
-    const headers = await getHeaders()
-    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
-    let tab = tabs[0]
-    if (!tab || !tab.id) {
-      if (relayAttempts >= MAX_RELAY_ATTEMPTS) {
-        return resolve({ data: null, status: 0 })
-      }
-      relayAttempts++
-      try {
-        tab = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
-      } catch {
-        return resolve({ data: null, status: 0 })
-      }
-      setTimeout(() => attempt(tab!.id!), 800)
-      return
-    }
-    attempt(tab.id)
+  const headers = await getHeaders()
 
-    function attempt(tabId: number) {
+  async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
+    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
+    if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
+    return { tabId: t.id!, created: true }
+  }
+
+  async function ping(tabId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      try {
+        chrome.tabs.sendMessage(tabId, { type: 'WS_PING' }, () => {
+          resolve(!chrome.runtime.lastError)
+        })
+      } catch { resolve(false) }
+    })
+  }
+
+  async function send(tabId: number): Promise<{ data: T | null; status: number }> {
+    return new Promise((resolve) => {
       chrome.tabs.sendMessage(
         tabId,
         {
@@ -59,15 +99,9 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
           },
         },
         (resp) => {
-          if (chrome.runtime.lastError) {
-            if (relayAttempts < MAX_RELAY_ATTEMPTS) {
-              relayAttempts++
-              setTimeout(() => attempt(tabId), 500)
-              return
-            }
+          if (chrome.runtime.lastError || !resp) {
             return resolve({ data: null, status: 0 })
           }
-          if (!resp) return resolve({ data: null, status: 0 })
           try {
             const json = resp.bodyText ? JSON.parse(resp.bodyText) : null
             resolve({ data: json as T, status: resp.status })
@@ -76,15 +110,75 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
           }
         }
       )
+    })
+  }
+
+  let created = false
+  let tabId = 0
+  try {
+    const got = await ensureRelayTab()
+    tabId = got.tabId
+    created = got.created
+    // Wait for content script readiness
+    let ready = await ping(tabId)
+    let tries = 0
+    while (!ready && tries < 6) {
+      await new Promise(r => setTimeout(r, 250))
+      ready = await ping(tabId)
+      tries++
     }
-  })
+    const result = await send(tabId)
+    return result
+  } catch {
+    return { data: null, status: 0 }
+  } finally {
+    // Close ephemeral tab if we created it
+    if (created && tabId) {
+      try { await chrome.tabs.remove(tabId) } catch {}
+    }
+  }
+}
+
+// Relay variant that uses provided headers (avoids getHeaders recursion)
+async function relayFetchViaTabCustomHeaders<T>(endpoint: string, headersOverride: Record<string, string>, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+  async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
+    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
+    if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
+    return { tabId: t.id!, created: true }
+  }
+  async function ping(tabId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      try { chrome.tabs.sendMessage(tabId, { type: 'WS_PING' }, () => resolve(!chrome.runtime.lastError)) } catch { resolve(false) }
+    })
+  }
+  async function send(tabId: number): Promise<{ data: T | null; status: number }> {
+    return new Promise((resolve) => {
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: 'WS_RELAY_FETCH', payload: { url: `${SITE_BASE}/api/wsProxy${endpoint}`, init: { ...init, headers: headersOverride, credentials: 'include' } } },
+        (resp) => {
+          if (chrome.runtime.lastError || !resp) return resolve({ data: null, status: 0 })
+          try { const json = resp.bodyText ? JSON.parse(resp.bodyText) : null; resolve({ data: json as T, status: resp.status }) } catch { resolve({ data: null, status: resp.status }) }
+        }
+      )
+    })
+  }
+  let created = false
+  let tabId = 0
+  try {
+    const got = await ensureRelayTab(); tabId = got.tabId; created = got.created
+    let ready = await ping(tabId); let tries = 0
+    while (!ready && tries < 6) { await new Promise(r => setTimeout(r, 250)); ready = await ping(tabId); tries++ }
+    return await send(tabId)
+  } catch { return { data: null, status: 0 } } finally { if (created && tabId) { try { await chrome.tabs.remove(tabId) } catch {} } }
 }
 
 async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {
   const headers = await getHeaders()
   const fullUrl = `${SITE_BASE}/api/wsProxy${endpoint}`
-  console.log(`[WS API] fetchViaSiteProxy: ${fullUrl}`)
-  console.log(`[WS API] Headers:`, headers)
+  if (DIAG) console.debug(`[WS API] fetchViaSiteProxy: ${fullUrl}`)
+  if (DIAG) console.debug(`[WS API] Headers:`, headers)
   
   try {
     const resp = await fetch(fullUrl, {
@@ -94,26 +188,38 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
       method: init?.method || 'GET',
     })
     const status = resp.status
-    console.log(`[WS API] Response status: ${status}, ok: ${resp.ok}`)
+    if (DIAG) console.debug(`[WS API] Response status: ${status}, ok: ${resp.ok}`)
     
     if (!resp.ok) {
-      console.log(`[WS API] Response not ok, trying relay for ${endpoint}`)
+      if (DIAG) console.debug(`[WS API] Response not ok, trying relay for ${endpoint}`)
       // Fallback to relay via page context when cookies are not included
       return await relayFetchViaTab<T>(endpoint, init)
     }
     const json = (await resp.json()) as T
-    console.log(`[WS API] Response data:`, json)
+    if (DIAG) console.debug(`[WS API] Response data:`, json)
     return { data: json, status }
   } catch (e) {
-    console.log(`[WS API] Fetch error for ${endpoint}:`, e)
+    if (DIAG) console.debug(`[WS API] Fetch error for ${endpoint}:`, e)
     // Network error from background → try relay or retry
     if (retryCount < MAX_API_RETRIES) {
-      console.log(`[WS API] Retrying fetch (${retryCount + 1}/${MAX_API_RETRIES}) for ${endpoint}`)
+      if (DIAG) console.debug(`[WS API] Retrying fetch (${retryCount + 1}/${MAX_API_RETRIES}) for ${endpoint}`)
       await new Promise(resolve => setTimeout(resolve, API_RETRY_DELAY * (retryCount + 1)))
       return await fetchViaSiteProxy<T>(endpoint, init, retryCount + 1)
     }
-    console.log(`[WS API] Max retries reached, trying relay for ${endpoint}`)
+    if (DIAG) console.debug(`[WS API] Max retries reached, trying relay for ${endpoint}`)
     return await relayFetchViaTab<T>(endpoint, init)
+  }
+}
+
+function cleanDomain(input: string | undefined | null): string {
+  if (!input) return ''
+  try {
+    let h = input.trim()
+    if (!/^https?:\/\//i.test(h)) h = `https://${h}`
+    const u = new URL(h)
+    return (u.hostname || '').replace(/^www\./i, '').toLowerCase()
+  } catch {
+    return String(input).replace(/^www\./i, '').toLowerCase()
   }
 }
 
@@ -187,6 +293,16 @@ function buildGiftProductUrl(d: any): string | undefined {
   return m ? `${SITE_BASE}/nl-NL/giftcards-shop/products/${m[1]}` : undefined
 }
 
+function extractObMerchantIdFromImageUrl(url?: string | null): string | null {
+  if (!url) return null
+  try {
+    const m = String(url).match(/\/stores(?:\/square)?\/(\d+)(?:[-.]|\/)/)
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
 type MerchantsOverviewResponse = {
   data?: {
     merchants?: Array<{
@@ -210,6 +326,7 @@ type DealsV2Response = {
   data?: {
     deals?: Array<{
       id?: string
+      rewardId?: string
       productId?: string
       providerReferenceId?: string
       amount?: { value?: number; currency?: string; scalingFactor?: number }
@@ -218,11 +335,36 @@ type DealsV2Response = {
       dealType?: string
       description?: string
       imageUrl?: string
-      merchantId?: string
+      merchantId?: string | number
       provider?: string
       siteContents?: string[]
       title?: string
+      usageType?: string
       links?: { webLink?: string }
+      requireOptIn?: boolean
+      providerMerchantId?: string | number
+    }>
+  }
+}
+
+// Cashback merchant details (rewards + conditions)
+type CashbackMerchantResponse = {
+  data?: {
+    merchant?: {
+      id?: string | number
+      name?: string
+      logoUrl?: string
+      countryCode?: string
+      additionalInfo?: string
+      termsCondition?: string
+      webUrl?: string
+    }
+    rewards?: Array<{
+      rewardId?: string | number
+      title?: string
+      cashBack?: number
+      cashbackType?: 'percent' | 'money'
+      currencyCode?: string
     }>
   }
 }
@@ -250,7 +392,7 @@ function classify(dealType: string | undefined): 'VOUCHERS' | 'ONLINE_CASHBACK' 
   return 'OTHER'
 }
 
-export async function searchMerchantByName(name: string, country: string = 'NL'): Promise<PartnerLite | null> {
+export async function searchMerchantByName(name: string, country: string = 'NL', expectedHostDomain?: string): Promise<PartnerLite | null> {
   // Normalize tricky merchant names before candidate generation
   let adjusted = name
   if (/^prenatal$/i.test(adjusted)) adjusted = 'prénatal'
@@ -282,6 +424,38 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
 
     const dealsRes = await fetchViaSiteProxy<DealsV2Response>(`/merchants-overview/api/v0.0.1/v2/deals?merchantId=${apiMerchant.id}&country=${country}`)
     const dealsList = dealsRes.data?.data?.deals || []
+    const allCb = dealsList.filter((d: any) => classify(d?.dealType) === 'ONLINE_CASHBACK')
+    let providerMerchantId: string | undefined = undefined
+    for (const d of allCb) {
+      if (d?.providerMerchantId) { providerMerchantId = String(d.providerMerchantId); break }
+      const fromImg = extractObMerchantIdFromImageUrl(d?.imageUrl)
+      if (fromImg) { providerMerchantId = fromImg; break }
+    }
+    if (DIAG) try { console.debug('[WS API] Cashback merchant lookup', { providerMerchantId, fallbackFromImage: !providerMerchantId && !!providerMerchantId }) } catch {}
+
+    // Fetch cashback rewards from dedicated endpoint to get rewardId for redirect
+    const rawLang = (await getUserLanguage().catch(() => 'nl-NL')) || 'nl-NL'
+    const localeHeader = String(rawLang)
+    const languageParam = encodeURIComponent(String(localeHeader.split('-')[0]).toLowerCase())
+    const cbRes = providerMerchantId
+      ? await fetchViaSiteProxy<CashbackMerchantResponse>(
+          `/cashback/api/v1/merchants/${encodeURIComponent(String(providerMerchantId))}?sortRewardsBy=amount%3Adesc&language=${languageParam}`,
+          { headers: { 'Accept-Language': localeHeader } }
+        )
+      : { data: null, status: 0 }
+    const rewards = cbRes.data?.data?.rewards || []
+    if (DIAG) try { console.debug('[WS API] Cashback rewards fetched', { count: rewards.length }) } catch {}
+
+    // Tighten: ensure OB merchant webUrl matches the expected host/domain if provided
+    try {
+      const merchantWebUrl = cbRes?.data?.data?.merchant?.webUrl || ''
+      const webDomain = cleanDomain(merchantWebUrl)
+      const hostDomain = cleanDomain(expectedHostDomain || name)
+      if (webDomain && hostDomain && !(hostDomain.endsWith(webDomain) || webDomain.endsWith(hostDomain))) {
+        console.log('[WS API] Skipping merchant due to domain mismatch', { hostDomain, webDomain, candidate })
+        continue
+      }
+    } catch {}
 
     let cashbackRate = 0
     let voucherAvailable = false
@@ -295,13 +469,24 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
 
     for (const d of dealsList) {
       const rate = toRate(d.amount, d.amountType || '')
-      const item = {
+      const item: Deal = {
         name: d?.title || apiMerchant.name || candidate,
         rate,
         description: d?.description || (d?.siteContents && d.siteContents[0]) || '',
         imageUrl: d?.imageUrl,
         dealUrl: buildGiftProductUrl(d),
-        dealType: d?.dealType,
+        // Cashback enrichments
+        // id set below based on deal class to avoid mixing UUID (giftcard) with rewardId (cashback)
+        amountType: d?.amountType as any,
+        currency: (d?.amount as any)?.currency || (d as any)?.currencyCode,
+        country: d?.country,
+        usageType: d?.usageType,
+        provider: d?.provider,
+        providerMerchantId: (d as any)?.providerMerchantId,
+        providerReferenceId: d?.providerReferenceId as any,
+        requireOptIn: (d as any)?.requireOptIn as any,
+        conditions: { siteContents: Array.isArray(d?.siteContents) ? d!.siteContents! : [] },
+        merchantId: (d as any)?.merchantId,
       }
       const cls = classify(d?.dealType)
       if (cls === 'VOUCHERS') {
@@ -316,8 +501,31 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
           voucherCandidates.push({ id: productId, item })
         }
       }
-      else if (cls === 'ONLINE_CASHBACK') cashback.push(item)
+      else if (cls === 'ONLINE_CASHBACK') {
+        // Prefer rewardId later; for fallback, carry providerReferenceId which sometimes works
+        const provRef = (d as any)?.providerReferenceId || (d as any)?.id
+        if (provRef && !item.id) item.id = String(provRef)
+        cashback.push(item)
+      }
       else if (cls === 'AUTOREWARDS') autorewards.push(item)
+    }
+
+    // Build Online cashback deals from rewards to ensure we have rewardId
+    const rewardsDeals: Deal[] = []
+    const merchantCountry = (cbRes.data?.data?.merchant?.countryCode || country || '').toUpperCase()
+    for (const r of rewards) {
+      const amtType = (r?.cashbackType || '').toLowerCase() === 'percent' ? 'PERCENTAGE' : 'FIXED'
+      const rate = typeof r?.cashBack === 'number' ? r.cashBack : 0
+      rewardsDeals.push({
+        id: r?.rewardId ? String(r.rewardId) : undefined,
+        name: r?.title || apiMerchant.name || candidate,
+        rate,
+        amountType: amtType as any,
+        currency: r?.currencyCode,
+        country: merchantCountry,
+        usageType: 'ONLINE',
+        merchantId: apiMerchant.id,
+      })
     }
 
     // Helper to fetch giftcard product details and filter by ONLINE usage
@@ -353,9 +561,10 @@ export async function searchMerchantByName(name: string, country: string = 'NL')
       voucherAvailable = true
       cashbackRate = Math.max(cashbackRate, max)
     }
-    if (cashback.length) {
-      const max = Math.max(...cashback.map(d => d.rate || 0))
-      categories.push({ name: 'Online cashback', deals: cashback, maxRate: max })
+    const ocDeals = rewardsDeals.length ? rewardsDeals : cashback
+    if (ocDeals.length) {
+      const max = Math.max(...ocDeals.map(d => d.rate || 0))
+      categories.push({ name: 'Online cashback', deals: ocDeals, maxRate: max })
       cashbackRate = Math.max(cashbackRate, max)
     }
 
@@ -386,7 +595,12 @@ export async function getPartnerByHostname(hostname: string): Promise<PartnerLit
   
   for (const c of candidates) {
     try {
-      const res = await searchMerchantByName(c)
+      let res = await searchMerchantByName(c, 'NL', hostname)
+      // Fallback: if nothing for exact host, try removing country suffixes like '/nl' and hyphens
+      if (!res && /^(.*)\.(nl|de|be|fr|it|es)$/i.test(c)) {
+        const bare = c.replace(/\.(nl|de|be|fr|it|es)$/i, '')
+        res = await searchMerchantByName(bare, 'NL', hostname)
+      }
       if (res) {
         console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
         return res
@@ -410,6 +624,77 @@ export async function refreshDeals(): Promise<PartnerLite[]> {
 
 export async function initializeScraper() {}
 export function setupScrapingSchedule() {}
+
+// --- Online Cashback helpers -------------------------------------------------
+
+type ClickPostResponse = {
+  data?: { linkUrl?: string; redirectUrl?: string; url?: string; link?: string; clickId?: string } | string
+}
+
+// Request tracked redirect URL for a cashback reward/deal
+export async function requestRedirectUrl(dealId: string | number): Promise<{ url: string; clickId?: string } | null> {
+  async function doAttempt(forceRefetchUserId: boolean): Promise<{ url: string; clickId?: string } | null> {
+    try {
+      const endpoint = `/rewards/api/v0/rewards/${encodeURIComponent(String(dealId))}/redirection`
+      // Use REAL user id for redirection clicks
+      let headersOverride: Record<string, string> | undefined
+      try {
+        if (forceRefetchUserId) { cachedUserId = undefined }
+        const uid = await getUserId()
+        if (uid) headersOverride = { 'x-user-id': String(uid) }
+      } catch {}
+      const userLang = (await getUserLanguage().catch(() => 'nl-NL')) || 'nl-NL'
+      const res = await fetchViaSiteProxy<ClickPostResponse>(endpoint, { method: 'GET', headers: { ...(headersOverride || {}), 'Accept-Language': userLang } })
+      const status = res.status
+      const body: any = res.data
+      const payload = body && (typeof body?.data !== 'undefined') ? body.data : body
+      const url = payload?.linkUrl || payload?.redirectUrl || payload?.url || payload?.link
+      const clickId = payload?.clickId
+      if (typeof url === 'string') return { url, clickId }
+      // If forbidden or empty, try once more after forcing user id refresh
+      if (status === 403 && !forceRefetchUserId) {
+        return await doAttempt(true)
+      }
+      return null
+    } catch {
+      if (!forceRefetchUserId) return await doAttempt(true)
+      return null
+    }
+  }
+  return await doAttempt(false)
+}
+
+// Fetch merchant conditions (terms & extra info) from cashback API
+export async function fetchMerchantConditions(merchantId: string | number): Promise<{ termsCondition?: string; additionalInfo?: string } | null> {
+  try {
+    const endpoint = `/cashback/api/v1/merchants/${encodeURIComponent(String(merchantId))}?sortRewardsBy=amount%3Adesc`
+    const res = await fetchViaSiteProxy<any>(endpoint)
+    const m = (res?.data && (res.data.data?.merchant || res.data.merchant)) || null
+    if (!m) return null
+    return {
+      termsCondition: m.termsCondition || undefined,
+      additionalInfo: m.additionalInfo || undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function getUserCountryCode(): Promise<string> {
+  // Try to derive from user info endpoint; fall back to NL
+  try {
+    const lang = await getUserLanguage()
+    if (lang) {
+      // Expect forms like "nl" or "nl-NL"; prefer region if present
+      const parts = lang.split('-')
+      if (parts.length === 2 && parts[1]) return parts[1].toUpperCase()
+      // Map common languages to default region
+      const map: Record<string, string> = { nl: 'NL', en: 'NL', de: 'DE', fr: 'FR', it: 'IT', es: 'ES' }
+      return map[lang.toLowerCase()] || 'NL'
+    }
+  } catch {}
+  return 'NL'
+}
 
 // Fetch user's language preference from Woolsocks API
 export async function getUserLanguage(): Promise<string | null> {
