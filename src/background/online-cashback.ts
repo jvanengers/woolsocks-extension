@@ -58,6 +58,16 @@ function hasAffiliateMarkers(url: string): boolean {
   } catch { return false }
 }
 
+// Determine whether a URL has only marketing/tracking params (no meaningful deep link)
+function isJustTrackingParams(u: URL): boolean {
+  try {
+    const keys = Array.from(u.searchParams.keys()).map(k => k.toLowerCase())
+    if (!keys.length) return true
+    const isTracking = (k: string) => /^(utm_|gclid|fbclid|ttclid|tt|tduid|affid|affiliate|aff|campaign|adgroup|adset|clickid|pk_|mc_|scid|msclkid|yclid|irclickid|awc)$/i.test(k)
+    return keys.every(isTracking)
+  } catch { return true }
+}
+
 async function getCooldownUntil(host: string): Promise<number> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
@@ -140,7 +150,18 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try { await setCooldown(clean) } catch {}
         // If we landed on the merchant but not on the original deep URL, restore it once
         try {
-          const shouldRestore = !!pending.originalUrl && pending.originalUrl !== url && !pending.restoredOnce
+          const shouldRestore = (() => {
+            if (!pending.originalUrl || pending.restoredOnce) return false
+            try {
+              const cur = new URL(url)
+              const orig = new URL(pending.originalUrl)
+              // Only restore if original had a meaningful deep path or non-tracking params
+              if (orig.hostname.replace(/^www\./i,'').toLowerCase() !== cur.hostname.replace(/^www\./i,'').toLowerCase()) return false
+              const origHasDeepPath = (orig.pathname || '/') !== '/'
+              const origHasMeaningfulParams = orig.search ? !isJustTrackingParams(orig) : false
+              return (origHasDeepPath || origHasMeaningfulParams) && (pending.originalUrl !== url)
+            } catch { return false }
+          })()
           if (shouldRestore) {
             if (OC_DEBUG) console.log('[WS OC] restoring deep link', { from: url, to: pending.originalUrl })
             // Update state to avoid repeated restores

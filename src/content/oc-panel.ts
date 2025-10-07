@@ -2,7 +2,7 @@
 // Renders a top-right panel that reflects cashback status per MCP annotations
 
 type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
-import { translate } from '../shared/i18n'
+import { translate, initLanguage } from '../shared/i18n'
 
 type UiEvent =
   | { kind: 'oc_scan_start'; host: string }
@@ -836,6 +836,7 @@ chrome.runtime.onMessage.addListener((msg: any) => {
 
 // On load: if domain has active pill persisted in this session, show it immediately
 ;(async () => {
+  try { await initLanguage() } catch {}
   const domain = getDomain()
   if (await getActivePill(domain)) {
     showMinimizedPill()

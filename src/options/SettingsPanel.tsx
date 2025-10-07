@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { translate } from '../shared/i18n'
+import { translate, initLanguage } from '../shared/i18n'
 
 type WsProfile = any
 type WsTransaction = any
@@ -93,6 +93,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [autoOc, setAutoOc] = useState<boolean>(true)
 
   useEffect(() => {
+    try { initLanguage() } catch {}
     checkSession().then((has) => {
       setSession(has)
       if (has) {
