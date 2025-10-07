@@ -52,7 +52,13 @@ async function getUserId(): Promise<string | null> {
       json = rel.data
     }
 
-    const id = (json?.data?.userId || json?.data?.id || null) as string | null
+    const id = (
+      json?.data?.userId ||
+      json?.data?.id ||
+      json?.user?.id ||
+      json?.id ||
+      null
+    ) as string | null
     cachedUserId = id
     resolvingUserId = false
     return id
