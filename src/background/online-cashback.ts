@@ -20,6 +20,8 @@ type RedirectState = {
   expectedFinalHost: string
   partnerName: string
   deal: Deal
+  originalUrl: string
+  restoredOnce?: boolean
 }
 
 const tabRedirectState = new Map<number, RedirectState>()
@@ -123,10 +125,30 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
 
       // Handle post-redirect landing back on merchant
       const pending = tabRedirectState.get(tabId)
+      // Extra debug to compare hosts during pending redirect flow
+      if (pending && OC_DEBUG) {
+        try {
+          const expectedHost = cleanHost(pending.expectedFinalHost)
+          console.log('[WS OC] pending-compare', { tabId, currentUrl: url, currentHost: clean, expectedHost, rawExpected: pending.expectedFinalHost })
+        } catch {}
+      }
       if (pending && clean.endsWith(cleanHost(pending.expectedFinalHost))) {
         if (OC_DEBUG) console.log('[WS OC] landed', { tabId, host: clean })
         // Mark cooldown after landing back to merchant to prevent repeated redirects
         try { await setCooldown(clean) } catch {}
+        // If we landed on the merchant but not on the original deep URL, restore it once
+        try {
+          const shouldRestore = !!pending.originalUrl && pending.originalUrl !== url && !pending.restoredOnce
+          if (shouldRestore) {
+            if (OC_DEBUG) console.log('[WS OC] restoring deep link', { from: url, to: pending.originalUrl })
+            // Update state to avoid repeated restores
+            tabRedirectState.set(tabId, { ...pending, restoredOnce: true })
+            try { track('oc_restore_deeplink', { domain: clean, partner_name: pending.partnerName }) } catch {}
+            await chrome.tabs.update(tabId, { url: pending.originalUrl })
+            // Return early; onCommitted will fire again for the restored URL, but cooldown prevents re-redirect
+            return
+          }
+        } catch {}
         setIcon('active', tabId)
 
         // Save popup data for the UI to render
@@ -174,7 +196,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       }
 
       // If we just navigated to an affiliate or other domain not matching expected, ignore
-      if (pending) { if (OC_DEBUG) console.log('[WS OC] pending-nonmatch', { tabId, url }); return }
+      if (pending) { if (OC_DEBUG) { try { const expectedHost = cleanHost(pending.expectedFinalHost); console.log('[WS OC] pending-nonmatch', { tabId, currentUrl: url, currentHost: clean, expectedHost, rawExpected: pending.expectedFinalHost }) } catch { console.log('[WS OC] pending-nonmatch', { tabId, url }) } } return }
 
       // Fallback: detect organic landing with affiliate markers and mark active
       if (hasAffiliateMarkers(url)) {
@@ -277,6 +299,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       tabRedirectState.set(tabId, enrich)
 
       try {
+        // Save original deep URL before performing the affiliate hop
+        tabRedirectState.set(tabId, { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url })
         await chrome.tabs.update(tabId, { url: redir.url })
         track('oc_redirect_navigated', { domain: clean, deal_id: best.id, click_id: redir.clickId })
       } catch (e) {
@@ -284,7 +308,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try {
           const created = await chrome.tabs.create({ url: redir.url, active: true })
           if (created?.id) {
-            tabRedirectState.set(created.id, { expectedFinalHost: clean, partnerName: partner.name, deal: best })
+            // Save original deep URL for the newly opened tab as well
+            tabRedirectState.set(created.id, { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url })
             track('oc_redirect_navigated', { domain: clean, deal_id: best.id, click_id: redir.clickId })
             if (OC_DEBUG) console.log('[WS OC] opened new tab for affiliate', { tabId: created.id })
           }

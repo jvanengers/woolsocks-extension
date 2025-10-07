@@ -235,28 +235,9 @@ function App() {
     )
   }
 
-  if (session === false) {
-    return (
-      <div style={{ background: '#FDC408', padding: 16, borderRadius: 0, overflow: 'hidden', position: 'relative', width: 320 }}>
-        <button
-          onClick={openLogin}
-          style={{
-            background: '#211940',
-            color: '#FFFFFF',
-            border: 'none',
-            borderRadius: 4,
-            height: 48,
-            width: '100%',
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: 'pointer'
-          }}
-        >
-          Login to continue
-        </button>
-      </div>
-    )
-  }
+  // Note: Do not early-return when unauthenticated. We still render the popup,
+  // but replace the top-left balance with a Login button matching the
+  // bottom-right message styling.
   return (
     <div style={{ 
       background: '#FDC408', 
@@ -301,28 +282,52 @@ function App() {
             </button>
           </>
         ) : (
-          <button
-            onClick={() => setView('transactions')}
-            style={{ 
-              background: 'rgba(0,0,0,0.05)', 
-              color: '#100B1C', 
-              padding: '6px 10px', 
-              borderRadius: 8, 
-              fontWeight: 500, 
-              display: 'inline-flex', 
-              alignItems: 'center', 
-              gap: 4, 
-              border: 'none', 
-              cursor: 'pointer',
-              fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-              fontSize: 14
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span id="__ws_balance">€{balance.toFixed(2)}</span>
-          </button>
+          session === true ? (
+            <button
+              onClick={() => setView('transactions')}
+              style={{ 
+                background: 'rgba(0,0,0,0.05)', 
+                color: '#100B1C', 
+                padding: '6px 10px', 
+                borderRadius: 8, 
+                fontWeight: 500, 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                gap: 4, 
+                border: 'none', 
+                cursor: 'pointer',
+                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                fontSize: 14
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span id="__ws_balance">€{balance.toFixed(2)}</span>
+            </button>
+          ) : (
+            <button
+              onClick={openLogin}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 32,
+                padding: '0 12px',
+                background: '#211940',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontFamily: 'Woolsocks, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                fontSize: 14,
+                fontWeight: 500,
+                lineHeight: 1.4
+              }}
+            >
+              Login
+            </button>
+          )
         )}
       </div>
 
@@ -362,32 +367,7 @@ function App() {
             </div>
           )}
 
-          {/* Tracking Active Status (always show when active, independent of deals availability) */}
-          {isTrackingActive && (
-            <div style={{ padding: '0 16px' }}>
-              <div style={{ 
-                background: '#ECFDF5', 
-                borderRadius: 8, 
-                padding: '8px 0', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: 8
-              }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="#00C275"/>
-                </svg>
-                <span style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                  fontSize: 16,
-                  color: '#100B1C',
-                  opacity: 0.5
-                }}>
-                  Cashback tracking active!
-                </span>
-              </div>
-            </div>
-          )}
+          {/* Tracking Active Status moved inside Online cashback section below the toggle */}
 
           {/* Online Cashback Section */}
           {onlineCashbackDeals.length > 0 && (
@@ -526,6 +506,33 @@ function App() {
                 </div>
               </div>
 
+              {/* Tracking Active Status - inside Online cashback, below the toggle */}
+              {isTrackingActive && (
+                <div style={{ padding: '8px 16px 0 16px' }}>
+                  <div style={{ 
+                    background: '#ECFDF5', 
+                    borderRadius: 8, 
+                    padding: '8px 0', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    gap: 8
+                  }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="#00C275"/>
+                    </svg>
+                    <span style={{ 
+                      fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                      fontSize: 16,
+                      color: '#100B1C',
+                      opacity: 0.5
+                    }}>
+                      Cashback tracking active!
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Tracking Active Status moved above to always render when active */}
             </div>
           )}
@@ -641,6 +648,34 @@ function App() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* No deals fallback section */}
+          {onlineCashbackDeals.length === 0 && vouchers.length === 0 && (
+            <div style={{ 
+              background: '#FFFFFF', 
+              borderRadius: 16,
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              marginTop: 8
+            }}>
+              <div style={{ 
+                textAlign: 'center',
+                padding: '8px 0'
+              }}>
+                <span style={{ 
+                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontSize: 14,
+                  color: '#100B1C',
+                  opacity: 0.5,
+                  letterSpacing: '0.15px'
+                }}>
+                  No deals available for this site
+                </span>
               </div>
             </div>
           )}

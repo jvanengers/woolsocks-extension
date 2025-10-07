@@ -361,10 +361,10 @@ function ensureMount(): ShadowRoot {
       font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
       font-size: 14px !important; font-weight: 500 !important; line-height: 1.4 !important;
     }
-    .pill-row { display:flex !important; align-items:center !important; gap:8px !important; white-space: nowrap !important; }
+    .pill-row { display:flex !important; align-items:center !important; gap:8px !important; white-space: nowrap !important; padding: 16px !important; }
     .label-text { white-space: nowrap !important; font-weight:400 !important; color:#0F0B1C !important; font-size:16px !important; line-height:1.45 !important; opacity:0.5 !important; }
-    .active-pill { display:flex !important; align-items:center !important; gap:12px !important; background: rgba(0,194,117,0.12) !important; border-radius: 16px !important; padding: 8px 12px !important; white-space: nowrap !important; }
-    .active-text { color:#0F0B1C !important; font-size:16px !important; line-height:1.45 !important; font-weight:500 !important; }
+    .active-pill { display:flex !important; align-items:center !important; gap:12px !important; background: rgba(0,194,117,0.12) !important; border-radius: 16px !important; padding: 8px 16px !important; white-space: nowrap !important; }
+    .active-text { color:#268E60 !important; font-size:16px !important; line-height:1.45 !important; font-weight:500 !important; }
     .minimize-btn {
       display: flex !important;
       padding: 0 16px !important;
@@ -526,14 +526,9 @@ function render(el: HTMLElement, html: string) {
 }
 
 function showChecking(_host: string) {
-  const r = ensureMount()
-  clearTimers()
-  const box = document.createElement('div'); box.className = 'panel'
-  render(box, `
-    <div class="row header">Checking for deals</div>
-    <div class="progress"><div class="bar"></div></div>
-  `)
-  r.getElementById?.('ws-oc-container')?.replaceChildren(box)
+  // Intentionally no-op: do not show a "checking for deals" panel
+  // to avoid flashing intermediate state. Other states remain intact.
+  return
 }
 
 function showDealsFound(host: string, deals: Deal[]) {
@@ -749,7 +744,7 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
       <button class="cta-btn" id="ws-expand">Login</button>
       <div class="label-text">${label}</div>
       <img class="logo logo-30" alt="Woolsocks" src="${logo}">
-      <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="24" height="24" /></button>
+      <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
     </div>
   `
   r.getElementById?.('ws-oc-container')?.replaceChildren(pill)
