@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import SettingsPanel from '../options/SettingsPanel'
-import { translate } from '../shared/i18n'
+import { translate, initLanguage } from '../shared/i18n'
 import { track } from '../background/analytics'
 
 interface Deal {
@@ -25,6 +25,8 @@ function App() {
   const [currentDomain, setCurrentDomain] = useState<string>('')
 
   useEffect(() => {
+    // Ensure language is initialized from storage so translate() uses the user's setting
+    try { initLanguage() } catch {}
     document.documentElement.style.margin = '0'
     document.documentElement.style.background = 'transparent'
     document.body.style.margin = '0'

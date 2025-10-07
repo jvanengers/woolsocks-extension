@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { translate } from '../shared/i18n'
+import { translate, initLanguage } from '../shared/i18n'
 import { createRoot } from 'react-dom/client'
 
 type WsProfile = any
@@ -96,6 +96,7 @@ function Options() {
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
 
   useEffect(() => {
+    try { initLanguage() } catch {}
     checkSession().then((has) => {
       setSession(has)
       if (has) {
