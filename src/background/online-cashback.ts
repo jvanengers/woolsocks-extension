@@ -13,7 +13,7 @@ const EXCLUDED_HOSTS = new Set<string>([
   'shopbuddies.nl', 'shopbuddies.com',
 ])
 
-// const COOLDOWN_MS = 60 * 60 * 1000 // 1h (disabled for testing)
+const COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes cooldown to avoid repeated redirects
 const OC_DEBUG = true
 
 type RedirectState = {
@@ -54,8 +54,6 @@ function hasAffiliateMarkers(url: string): boolean {
   } catch { return false }
 }
 
-// Cooldown disabled for testing
-/* unused during testing
 async function getCooldownUntil(host: string): Promise<number> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
@@ -66,7 +64,6 @@ async function getCooldownUntil(host: string): Promise<number> {
   }
 }
 
-// Cooldown disabled for testing
 async function setCooldown(host: string): Promise<void> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
@@ -75,7 +72,6 @@ async function setCooldown(host: string): Promise<void> {
     await chrome.storage.local.set({ __wsOcLastActivationByDomain: map })
   } catch {}
 }
-*/
 
 function pickBestCashback(deals: Deal[]): Deal | null {
   if (!Array.isArray(deals) || deals.length === 0) return null
@@ -103,6 +99,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
     // Breadcrumb once on startup
     // Debug breadcrumb once at startup
     // console.debug('[WS OC] listener ready')
+    // Primary activation flow onCommitted
     chrome.webNavigation.onCommitted.addListener(async (details) => {
       const { tabId, frameId, url } = details
       if (frameId !== 0 || !isHttpUrl(url)) return
@@ -128,7 +125,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const pending = tabRedirectState.get(tabId)
       if (pending && clean.endsWith(cleanHost(pending.expectedFinalHost))) {
         if (OC_DEBUG) console.log('[WS OC] landed', { tabId, host: clean })
-        // Cooldown disabled for testing
+        // Mark cooldown after landing back to merchant to prevent repeated redirects
+        try { await setCooldown(clean) } catch {}
         setIcon('active', tabId)
 
         // Save popup data for the UI to render
@@ -159,7 +157,17 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         const allDeals = (pending.deal && Array.isArray((pending as any).deals)) ? (pending as any).deals as Deal[] : [pending.deal]
         // Expose merchant webUrl to content deck via page context cache
         try { (globalThis as any).__wsLastMerchantWebUrl = (pending as any).merchantWebUrl || null } catch {}
-        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {}
+        // Persist active pill for this domain in session storage so content can auto-show if message races
+        try { await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {}
+        // As a safety, re-send activation after a short delay in case content script loads late
+        try { setTimeout(() => { try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {} }, 1200) } catch {}
+        try {
+          const key = '__wsOcActivePillByDomain'
+          const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+          const map = current || {}
+          map[clean] = true
+          await chrome.storage.session.set({ [key]: map })
+        } catch {}
         // Don't open popup - the top-right panel handles the UI now
         tabRedirectState.delete(tabId)
         return
@@ -196,6 +204,13 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             track('oc_activated', { domain: clean, partner_name: partner.name, deal_id: best?.id, amount_type: best?.amountType || 'PERCENTAGE', rate: best?.rate || 0, reason: 'affiliate_params' })
             // Notify UI to show post-activation deck
             try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: eligible, dealId: best?.id, providerMerchantId: best?.providerMerchantId }) } catch {}
+            try {
+              const key = '__wsOcActivePillByDomain'
+              const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+              const map = current || {}
+              map[clean] = true
+              await chrome.storage.session.set({ [key]: map })
+            } catch {}
             return
           }
         } catch {}
@@ -209,13 +224,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (!enabled) { return }
       } catch {}
 
-      // Cooldown disabled for testing
-      // const until = await getCooldownUntil(clean)
-      // if (until && Date.now() - until < COOLDOWN_MS) {
-      //   track('oc_blocked', { domain: clean, reason: 'cooldown' })
-      //   if (OC_DEBUG) console.log('[WS OC] blocked by cooldown', { domain: clean, until })
-      //   return
-      // }
+      const until = await getCooldownUntil(clean)
+      if (until && Date.now() - until < COOLDOWN_MS) {
+        track('oc_blocked', { domain: clean, reason: 'cooldown' })
+        if (OC_DEBUG) console.log('[WS OC] blocked by cooldown', { domain: clean, until })
+        return
+      }
 
       // Lookup merchant
       const partner: PartnerLite | null = await getPartnerByHostname(clean)
@@ -277,6 +291,24 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         } catch {}
         tabRedirectState.delete(tabId)
       }
+    }, { url: [{ schemes: ['http', 'https'] }] })
+
+    // Safety net: after full load, if we recorded activation for this domain in this session, re-emit UI message
+    chrome.webNavigation.onCompleted.addListener(async (details) => {
+      const { tabId, frameId, url } = details
+      if (frameId !== 0 || !isHttpUrl(url)) return
+      let host = ''
+      try { host = new URL(url).hostname } catch { return }
+      if (!host || isExcluded(host)) return
+      const clean = cleanHost(host)
+      try {
+        const key = '__wsOcActivePillByDomain'
+        const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+        if (current && current[clean]) {
+          // Content script might have loaded after the first message; nudge UI to render the pill
+          try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null }) } catch {}
+        }
+      } catch {}
     }, { url: [{ schemes: ['http', 'https'] }] })
   } catch (e) {
     console.warn('[WS] webNavigation listener could not be registered:', e)

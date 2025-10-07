@@ -59,7 +59,7 @@ const manifest = {
     {
       matches: ['<all_urls>'],
       js: ['src/content/oc-panel.ts'],
-      run_at: 'document_end',
+      run_at: 'document_start',
       exclude_matches: [
         'https://woolsocks.eu/*',
         'https://*.woolsocks.eu/*',
