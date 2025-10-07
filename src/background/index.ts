@@ -3,7 +3,7 @@ import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, 
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
-import { setupOnlineCashbackFlow } from './online-cashback'
+import { setupOnlineCashbackFlow, getDomainActivationState } from './online-cashback'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -166,6 +166,14 @@ async function evaluateTab(tabId: number, url?: string | null) {
     // Content script is auto-injected via manifest.json on all pages
     // No manual injection needed - it runs automatically
     
+    // If domain already marked active (within TTL), prioritize green icon and short-circuit
+    try {
+      const active = getDomainActivationState(u.hostname)
+      if (active.active) {
+        setIcon('active', tabId)
+      }
+    } catch {}
+
     // Debounce same tab+host within short window to avoid duplicate API calls
     const hostKey = `${tabId}:${u.hostname.replace(/^www\./, '').toLowerCase()}`
     const lastRun = __wsEvalDebounce.get(hostKey) || 0
@@ -364,6 +372,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const active = await hasActiveSession()
       sendResponse({ active })
     })()
+    return true
+  } else if (message?.type === 'REQUEST_ACTIVATION_STATE') {
+    try {
+      const { domain } = message
+      const state = getDomainActivationState(domain || '')
+      sendResponse(state)
+    } catch {
+      sendResponse({ active: false })
+    }
     return true
   } else if (message?.type === 'REFRESH_PARTNERS') {
     ;(async () => {

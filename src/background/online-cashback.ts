@@ -15,6 +15,7 @@ const EXCLUDED_HOSTS = new Set<string>([
 
 const COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes cooldown to avoid repeated redirects
 const OC_DEBUG = true
+const ACTIVE_TTL_MS = 10 * 60 * 1000 // 10 minutes active state per domain
 
 type RedirectState = {
   expectedFinalHost: string
@@ -29,6 +30,10 @@ type RedirectState = {
 const tabRedirectState = new Map<number, RedirectState>()
 const navigationDebounce = new Map<string, number>() // key = `${tabId}:${host}`
 
+// Activation registry: single source of truth for current active domains (TTL)
+type ActivationEntry = { at: number; clickId?: string; tabIds: Set<number> }
+const activationRegistry = new Map<string, ActivationEntry>() // key: clean host
+
 function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url)
 }
@@ -36,6 +41,49 @@ function isHttpUrl(url: string): boolean {
 function cleanHost(hostname: string): string {
   try { return hostname.replace(/^www\./i, '').toLowerCase() } catch { return hostname }
 }
+
+function mirrorActivationToSessionStorage() {
+  try {
+    const key = '__wsOcActiveByDomain'
+    const obj: Record<string, { at: number; clickId?: string }> = {}
+    for (const [d, e] of activationRegistry.entries()) obj[d] = { at: e.at, clickId: e.clickId }
+    chrome.storage.session.set({ [key]: obj })
+  } catch {}
+}
+
+export function getDomainActivationState(domain: string): { active: boolean; clickId?: string; at?: number } {
+  const d = cleanHost(domain)
+  const e = activationRegistry.get(d)
+  if (!e) return { active: false }
+  const active = Date.now() - e.at < ACTIVE_TTL_MS
+  return { active, clickId: e.clickId, at: e.at }
+}
+
+function markDomainActive(domain: string, tabId?: number, clickId?: string) {
+  const d = cleanHost(domain)
+  const now = Date.now()
+  const prev = activationRegistry.get(d)
+  if (prev) {
+    prev.at = now
+    if (clickId) prev.clickId = clickId
+    if (typeof tabId === 'number') prev.tabIds.add(tabId)
+  } else {
+    activationRegistry.set(d, { at: now, clickId, tabIds: new Set<number>(typeof tabId === 'number' ? [tabId] : []) })
+  }
+  mirrorActivationToSessionStorage()
+  try { track('oc_state_mark_active', { domain: d, click_id: clickId }) } catch {}
+}
+
+function cleanupExpiredActivations() {
+  const now = Date.now()
+  for (const [d, e] of activationRegistry.entries()) {
+    if (now - e.at >= ACTIVE_TTL_MS) activationRegistry.delete(d)
+  }
+  mirrorActivationToSessionStorage()
+}
+
+// Periodic cleanup (non-blocking; MV3 service worker timers are best-effort)
+try { setInterval(() => { try { cleanupExpiredActivations() } catch {} }, 60 * 1000) } catch {}
 
 function isExcluded(hostname: string): boolean {
   const h = cleanHost(hostname)
@@ -148,6 +196,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (OC_DEBUG) console.log('[WS OC] landed', { tabId, host: clean })
         // Mark cooldown after landing back to merchant to prevent repeated redirects
         try { await setCooldown(clean) } catch {}
+        // Mark domain active for TTL and set icon green immediately
+        try { markDomainActive(clean, tabId, pending.deal.clickId) } catch {}
         // If we landed on the merchant but not on the original deep URL, restore it once
         try {
           const shouldRestore = (() => {
@@ -244,6 +294,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
             const eligible = ocCategory ? filterOnlineCountry(ocCategory.deals as Deal[], userCountry) : []
             const best = pickBestCashback(eligible)
+            try { markDomainActive(clean, tabId) } catch {}
             setIcon('active', tabId)
             await chrome.storage.local.set({
               __wsOcPopupData: {
@@ -290,6 +341,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       }
 
       // Lookup merchant
+      // If domain is already marked active, keep active UI/icon and avoid downgrading
+      try {
+        const state = getDomainActivationState(clean)
+        if (state.active) { setIcon('active', tabId) }
+      } catch {}
+
       const partner: PartnerLite | null = await getPartnerByHostname(clean)
       if (!partner) { if (OC_DEBUG) console.log('[WS OC] no partner for', clean); return }
       track('oc_partner_detected', { domain: clean, partner_name: partner.name })

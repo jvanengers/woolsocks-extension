@@ -834,6 +834,18 @@ chrome.runtime.onMessage.addListener((msg: any) => {
   }
 })
 
+// On visibility/show, request activation state from background and re-emit if active
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return
+  try {
+    chrome.runtime.sendMessage({ type: 'REQUEST_ACTIVATION_STATE', domain: getDomain() }, (resp) => {
+      if (resp && resp.active) {
+        showAuthenticatedActivePill()
+      }
+    })
+  } catch {}
+})
+
 // On load: if domain has active pill persisted in this session, show it immediately
 ;(async () => {
   try { await initLanguage() } catch {}
