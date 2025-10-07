@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { translate } from '../shared/i18n'
 import { createRoot } from 'react-dom/client'
 
 type WsProfile = any
@@ -146,17 +147,17 @@ function Options() {
   return (
     <div style={{ width: 320, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>Woolsocks</h2>
-        <div style={{ fontSize: 12, color: '#666' }}>Options</div>
+        <h2 style={{ margin: 0 }}>{translate('options.title')}</h2>
+        <div style={{ fontSize: 12, color: '#666' }}>{translate('options.sectionTitle')}</div>
       </div>
 
       {session === null && (
-        <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>Checking session…</div>
+        <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>{translate('options.checkingSession')}</div>
       )}
 
       {session === false && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 14, marginBottom: 12 }}>No active session found.</div>
+          <div style={{ fontSize: 14, marginBottom: 12 }}>{translate('options.noActiveSession')}</div>
           <button
             onClick={openLogin}
             style={{
@@ -164,30 +165,30 @@ function Options() {
               padding: '10px 14px', fontSize: 13, cursor: 'pointer'
             }}
           >
-            Login at Woolsocks.eu
+            {translate('options.loginAtWs')}
           </button>
         </div>
       )}
 
       {session === true && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
-          <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>Cashback sock</div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{translate('options.greeting', { name: firstName || 'there' })}</div>
+          <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>{translate('options.cashbackSock')}</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: '#10B981' }}>€{sockValue.toFixed(2)}</div>
           <div style={{ marginTop: 16 }}>
             <button
               onClick={() => { loadProfile(); loadTransactions() }}
               style={{ background: '#f5f5f5', color: '#333', border: '1px solid #ddd', borderRadius: 6, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}
             >
-              Refresh
+              {translate('options.refresh')}
             </button>
           </div>
 
           {/* Recent transactions */}
           <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Recent transactions</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{translate('options.recentTransactions')}</div>
             {transactions.length === 0 && (
-              <div style={{ fontSize: 12, color: '#666' }}>No recent transactions found.</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{translate('options.noRecentTransactions')}</div>
             )}
             <div>
               {transactions.map((t) => (
@@ -202,12 +203,12 @@ function Options() {
                   <div style={{ flex: 1, marginLeft: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>
                       {t.recordType === 'Expense' ? (
-                        navigator.language?.toLowerCase().startsWith('nl') ? 'Uitbetaling naar IBAN' : 'Payout to IBAN'
+                        translate('options.payoutToIban')
                       ) : (
                         t.merchantName
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: '#777' }}>{new Date(t.createdAt).toLocaleDateString()} · {t.state}</div>
+                    <div style={{ fontSize: 11, color: '#777' }}>{new Date(t.createdAt).toLocaleDateString()} · {t.state || translate('options.pending')}</div>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: t.amount >= 0 ? '#059669' : '#ef4444' }}>€{t.amount.toFixed(2)}</div>
                 </div>
@@ -231,7 +232,7 @@ function Options() {
                   cursor: 'pointer'
                 }}
               >
-                View all cashback transactions
+                {translate('options.viewAllTransactions')}
               </button>
             </div>
           </div>

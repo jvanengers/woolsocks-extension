@@ -2,6 +2,7 @@
 // Renders a top-right panel that reflects cashback status per MCP annotations
 
 type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
+import { translate } from '../shared/i18n'
 
 type UiEvent =
   | { kind: 'oc_scan_start'; host: string }
@@ -537,7 +538,7 @@ function showDealsFound(host: string, deals: Deal[]) {
   const safeHost = host.replace(/^www\./i, '')
   const list = deals.map(d => `<div class='deal'><div class='badge'>${formatRate(d)}</div><div>${escapeHtml(d.name || 'Online aankoop')}</div></div>`).join('')
   render(box, `
-    <div class="row header">Deals found at ${escapeHtml(safeHost)}</div>
+    <div class="row header">${translate('ocPanel.dealsFoundAt', { host: escapeHtml(safeHost) })}</div>
     <div class="progress"><div class="bar"></div></div>
     ${list}
   `)
@@ -550,7 +551,7 @@ function showSettingUp(host: string) {
   const safeHost = host.replace(/^www\./i, '')
   render(box, `
     <div class="setup-row">
-      <div class="setup-text">Setting up cashback tracking for ${escapeHtml(safeHost)}</div>
+      <div class="setup-text">${translate('ocPanel.settingUpFor', { host: escapeHtml(safeHost) })}</div>
       <img class="logo logo-30 spin" alt="Woolsocks" src="${WS_LOGO.yellow}">
     </div>
   `)
@@ -561,7 +562,7 @@ function showNoDeals() {
   const r = ensureMount(); clearTimers()
   const box = document.createElement('div'); box.className = 'panel'
   render(box, `
-    <div class="row header">No deals found</div>
+    <div class="row header">${translate('ocPanel.noDealsFound')}</div>
   `)
   r.getElementById?.('ws-oc-container')?.replaceChildren(box)
   stateTimer = window.setTimeout(() => hideAll(), 10000)
@@ -609,13 +610,13 @@ function showDeckPage1(allDeals: Deal[], onViewConditions: () => void, onReset: 
       ${opts?.unauth ? '' : `<div class=\"deck-content\">${escapeHtml(domain)}</div>`}
       ${opts?.unauth ? `<!-- conditions hidden in unauthenticated state -->` : `
       <div style=\"display:flex;gap:16px;width:100%;\">
-        <button class=\"link-btn\" id=\"ws-view\" style=\"flex:1 0 100% !important;width:100%\">View conditions</button>
+        <button class=\"link-btn\" id=\"ws-view\" style=\"flex:1 0 100% !important;width:100%\">${translate('ocPanel.viewConditions')}</button>
       </div>`}
       ${list}
-      <button class="primary-cta" id="ws-login">Signup / Login</button>
+      <button class="primary-cta" id="ws-login">${translate('ocPanel.signupLogin')}</button>
       <div class="deck-footer">
         <button class="minimize-btn" id="ws-minimize">${SVG_ARROW_DOWN}</button>
-        <div class="deck-status">${opts?.unauth ? escapeHtml(domain) : 'Cashback active!'}</div>
+        <div class="deck-status">${opts?.unauth ? escapeHtml(domain) : translate('ocPanel.cashbackActive')}</div>
         <img class="logo logo-30" alt="Woolsocks" src="${opts?.unauth ? WS_LOGO.grey : WS_LOGO.green}">
       </div>
     </div>
@@ -677,10 +678,10 @@ function showDeckPage2() {
         <div class="step-indicator"><div class="step-dot"></div><div class="step-dot active"></div><div class="step-dot"></div></div>
         <div class="nav-btn" id="ws-nav-right-2">${SVG_NAV_RIGHT}</div>
       </div>
-      <div class="deck-content">Shop and pay like you do normally</div>
+      <div class="deck-content">${translate('ocPanel.shopAndPayNormally')}</div>
       <div class="deck-footer">
         <button class="minimize-btn" id="ws-minimize">${SVG_ARROW_DOWN}</button>
-        <div class="deck-status">Cashback active!</div>
+        <div class="deck-status">${translate('ocPanel.cashbackActive')}</div>
         <img class="logo logo-30" alt="Woolsocks" src="${WS_LOGO.green}">
       </div>
     </div>
@@ -716,10 +717,10 @@ function showDeckPage3() {
         <div class="step-indicator"><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot active"></div></div>
         <div class="nav-btn" id="ws-nav-right-3">${SVG_NAV_RIGHT}</div>
       </div>
-      <div class="deck-content">Accept all cookies and disable adblockers</div>
+      <div class="deck-content">${translate('ocPanel.acceptCookiesDisableAdblock')}</div>
       <div class="deck-footer">
         <button class="minimize-btn" id="ws-minimize">${SVG_ARROW_DOWN}</button>
-        <div class="deck-status">Cashback active!</div>
+        <div class="deck-status">${translate('ocPanel.cashbackActive')}</div>
         <img class="logo logo-30" alt="Woolsocks" src="${WS_LOGO.green}">
       </div>
     </div>
@@ -737,11 +738,11 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
   const pill = document.createElement('div'); pill.className = 'minipill'
   const deals = opts?.deals || (window as any).__wsLastDeals || []
   const bestRate = Array.isArray(deals) && deals.length ? Math.max(...deals.map((d:any)=>Number(d?.rate||0))) : 0
-  const label = opts?.unauth ? `Earn ${bestRate}% cashback` : 'Cashback active!'
+  const label = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestRate }) : translate('ocPanel.cashbackActive')
   const logo = opts?.unauth ? WS_LOGO.grey : WS_LOGO.green
   pill.innerHTML = `
     <div class="pill-row">
-      <button class="cta-btn" id="ws-expand">Login</button>
+      <button class="cta-btn" id="ws-expand">${translate('popup.login')}</button>
       <div class="label-text">${label}</div>
       <img class="logo logo-30" alt="Woolsocks" src="${logo}">
       <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
@@ -777,7 +778,7 @@ function showAuthenticatedActivePill() {
   pill.innerHTML = `
     <div class="active-pill">
       ${CHECK_SVG}
-      <div class="active-text">Cashback active!</div>
+      <div class="active-text">${translate('ocPanel.cashbackActive')}</div>
     </div>
     <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
   `

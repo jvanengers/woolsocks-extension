@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import SettingsPanel from '../options/SettingsPanel'
+import { translate } from '../shared/i18n'
 import { track } from '../background/analytics'
 
 interface Deal {
@@ -230,7 +231,7 @@ function App() {
   if (session === null) {
     return (
       <div style={{ background: '#FDC408', padding: 16, borderRadius: 0, overflow: 'hidden', position: 'relative', width: 320 }}>
-        <div style={{ fontSize: 13, color: '#111827', opacity: 0.7 }}>Checking session…</div>
+        <div style={{ fontSize: 13, color: '#111827', opacity: 0.7 }}>{translate('popup.checkingSession')}</div>
       </div>
     )
   }
@@ -325,7 +326,7 @@ function App() {
                 lineHeight: 1.4
               }}
             >
-              Login
+              {translate('popup.login')}
             </button>
           )
         )}
@@ -362,7 +363,7 @@ function App() {
                 opacity: 0.5,
                 lineHeight: 1.45
               }}>
-                Deals for {currentDomain}
+                {translate('popup.dealsFor', { domain: currentDomain })}
               </span>
             </div>
           )}
@@ -394,7 +395,7 @@ function App() {
                   opacity: 0.5,
                   letterSpacing: '0.15px'
                 }}>
-                  Online cashback
+                  {translate('popup.onlineCashback')}
                 </span>
               </div>
 
@@ -458,7 +459,7 @@ function App() {
                     fontWeight: 600,
                     color: '#100B1C'
                   }}>
-                    Auto-activation
+                    {translate('popup.autoActivation')}
                   </div>
                   <label style={{ 
                     cursor: 'pointer',
@@ -527,7 +528,7 @@ function App() {
                       color: '#100B1C',
                       opacity: 0.5
                     }}>
-                      Cashback tracking active!
+                      {translate('popup.trackingActive')}
                     </span>
                   </div>
                 </div>
@@ -561,7 +562,7 @@ function App() {
                   opacity: 0.5,
                   letterSpacing: '0.15px'
                 }}>
-                  Pay with vouchers
+                  {translate('popup.payWithVouchers')}
                 </span>
               </div>
 
@@ -674,7 +675,7 @@ function App() {
                   opacity: 0.5,
                   letterSpacing: '0.15px'
                 }}>
-                  No deals available for this site
+                  {translate('popup.noDealsForSite')}
                 </span>
               </div>
             </div>

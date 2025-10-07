@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { translate } from '../shared/i18n'
 
 type WsProfile = any
 type WsTransaction = any
@@ -197,12 +198,12 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     }}>
 
       {session === null && (
-        <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>Checking session…</div>
+        <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>{translate('options.checkingSession')}</div>
       )}
 
       {session === false && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 14, marginBottom: 12 }}>No active session found.</div>
+          <div style={{ fontSize: 14, marginBottom: 12 }}>{translate('options.noActiveSession')}</div>
           <button
             onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })}
             style={{
@@ -210,7 +211,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               padding: '10px 14px', fontSize: 13, cursor: 'pointer'
             }}
           >
-            Login at Woolsocks.eu
+            {translate('options.loginAtWs')}
           </button>
         </div>
       )}
@@ -221,10 +222,10 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           {isQaUser && variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>QA: Always show voucher (ignore dismissals)</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.qaBypassTitle')}</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={qaBypass} onChange={(e) => saveQaBypass(e.target.checked)} />
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>{qaBypass ? 'Enabled' : 'Disabled'}</span>
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{qaBypass ? translate('options.enabled') : translate('options.disabled')}</span>
                 </label>
               </div>
             </div>
@@ -234,10 +235,10 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           {variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>Auto-activate online cashback</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.autoActivateOnlineCashback')}</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={autoOc} onChange={(e) => saveAutoOc(e.target.checked)} />
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>{autoOc ? 'Enabled' : 'Disabled'}</span>
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{autoOc ? translate('options.enabled') : translate('options.disabled')}</span>
                 </label>
               </div>
             </div>
@@ -283,13 +284,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                 lineHeight: 1.45,
                 letterSpacing: '0.1px'
               }}>
-                Recent transactions
+                {translate('options.recentTransactions')}
               </div>
             </>
           ) : (
             <>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
-              <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>Cashback sock</div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{translate('options.greeting', { name: firstName || 'there' })}</div>
+              <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>{translate('options.cashbackSock')}</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#000000' }}>€{sockValue.toFixed(2)}</div>
             </>
           )}
@@ -297,10 +298,10 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           {/* Recent transactions */}
           <div style={{ marginTop: variant === 'popup' ? 15 : 24 }}>
             {variant !== 'popup' && (
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Recent transactions</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{translate('options.recentTransactions')}</div>
             )}
             {transactions.length === 0 && (
-              <div style={{ fontSize: 12, color: '#666' }}>No recent transactions found.</div>
+              <div style={{ fontSize: 12, color: '#666' }}>{translate('options.noRecentTransactions')}</div>
             )}
             <div style={{ 
               background: variant === 'popup' ? '#F5F5F6' : 'transparent',
@@ -338,7 +339,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                           whiteSpace: 'nowrap'
                         }}>
                           {t.recordType === 'Expense' ? (
-                            navigator.language?.toLowerCase().startsWith('nl') ? 'Uitbetaling naar IBAN' : 'Payout to IBAN'
+                            translate('options.payoutToIban')
                           ) : (
                             t.merchantName
                           )}
@@ -378,7 +379,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                           lineHeight: 1.4,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.state || 'Pending'}
+                          {t.state || translate('options.pending')}
                         </div>
                       </div>
                     </div>
@@ -402,7 +403,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                       cursor: 'pointer'
                     }}
                   >
-                    View all transactions
+                    {translate('options.viewAllTransactions')}
                   </button>
                 </div>
               </div>

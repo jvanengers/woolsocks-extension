@@ -46,6 +46,66 @@ export interface Translations {
     showingOffer: string
     scriptInjected: string
   }
+  // Additional UI sections are optional and may be missing in some locales; English will be used as fallback via translate()
+  // Popup UI
+  popup?: {
+    checkingSession: string
+    login: string
+    dealsFor: string // e.g., Deals for {domain}
+    onlineCashback: string
+    autoActivation: string
+    trackingActive: string
+    vouchers: string
+    payWithVouchers: string
+    noDealsForSite: string
+  }
+  // Options page UI
+  options?: {
+    title: string
+    sectionTitle: string
+    checkingSession: string
+    noActiveSession: string
+    loginAtWs: string
+    greeting: string // Hi {name} 👋
+    cashbackSock: string
+    refresh: string
+    recentTransactions: string
+    noRecentTransactions: string
+    viewAllTransactions: string
+    enabled: string
+    disabled: string
+    autoActivateOnlineCashback: string
+    qaBypassTitle: string
+    payoutToIban: string
+    pending: string
+  }
+  // Onboarding copy
+  onboarding?: {
+    welcomeTitle: string
+    welcomeContent: string
+    cashbackTitle: string
+    cashbackContent: string
+    activationTitle: string
+    activationContent: string
+    vouchersTitle: string
+    vouchersContent: string
+    settingsTitle: string
+    settingsContent: string
+    privacyTitle: string
+    privacyContent: string
+  }
+  // OC panel (content script) strings
+  ocPanel?: {
+    dealsFoundAt: string // Deals found at {host}
+    settingUpFor: string // Setting up cashback tracking for {host}
+    noDealsFound: string
+    viewConditions: string
+    signupLogin: string
+    cashbackActive: string
+    shopAndPayNormally: string
+    acceptCookiesDisableAdblock: string
+    earnRateCashback: string // Earn {rate}% cashback
+  }
 }
 
 const translations: Record<Language, Translations> = {
@@ -84,6 +144,61 @@ const translations: Record<Language, Translations> = {
       noVouchers: 'No vouchers available for merchant: {name}',
       showingOffer: 'Showing voucher offer for {name} with {rate}% cashback',
       scriptInjected: 'Universal checkout script injected for tab {tabId} on {hostname}',
+    },
+    popup: {
+      checkingSession: 'Checking session…',
+      login: 'Login',
+      dealsFor: 'Deals for {domain}',
+      onlineCashback: 'Online cashback',
+      autoActivation: 'Auto-activation',
+      trackingActive: 'Cashback tracking active!',
+      vouchers: 'Vouchers',
+      payWithVouchers: 'Pay with vouchers',
+      noDealsForSite: 'No deals available for this site',
+    },
+    options: {
+      title: 'Woolsocks',
+      sectionTitle: 'Options',
+      checkingSession: 'Checking session…',
+      noActiveSession: 'No active session found.',
+      loginAtWs: 'Login at Woolsocks.eu',
+      greeting: 'Hi {name} 👋',
+      cashbackSock: 'Cashback sock',
+      refresh: 'Refresh',
+      recentTransactions: 'Recent transactions',
+      noRecentTransactions: 'No recent transactions found.',
+      viewAllTransactions: 'View all transactions',
+      enabled: 'Enabled',
+      disabled: 'Disabled',
+      autoActivateOnlineCashback: 'Auto-activate online cashback',
+      qaBypassTitle: 'QA: Always show voucher (ignore dismissals)',
+      payoutToIban: 'Payout to IBAN',
+      pending: 'Pending',
+    },
+    onboarding: {
+      welcomeTitle: 'Welcome to Woolsocks!',
+      welcomeContent: 'Never miss cashback again. This extension will help you earn money back on your online purchases.',
+      cashbackTitle: 'Cashback Detection',
+      cashbackContent: 'When you visit partner sites like Amazon or Zalando, our icon will turn yellow to show cashback is available.',
+      activationTitle: 'Activate Cashback',
+      activationContent: 'Click the extension icon or the popup to activate cashback. The icon turns green when active.',
+      vouchersTitle: 'Gift Card Savings',
+      vouchersContent: "At checkout, we'll suggest gift cards that give you instant cashback on your purchase.",
+      settingsTitle: 'Customize Your Experience',
+      settingsContent: 'Adjust notifications in settings. You can turn off popups but keep icon color changes.',
+      privacyTitle: 'Your Privacy Matters',
+      privacyContent: "We only check the website you're on for deals. No browsing history or personal data is collected.",
+    },
+    ocPanel: {
+      dealsFoundAt: 'Deals found at {host}',
+      settingUpFor: 'Setting up cashback tracking for {host}',
+      noDealsFound: 'No deals found',
+      viewConditions: 'View conditions',
+      signupLogin: 'Signup / Login',
+      cashbackActive: 'Cashback active!',
+      shopAndPayNormally: 'Shop and pay like you do normally',
+      acceptCookiesDisableAdblock: 'Accept all cookies and disable adblockers',
+      earnRateCashback: 'Earn {rate}% cashback',
     },
   },
   
