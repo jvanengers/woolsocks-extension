@@ -6,7 +6,7 @@ import { crx } from '@crxjs/vite-plugin'
 const manifest = {
   manifest_version: 3,
   name: 'Woolsocks: Vouchers',
-  version: '0.7.0',
+  version: '0.8.0',
   description: 'Find and buy instant vouchers at checkout for supported merchants.',
   action: {
     default_title: 'Woolsocks',
