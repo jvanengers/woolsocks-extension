@@ -30,6 +30,11 @@ type RedirectState = {
 const tabRedirectState = new Map<number, RedirectState>()
 const navigationDebounce = new Map<string, number>() // key = `${tabId}:${host}`
 
+// Some affiliates open a new tab; tabId-based pending can be lost. Keep a
+// short-lived domain-scoped pending as a fallback to recognize landings.
+type PendingByDomain = { affiliateHost?: string; clickId?: string; partnerName?: string; deal?: Deal; originalUrl?: string; until: number }
+const pendingByDomain = new Map<string, PendingByDomain>() // key: expectedFinalHost (clean)
+
 // Activation registry: single source of truth for current active domains (TTL)
 type ActivationEntry = { at: number; clickId?: string; tabIds: Set<number> }
 const activationRegistry = new Map<string, ActivationEntry>() // key: clean host
@@ -85,6 +90,24 @@ function cleanupExpiredActivations() {
 // Periodic cleanup (non-blocking; MV3 service worker timers are best-effort)
 try { setInterval(() => { try { cleanupExpiredActivations() } catch {} }, 60 * 1000) } catch {}
 
+function cleanupPendingByDomain() {
+  const now = Date.now()
+  for (const [d, entry] of pendingByDomain.entries()) {
+    if (now > entry.until) pendingByDomain.delete(d)
+  }
+}
+try { setInterval(() => { try { cleanupPendingByDomain() } catch {} }, 30 * 1000) } catch {}
+
+function hasValidDomainPending(clean: string): boolean {
+  const now = Date.now()
+  const direct = pendingByDomain.get(clean)
+  if (direct && now < direct.until) return true
+  for (const [k, v] of pendingByDomain.entries()) {
+    if (clean.endsWith(k) && now < v.until) return true
+  }
+  return false
+}
+
 export function removeTabFromOtherDomains(tabId: number, currentDomain: string) {
   const cur = cleanHost(currentDomain)
   for (const [d, e] of activationRegistry.entries()) {
@@ -101,6 +124,15 @@ function isExcluded(hostname: string): boolean {
     if (h === d || h.endsWith('.' + d)) return true
   }
   return false
+}
+
+// Use apex/base domain as a site key so subdomains (e.g., nl.aliexpress.com,
+// best.aliexpress.com) share the same cooldown window and don't re-trigger.
+function siteKey(hostname: string): string {
+  const h = cleanHost(hostname)
+  const parts = h.split('.')
+  if (parts.length >= 2) return parts.slice(-2).join('.')
+  return h
 }
 
 function hasAffiliateMarkers(url: string): boolean {
@@ -130,7 +162,8 @@ async function getCooldownUntil(host: string): Promise<number> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
     const map = (__wsOcLastActivationByDomain || {}) as Record<string, number>
-    return map[host] || 0
+    const key = siteKey(host)
+    return map[key] || 0
   } catch {
     return 0
   }
@@ -140,7 +173,8 @@ async function setCooldown(host: string): Promise<void> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
     const map = (__wsOcLastActivationByDomain || {}) as Record<string, number>
-    map[host] = Date.now()
+    const key = siteKey(host)
+    map[key] = Date.now()
     await chrome.storage.local.set({ __wsOcLastActivationByDomain: map })
   } catch {}
 }
@@ -192,6 +226,49 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
 
       // Notify UI: scan start
       try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_scan_start', host: clean }) } catch {}
+
+      // Domain-scoped pending fallback: if we see a landing on expected host
+      // within TTL (even from a different tab), mark active and emit.
+      // Try exact key first; otherwise match by suffix to cover subdomains
+      let domPending = pendingByDomain.get(clean)
+      if (!domPending) {
+        for (const [k, v] of pendingByDomain.entries()) {
+          if (clean.endsWith(k)) { domPending = v; break }
+        }
+      }
+      if (domPending && Date.now() < domPending.until) {
+        if (OC_DEBUG) console.log('[WS OC] landed (domain-fallback)', { tabId, host: clean })
+        try { markDomainActive(clean, tabId, domPending.clickId) } catch {}
+        setIcon('active', tabId)
+        try {
+          await chrome.storage.local.set({
+            __wsOcPopupData: {
+              domain: clean,
+              partnerName: domPending.partnerName || clean,
+              rate: (domPending.deal && domPending.deal.rate) || 0,
+              amountType: (domPending.deal && domPending.deal.amountType) || 'PERCENTAGE',
+              title: (domPending.deal && domPending.deal.name) || 'Online aankoop',
+              affiliateUrl: (domPending.deal && (domPending.deal as any).affiliateUrl) || null,
+              dealId: (domPending.deal && domPending.deal.id) || null,
+              clickId: domPending.clickId || null,
+              conditions: (domPending.deal && (domPending.deal as any).conditions) || null,
+              timestamp: Date.now(),
+            }
+          })
+        } catch {}
+        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: domPending.deal ? [domPending.deal] : [], dealId: domPending.deal?.id, providerMerchantId: (domPending.deal as any)?.providerMerchantId }) } catch {}
+        try { track('oc_state_reemit', { domain: clean, reason: 'domain_fallback' }) } catch {}
+        pendingByDomain.delete(clean)
+        return
+      } else if (OC_DEBUG) {
+        try {
+          const keys = Array.from(pendingByDomain.keys())
+          const foundExact = pendingByDomain.has(clean)
+          const foundSuffix = keys.find(k => clean.endsWith(k))
+          const reason = domPending ? 'expired' : (foundExact || foundSuffix ? 'expired' : 'not_found')
+          console.log('[WS OC] fallback-miss', { host: clean, foundExact, foundSuffix, reason })
+        } catch {}
+      }
 
       // Handle post-redirect landing back on merchant
       const pending = tabRedirectState.get(tabId)
@@ -264,8 +341,9 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try { (globalThis as any).__wsLastMerchantWebUrl = (pending as any).merchantWebUrl || null } catch {}
         // Persist active pill for this domain in session storage so content can auto-show if message races
         try { await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {}
+        try { track('oc_state_reemit', { domain: clean, reason: 'post_landing' }) } catch {}
         // As a safety, re-send activation after a short delay in case content script loads late
-        try { setTimeout(() => { try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {} }, 1200) } catch {}
+        try { setTimeout(() => { try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }); try { track('oc_state_reemit', { domain: clean, reason: 'delayed' }) } catch {} } catch {} }, 1200) } catch {}
         try {
           const key = '__wsOcActivePillByDomain'
           const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
@@ -323,6 +401,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             track('oc_activated', { domain: clean, partner_name: partner.name, deal_id: best?.id, amount_type: best?.amountType || 'PERCENTAGE', rate: best?.rate || 0, reason: 'affiliate_params' })
             // Notify UI to show post-activation deck
             try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: eligible, dealId: best?.id, providerMerchantId: best?.providerMerchantId }) } catch {}
+            try { track('oc_state_reemit', { domain: clean, reason: 'organic_affiliate' }) } catch {}
             try {
               const key = '__wsOcActivePillByDomain'
               const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
@@ -381,6 +460,10 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       // Tell UI setting up
       try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_redirect_requested', host: clean }) } catch {}
       if (OC_DEBUG) console.log('[WS OC] requesting redirect', { dealId: best.id })
+      // Guard: if site is already active (ActivationRegistry says active), do not redirect again
+      try { const state = getDomainActivationState(clean); if (state.active) { if (OC_DEBUG) console.log('[WS OC] skip redirect - already active', { host: clean }); return } } catch {}
+      // Guard: if there is a domain-scoped pending in-flight redirect, skip issuing another
+      if (hasValidDomainPending(clean)) { if (OC_DEBUG) console.log('[WS OC] skip redirect - pending in-flight', { host: clean }); return }
       let redir: { url: string; clickId?: string } | null = null
       try {
         redir = await requestRedirectUrl(best.id)
@@ -400,6 +483,14 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best }
       ;(enrich as any).deals = eligible
       tabRedirectState.set(tabId, enrich)
+      // Also set domain-scoped pending fallback (2.5 minutes TTL)
+      try {
+        let affiliateHost = ''
+        try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
+        const until = Date.now() + 150000
+        pendingByDomain.set(clean, { affiliateHost, clickId: redir.clickId, partnerName: partner.name, deal: best, originalUrl: url, until })
+        if (OC_DEBUG) console.log('[WS OC] set domain-pending', { key: clean, affiliateHost, until })
+      } catch {}
 
       try {
         // Save original deep URL before performing the affiliate hop

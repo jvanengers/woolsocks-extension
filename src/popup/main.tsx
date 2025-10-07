@@ -180,6 +180,16 @@ function App() {
           }
         } catch {}
 
+        // Ask background if this domain is currently marked active (TTL-based),
+        // to avoid relying solely on local popup data. This does not change UI
+        // structure; it only toggles the existing Tracking Active badge.
+        try {
+          const state = await chrome.runtime.sendMessage({ type: 'REQUEST_ACTIVATION_STATE', domain: hostname })
+          if (state && state.active) {
+            setIsTrackingActive(true)
+          }
+        } catch {}
+
         // Check merchant support
         const response: any = await chrome.runtime.sendMessage({ 
           type: 'CHECK_MERCHANT_SUPPORT', 
