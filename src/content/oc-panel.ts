@@ -841,6 +841,8 @@ document.addEventListener('visibilitychange', () => {
     chrome.runtime.sendMessage({ type: 'REQUEST_ACTIVATION_STATE', domain: getDomain() }, (resp) => {
       if (resp && resp.active) {
         showAuthenticatedActivePill()
+        try { (window as any).__wsLastActivation = { at: resp.at, clickId: resp.clickId } } catch {}
+        try { /* analytics breadcrumb */ (console as any).debug?.('[WS OC] reemit active from bg state') } catch {}
       }
     })
   } catch {}

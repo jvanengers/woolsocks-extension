@@ -85,6 +85,16 @@ function cleanupExpiredActivations() {
 // Periodic cleanup (non-blocking; MV3 service worker timers are best-effort)
 try { setInterval(() => { try { cleanupExpiredActivations() } catch {} }, 60 * 1000) } catch {}
 
+export function removeTabFromOtherDomains(tabId: number, currentDomain: string) {
+  const cur = cleanHost(currentDomain)
+  for (const [d, e] of activationRegistry.entries()) {
+    if (d === cur) continue
+    if (e.tabIds.delete(tabId)) {
+      // best-effort mirror; keep until TTL
+    }
+  }
+}
+
 function isExcluded(hostname: string): boolean {
   const h = cleanHost(hostname)
   for (const d of EXCLUDED_HOSTS) {

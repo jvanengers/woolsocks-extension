@@ -3,7 +3,8 @@ import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, 
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
-import { setupOnlineCashbackFlow, getDomainActivationState } from './online-cashback'
+import { track } from './analytics'
+import { setupOnlineCashbackFlow, getDomainActivationState, removeTabFromOtherDomains } from './online-cashback'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -181,6 +182,9 @@ async function evaluateTab(tabId: number, url?: string | null) {
       return
     }
     __wsEvalDebounce.set(hostKey, Date.now())
+
+    // Maintain per-tab domain linkage for ActivationRegistry
+    try { removeTabFromOtherDomains(tabId, u.hostname) } catch {}
 
     // Check if this merchant is supported via API (async, non-blocking)
     // The checkout detector will handle the actual voucher display if needed
@@ -377,6 +381,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       const { domain } = message
       const state = getDomainActivationState(domain || '')
+      try { track('oc_state_query', { domain: (domain || '').replace(/^www\./, '').toLowerCase(), active: !!state.active }) } catch {}
       sendResponse(state)
     } catch {
       sendResponse({ active: false })
