@@ -13,7 +13,7 @@ const EXCLUDED_HOSTS = new Set<string>([
   'shopbuddies.nl', 'shopbuddies.com',
 ])
 
-const COOLDOWN_MS = 60 * 60 * 1000 // 1h
+// const COOLDOWN_MS = 60 * 60 * 1000 // 1h (disabled for testing)
 const OC_DEBUG = true
 
 type RedirectState = {
@@ -54,6 +54,8 @@ function hasAffiliateMarkers(url: string): boolean {
   } catch { return false }
 }
 
+// Cooldown disabled for testing
+/* unused during testing
 async function getCooldownUntil(host: string): Promise<number> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
@@ -64,6 +66,7 @@ async function getCooldownUntil(host: string): Promise<number> {
   }
 }
 
+// Cooldown disabled for testing
 async function setCooldown(host: string): Promise<void> {
   try {
     const { __wsOcLastActivationByDomain } = await chrome.storage.local.get('__wsOcLastActivationByDomain')
@@ -72,6 +75,7 @@ async function setCooldown(host: string): Promise<void> {
     await chrome.storage.local.set({ __wsOcLastActivationByDomain: map })
   } catch {}
 }
+*/
 
 function pickBestCashback(deals: Deal[]): Deal | null {
   if (!Array.isArray(deals) || deals.length === 0) return null
@@ -117,12 +121,14 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (now - last < 1500) return
       navigationDebounce.set(debounceKey, now)
 
+      // Notify UI: scan start
+      try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_scan_start', host: clean }) } catch {}
+
       // Handle post-redirect landing back on merchant
       const pending = tabRedirectState.get(tabId)
       if (pending && clean.endsWith(cleanHost(pending.expectedFinalHost))) {
         if (OC_DEBUG) console.log('[WS OC] landed', { tabId, host: clean })
-        // Mark cooldown and show popup
-        await setCooldown(clean)
+        // Cooldown disabled for testing
         setIcon('active', tabId)
 
         // Save popup data for the UI to render
@@ -149,7 +155,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
           rate: pending.deal.rate,
           click_id: pending.deal.clickId,
         })
-        try { chrome.action.openPopup() } catch {}
+        // Notify UI to show post-activation deck; include all deals in category if available
+        const allDeals = (pending.deal && Array.isArray((pending as any).deals)) ? (pending as any).deals as Deal[] : [pending.deal]
+        // Expose merchant webUrl to content deck via page context cache
+        try { (globalThis as any).__wsLastMerchantWebUrl = (pending as any).merchantWebUrl || null } catch {}
+        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {}
+        // Don't open popup - the top-right panel handles the UI now
         tabRedirectState.delete(tabId)
         return
       }
@@ -167,7 +178,6 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
             const eligible = ocCategory ? filterOnlineCountry(ocCategory.deals as Deal[], userCountry) : []
             const best = pickBestCashback(eligible)
-            await setCooldown(clean)
             setIcon('active', tabId)
             await chrome.storage.local.set({
               __wsOcPopupData: {
@@ -184,7 +194,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
               }
             })
             track('oc_activated', { domain: clean, partner_name: partner.name, deal_id: best?.id, amount_type: best?.amountType || 'PERCENTAGE', rate: best?.rate || 0, reason: 'affiliate_params' })
-            try { chrome.action.openPopup() } catch {}
+            // Notify UI to show post-activation deck
+            try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: eligible, dealId: best?.id, providerMerchantId: best?.providerMerchantId }) } catch {}
             return
           }
         } catch {}
@@ -198,13 +209,13 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (!enabled) { return }
       } catch {}
 
-      // Cooldown check
-      const until = await getCooldownUntil(clean)
-      if (until && Date.now() - until < COOLDOWN_MS) {
-        track('oc_blocked', { domain: clean, reason: 'cooldown' })
-        if (OC_DEBUG) console.log('[WS OC] blocked by cooldown', { domain: clean, until })
-        return
-      }
+      // Cooldown disabled for testing
+      // const until = await getCooldownUntil(clean)
+      // if (until && Date.now() - until < COOLDOWN_MS) {
+      //   track('oc_blocked', { domain: clean, reason: 'cooldown' })
+      //   if (OC_DEBUG) console.log('[WS OC] blocked by cooldown', { domain: clean, until })
+      //   return
+      // }
 
       // Lookup merchant
       const partner: PartnerLite | null = await getPartnerByHostname(clean)
@@ -222,23 +233,34 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (!best || !best.id) { track('oc_blocked', { domain: clean, reason: 'no_link' }); if (OC_DEBUG) console.log('[WS OC] best deal missing id', best); return }
 
       track('oc_eligible', { domain: clean, partner_name: partner.name, deals_count: eligible.length, deal_id: best.id, amount_type: best.amountType, rate: best.rate, country: userCountry })
+      // Notify UI that deals were found with list (for pre-activation state)
+      try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_deals_found', host: clean, deals: eligible }) } catch {}
       if (OC_DEBUG) console.log('[WS OC] eligible', { dealId: best.id, rate: best.rate, amountType: best.amountType })
 
-      // Request tracked redirect URL
+      // Request tracked redirect URL (only if logged in); otherwise show login-required state
       track('oc_redirect_requested', { domain: clean, deal_id: best.id, provider: best.provider })
+      // Tell UI setting up
+      try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_redirect_requested', host: clean }) } catch {}
       if (OC_DEBUG) console.log('[WS OC] requesting redirect', { dealId: best.id })
       let redir: { url: string; clickId?: string } | null = null
       try {
         redir = await requestRedirectUrl(best.id)
       } catch (e) {}
-      if (!redir || !redir.url) { if (OC_DEBUG) console.log('[WS OC] no redirect url returned'); return }
+      if (!redir || !redir.url) {
+        if (OC_DEBUG) console.log('[WS OC] no redirect url returned (likely not logged in)')
+        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
+        return
+      }
       try { const h = new URL(redir.url).hostname; track('oc_redirect_issued', { domain: clean, deal_id: best.id, link_host: h, click_id: redir.clickId }) } catch { track('oc_redirect_issued', { domain: clean, deal_id: best.id, click_id: redir.clickId }) }
       if (OC_DEBUG) console.log('[WS OC] navigating to affiliate', { url: redir.url })
 
-      // Stash state for when we land back
+      // Stash state for when we land back (also keep all deals for deck page 1)
       best.affiliateUrl = redir.url
       best.clickId = redir.clickId
-      tabRedirectState.set(tabId, { expectedFinalHost: clean, partnerName: partner.name, deal: best })
+      ;(best as any).providerMerchantId = (best as any).providerMerchantId || eligible[0]?.providerMerchantId
+      const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best }
+      ;(enrich as any).deals = eligible
+      tabRedirectState.set(tabId, enrich)
 
       try {
         await chrome.tabs.update(tabId, { url: redir.url })

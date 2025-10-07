@@ -223,6 +223,32 @@ function cleanDomain(input: string | undefined | null): string {
   }
 }
 
+function getBaseDomain(domain: string): string {
+  // Remove TLD and return just the base domain name
+  // e.g., "manfield.com" -> "manfield", "shop.example.co.uk" -> "shop.example"
+  const parts = domain.split('.')
+  if (parts.length <= 2) {
+    return parts[0] // e.g., "manfield.com" -> "manfield"
+  }
+  // For longer domains, take everything except the last part (TLD)
+  return parts.slice(0, -1).join('.')
+}
+
+function domainsMatch(domain1: string, domain2: string): boolean {
+  if (!domain1 || !domain2) return false
+  
+  // First try exact match
+  if (domain1 === domain2) return true
+  
+  // Then try the original logic (one ends with the other)
+  if (domain1.endsWith(domain2) || domain2.endsWith(domain1)) return true
+  
+  // Finally, try base domain matching (ignore TLD differences)
+  const base1 = getBaseDomain(domain1)
+  const base2 = getBaseDomain(domain2)
+  return base1 === base2
+}
+
 function buildNameCandidates(hostnameOrName: string): string[] {
   const raw = hostnameOrName.replace(/^www\./i, '')
   const parts = raw.split('.')
@@ -451,7 +477,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
       const merchantWebUrl = cbRes?.data?.data?.merchant?.webUrl || ''
       const webDomain = cleanDomain(merchantWebUrl)
       const hostDomain = cleanDomain(expectedHostDomain || name)
-      if (webDomain && hostDomain && !(hostDomain.endsWith(webDomain) || webDomain.endsWith(hostDomain))) {
+      if (webDomain && hostDomain && !domainsMatch(hostDomain, webDomain)) {
         console.log('[WS API] Skipping merchant due to domain mismatch', { hostDomain, webDomain, candidate })
         continue
       }
@@ -585,6 +611,26 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
 }
 
 export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
+  // Short-lived cache (per service worker lifetime) to avoid spamming API on the same host
+  // TTL chosen modest to keep data fresh while preventing bursts during navigation events
+  const CACHE_TTL_MS = 5 * 60 * 1000
+  const key = (hostname || '').replace(/^www\./i, '').toLowerCase()
+  ;(globalThis as any).__wsPartnerCache = (globalThis as any).__wsPartnerCache || new Map<string, { at: number; val: PartnerLite | null }>()
+  ;(globalThis as any).__wsPartnerInflight = (globalThis as any).__wsPartnerInflight || new Map<string, Promise<PartnerLite | null>>()
+  const cache: Map<string, { at: number; val: PartnerLite | null }> = (globalThis as any).__wsPartnerCache
+  const inflight: Map<string, Promise<PartnerLite | null>> = (globalThis as any).__wsPartnerInflight
+
+  // Serve fresh cache hit
+  const existing = cache.get(key)
+  if (existing && Date.now() - existing.at < CACHE_TTL_MS) {
+    return existing.val
+  }
+
+  // Coalesce concurrent lookups for the same host
+  const pending = inflight.get(key)
+  if (pending) return pending
+
+  const run = (async (): Promise<PartnerLite | null> => {
   try {
     hostname.replace(/^www\./, '').toLowerCase()
     // No hard overrides here any more; dynamic search is used for all, with name normalization handled in searchMerchantByName
@@ -603,6 +649,7 @@ export async function getPartnerByHostname(hostname: string): Promise<PartnerLit
       }
       if (res) {
         console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
+        cache.set(key, { at: Date.now(), val: res })
         return res
       }
     } catch (error) {
@@ -611,7 +658,12 @@ export async function getPartnerByHostname(hostname: string): Promise<PartnerLit
   }
   
   console.warn(`[WS API] No merchant found for hostname: ${hostname} with candidates:`, candidates)
+  cache.set(key, { at: Date.now(), val: null })
   return null
+  })()
+
+  inflight.set(key, run)
+  try { return await run } finally { inflight.delete(key) }
 }
 
 export async function getAllPartners(): Promise<{ partners: PartnerLite[]; lastUpdated: Date }>{

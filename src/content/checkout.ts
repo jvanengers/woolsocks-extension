@@ -791,7 +791,6 @@ const genericDetector: CheckoutDetector = {
     const hostname = window.location.hostname.toLowerCase()
     const url = window.location.href.toLowerCase()
     const pathname = window.location.pathname.toLowerCase()
-    const bodyText = document.body.textContent?.toLowerCase() || ''
     
     // Exclude known non-e-commerce domains to reduce false positives
     const nonEcommerceDomains = [
@@ -811,7 +810,7 @@ const genericDetector: CheckoutDetector = {
     
     if (isNonEcommerce) return false
     
-    // URL-based detection (primary signal) - comprehensive patterns
+    // URL-based detection only - comprehensive patterns
     const urlKeywords = [
       // English patterns
       'checkout', 'cart', 'basket', 'bag', 'order', 'payment', 'purchase',
@@ -834,92 +833,8 @@ const genericDetector: CheckoutDetector = {
       pathname.includes(keyword) || url.includes(keyword)
     )
     
-    // Debug logging for troubleshooting (universal)
-    // debug suppressed
-    
-    // If URL clearly indicates checkout, that's sufficient
-    if (hasCheckoutUrl) return true
-    
-    // For other cases, require multiple signals to avoid false positives
-    let signalCount = 0
-    
-    // DOM-based detection - comprehensive selectors
-    const checkoutSelectors = [
-      // Class-based selectors
-      '[class*="checkout"]', '[class*="cart"]', '[class*="basket"]', '[class*="bag"]',
-      '[class*="order"]', '[class*="payment"]', '[class*="purchase"]', '[class*="buy"]',
-      '[class*="kassa"]', '[class*="winkelmand"]', '[class*="winkelwagen"]', '[class*="bestellen"]',
-      '[class*="afrekenen"]', '[class*="betalen"]', '[class*="reserveren"]', '[class*="boeken"]',
-      
-      // ID-based selectors
-      '[id*="checkout"]', '[id*="cart"]', '[id*="basket"]', '[id*="bag"]',
-      '[id*="order"]', '[id*="payment"]', '[id*="purchase"]', '[id*="buy"]',
-      '[id*="winkelmand"]', '[id*="winkelwagen"]', '[id*="bestellen"]',
-      
-      // Data attribute selectors
-      '[data-testid*="checkout"]', '[data-testid*="cart"]', '[data-testid*="basket"]',
-      '[data-testid*="order"]', '[data-testid*="payment"]', '[data-testid*="buy"]',
-      '[data-cy*="checkout"]', '[data-cy*="cart"]', '[data-cy*="order"]',
-      
-      // Common e-commerce containers
-      '.checkout-summary', '.order-summary', '.cart-summary', '.basket-summary',
-      '.payment-summary', '.order-total', '.cart-total', '.basket-total',
-      '.shopping-cart', '.shopping-basket', '.order-form', '.checkout-form'
-    ]
-    
-    if (checkoutSelectors.some(selector => document.querySelector(selector) !== null)) {
-      signalCount++
-    }
-    
-    // E-commerce specific text patterns - comprehensive
-    const ecommercePatterns = [
-      // English patterns
-      'proceed to checkout', 'place order', 'order summary', 'order total',
-      'payment method', 'shipping address', 'billing address', 'add to cart',
-      'shopping cart', 'shopping bag', 'item total', 'subtotal', 'grand total',
-      'checkout', 'complete order', 'finalize order', 'confirm order',
-      'buy now', 'purchase', 'order now', 'proceed to payment',
-      'delivery address', 'billing information', 'payment details',
-      
-      // Dutch patterns
-      'bestellen', 'afrekenen', 'betalen', 'winkelmand', 'winkelwagen',
-      'bestelling', 'afrekening', 'betaling', 'verzendadres', 'factuuradres',
-      'doorgaan naar kassa', 'bestelling plaatsen', 'bestelling voltooien',
-      'totaalbedrag', 'subtotaal', 'verzendkosten', 'betaalmethode',
-      'reserveren', 'boeken', 'bevestigen'
-    ]
-    
-    if (ecommercePatterns.some(pattern => bodyText.includes(pattern))) {
-      signalCount++
-    }
-    
-    // Form-based detection
-    if (document.querySelector('form[action*="checkout"], form[action*="order"], form[action*="payment"]') !== null) {
-      signalCount++
-    }
-    
-    // Button-based detection with e-commerce context
-    const checkoutButtons = document.querySelectorAll('button, input[type="submit"], a')
-    const hasEcommerceButton = Array.from(checkoutButtons).some(button => {
-      const text = button.textContent?.toLowerCase() || ''
-      const value = (button as HTMLInputElement).value?.toLowerCase() || ''
-      return ['proceed to checkout', 'place order', 'complete purchase', 'pay now', 'buy now'].some(phrase =>
-        text.includes(phrase) || value.includes(phrase)
-      )
-    })
-    
-    if (hasEcommerceButton) {
-      signalCount++
-    }
-    
-    // Price indicators
-    const hasPriceElements = document.querySelectorAll('[class*="price"], [class*="total"], [class*="amount"]').length > 2
-    if (hasPriceElements) {
-      signalCount++
-    }
-    
-    // Require at least 2 signals for detection (more conservative)
-    return signalCount >= 2
+    // Only use URL-based detection to avoid false positives
+    return hasCheckoutUrl
   },
   extractTotal: () => {
     // Strategy 1: Look for specific total selectors

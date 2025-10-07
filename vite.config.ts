@@ -57,6 +57,17 @@ const manifest = {
       ]
     },
     {
+      matches: ['<all_urls>'],
+      js: ['src/content/oc-panel.ts'],
+      run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*',
+      ]
+    },
+    {
       // Relay script runs only on Woolsocks pages to enable API proxying via page context
       matches: ['https://woolsocks.eu/*', 'https://*.woolsocks.eu/*'],
       js: ['src/content/relay.ts'],
@@ -86,6 +97,7 @@ export default defineConfig({
         background: 'src/background/index.ts',
         content: 'src/content/checkout.ts',
         entrance: 'src/content/entrance.ts',
+        ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
       },
     },

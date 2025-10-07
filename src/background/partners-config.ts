@@ -179,24 +179,4 @@ export async function initializeConfig(): Promise<void> {
   }
 }
 
-// Set up periodic refresh alarm
-export function setupConfigRefresh(): void {
-  // Clear existing alarm
-  chrome.alarms.clear('config-refresh')
-  
-  // Set new alarm for every 5 minutes
-  chrome.alarms.create('config-refresh', {
-    delayInMinutes: 5,
-    periodInMinutes: 5
-  })
-  
-  // Listen for alarm
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'config-refresh') {
-      fetchRemoteConfig().catch(error => {
-        console.warn('Periodic config refresh failed:', error)
-      })
-    }
-  })
-}
 
