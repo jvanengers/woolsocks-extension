@@ -65,6 +65,18 @@ async function getUserId(): Promise<string | null> {
 
 // legacy counters removed with ephemeral relay
 const API_RETRY_DELAY = 1000 // 1 second
+
+// Public helper to determine if the user has an active authenticated session
+// Uses the same logic as requestRedirectUrl -> resolves a real user id via
+// user-info endpoint (with relay fallback) and caches within the background SW
+export async function hasActiveSession(): Promise<boolean> {
+  try {
+    const id = await getUserId()
+    return typeof id === 'string' && id.length > 0
+  } catch {
+    return false
+  }
+}
 const MAX_API_RETRIES = 2
 
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {

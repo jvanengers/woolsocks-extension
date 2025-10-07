@@ -30,38 +30,21 @@ function App() {
     document.body.style.margin = '0'
     document.body.style.background = 'transparent'
     ;(async () => {
-      async function getAnonId(): Promise<string> {
-        const stored = await chrome.storage.local.get('wsAnonId')
-        if (stored?.wsAnonId) return stored.wsAnonId as string
-        const id = crypto.randomUUID()
-        await chrome.storage.local.set({ wsAnonId: id })
-        return id
-      }
       try {
-        // Prefer network-based check against user-info API
-        const anonId = await getAnonId()
-        const resp = await fetch('https://woolsocks.eu/api/wsProxy/user-info/api/v0', {
-          credentials: 'include',
-          headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId },
-        })
-        if (resp.ok) {
-          try {
-            const json: any = await resp.json()
-            const uid = json?.data?.userId || json?.data?.id || json?.user?.id
-            setSession(!!uid)
-            return
-          } catch {}
+        // Ask background to check via user-info with relay fallback
+        const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' })
+        if (resp && typeof resp.active === 'boolean') {
+          setSession(resp.active)
+          return
         }
-        // Fallback to strict cookie presence (exact name only)
-        try {
-          const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
-          const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
-          const all = [...site, ...api]
-          const has = all.some(c => c.name === 'ws-session')
-          setSession(has)
-        } catch {
-          setSession(false)
-        }
+      } catch {}
+      // Final safety fallback: cookie presence
+      try {
+        const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
+        const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
+        const all = [...site, ...api]
+        const has = all.some(c => c.name === 'ws-session')
+        setSession(has)
       } catch {
         setSession(false)
       }

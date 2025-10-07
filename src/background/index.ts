@@ -1,5 +1,5 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
@@ -357,6 +357,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     ;(async () => {
       const data = await getAllPartners()
       sendResponse(data)
+    })()
+    return true
+  } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
+    ;(async () => {
+      const active = await hasActiveSession()
+      sendResponse({ active })
     })()
     return true
   } else if (message?.type === 'REFRESH_PARTNERS') {
