@@ -6,12 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
-- Voucher URLs now use `providerReferenceId` (fallbacks to `productId`, `id`, or UUID in `links.webLink`)
-- Hide `GIFTCARD_PAY_LATER` (0%) vouchers; deduplicate and sort by rate
-- Added Airbnb checkout detection
-- Disabled entrance banner to avoid duplicate panels
-- Simplified Options page: session-aware login/greeting + sock value
-- Documentation overhaul (README, TESTING)
+- Online cashback auto-activation on merchant visit (1h per-domain cooldown)
+- Country-aware CASHBACK deal filtering (`usageType=ONLINE`)
+- Redirect URL via `/rewards/api/v0/rewards/{id}/redirection` (captures `linkUrl` and `clickId`)
+- Popup shows "Cashback tracking enabled" with rate, title, and re-activate button
+- Settings toggle: Auto-activate online cashback (default ON)
+- GA4 analytics via Measurement Protocol with click_id; `oc_activated` recommended as Key event
+- Permission update: `webNavigation` added; permission justifications documented in README
+- Voucher URLs continue to use `providerReferenceId` (fallbacks: `productId`, `id`, UUID in `links.webLink`)
 
 ## [1.0.0] - 2024-01-XX
 

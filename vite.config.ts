@@ -31,7 +31,7 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest'],
+  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest', 'webNavigation'],
   host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {
@@ -49,6 +49,17 @@ const manifest = {
       matches: ['<all_urls>'],
       js: ['src/content/entrance.ts'],
       run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*',
+      ]
+    },
+    {
+      matches: ['<all_urls>'],
+      js: ['src/content/oc-panel.ts'],
+      run_at: 'document_start',
       exclude_matches: [
         'https://woolsocks.eu/*',
         'https://*.woolsocks.eu/*',
@@ -86,6 +97,7 @@ export default defineConfig({
         background: 'src/background/index.ts',
         content: 'src/content/checkout.ts',
         entrance: 'src/content/entrance.ts',
+        ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
       },
     },

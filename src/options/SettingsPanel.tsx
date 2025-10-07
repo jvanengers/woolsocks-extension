@@ -89,6 +89,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
+  const [autoOc, setAutoOc] = useState<boolean>(true)
 
   useEffect(() => {
     checkSession().then((has) => {
@@ -97,6 +98,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         loadProfile()
         loadTransactions()
         loadQaBypass()
+        loadAutoOc()
       }
     })
   }, [])
@@ -128,6 +130,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     setQaBypass(!!user.settings?.qaBypassVoucherDismissal)
   }
 
+  async function loadAutoOc() {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { settings: {} }
+    const enabled = user.settings?.autoActivateOnlineCashback
+    setAutoOc(enabled !== false)
+  }
+
   async function saveQaBypass(next: boolean) {
     const result = await chrome.storage.local.get('user')
     const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
@@ -135,6 +144,15 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     user.settings.qaBypassVoucherDismissal = next
     await chrome.storage.local.set({ user })
     setQaBypass(next)
+  }
+
+  async function saveAutoOc(next: boolean) {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true } }
+    user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true }
+    user.settings.autoActivateOnlineCashback = next
+    await chrome.storage.local.set({ user })
+    setAutoOc(next)
   }
 
   const firstName: string | undefined =
@@ -170,7 +188,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   }, [profile, isQaUser, qaBypass])
 
   return (
-    <div style={{ width: 320, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
+    <div style={{ 
+      width: variant === 'popup' ? '100%' : 320, 
+      padding: variant === 'popup' ? 0 : 16, 
+      borderRadius: variant === 'popup' ? 0 : 12, 
+      background: variant === 'popup' ? 'transparent' : '#fff', 
+      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' 
+    }}>
 
       {session === null && (
         <div style={{ marginTop: 24, fontSize: 13, color: '#666' }}>Checking session…</div>
@@ -193,8 +217,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
       {session === true && (
         <div style={{ marginTop: variant === 'popup' ? 8 : 24 }}>
-          {/* QA toggle */}
-          {isQaUser && (
+          {/* QA toggle - only show in options page */}
+          {isQaUser && variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>QA: Always show voucher (ignore dismissals)</div>
@@ -206,11 +230,62 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           )}
 
-          {variant === 'popup' ? (
-            <div style={{ textAlign: 'center', margin: '8px 0 16px 0' }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>Hi {firstName || 'there'},</div>
-              <div style={{ marginTop: 8, fontSize: 16, color: '#6b7280' }}>Recent transactions</div>
+          {/* Online cashback auto-activation toggle - only show in options page */}
+          {variant !== 'popup' && (
+            <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Auto-activate online cashback</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={autoOc} onChange={(e) => saveAutoOc(e.target.checked)} />
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{autoOc ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
             </div>
+          )}
+
+          {variant === 'popup' ? (
+            <>
+              {/* Balance display - centered with coin icon */}
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: 4, 
+                padding: '8px 10px',
+                background: 'rgba(0,0,0,0.05)',
+                borderRadius: 8,
+                margin: '0 auto',
+                width: 'fit-content'
+              }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ 
+                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontSize: 14, 
+                  fontWeight: 700, 
+                  color: '#100B1C',
+                  lineHeight: 1.45,
+                  letterSpacing: '0.1px'
+                }}>
+                  €{sockValue.toFixed(2)}
+                </span>
+              </div>
+              
+              {/* Recent transactions label */}
+              <div style={{ 
+                textAlign: 'center', 
+                marginTop: 15,
+                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                fontSize: 14, 
+                color: '#100B1C',
+                opacity: 0.5,
+                lineHeight: 1.45,
+                letterSpacing: '0.1px'
+              }}>
+                Recent transactions
+              </div>
+            </>
           ) : (
             <>
               <div style={{ fontSize: 16, fontWeight: 600 }}>Hi {firstName || 'there'} 👋</div>
@@ -220,57 +295,130 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           )}
 
           {/* Recent transactions */}
-          <div style={{ marginTop: variant === 'popup' ? 12 : 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Recent transactions</div>
+          <div style={{ marginTop: variant === 'popup' ? 15 : 24 }}>
+            {variant !== 'popup' && (
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Recent transactions</div>
+            )}
             {transactions.length === 0 && (
               <div style={{ fontSize: 12, color: '#666' }}>No recent transactions found.</div>
             )}
-            <div>
-              {transactions.map((t) => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 0' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 6, overflow: 'hidden', background: '#f6f6f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {t.logo ? (
-                      <img src={t.logo} alt={t.merchantName} style={{ width: 28, height: 28, objectFit: 'contain' }} />
-                    ) : (
-                      <div style={{ fontSize: 10, color: '#999' }}>{t.merchantName?.[0] || '?'}</div>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, marginLeft: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>
-                      {t.recordType === 'Expense' ? (
-                        navigator.language?.toLowerCase().startsWith('nl') ? 'Uitbetaling naar IBAN' : 'Payout to IBAN'
-                      ) : (
-                        t.merchantName
-                      )}
+            <div style={{ 
+              background: variant === 'popup' ? '#F5F5F6' : 'transparent',
+              borderRadius: variant === 'popup' ? 16 : 0,
+              padding: variant === 'popup' ? '0' : '0'
+            }}>
+              <div style={{ 
+                background: variant === 'popup' ? '#FFFFFF' : 'transparent',
+                borderRadius: variant === 'popup' ? '16px 16px 16px 16px' : 0,
+                padding: variant === 'popup' ? '16px 0' : '0'
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: 8
+                }}>
+                  {transactions.map((t) => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: variant === 'popup' ? '8px 16px' : '12px 0' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 4, overflow: 'hidden', background: '#FFFFFF', border: '0.5px solid #ECEBED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {t.logo ? (
+                          <img src={t.logo} alt={t.merchantName} style={{ width: 36, height: 36, objectFit: 'contain' }} />
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#999' }}>{t.merchantName?.[0] || '?'}</div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, marginLeft: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ 
+                          fontSize: 12, 
+                          fontWeight: 600,
+                          fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          color: '#100B1C',
+                          lineHeight: 1.45,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.recordType === 'Expense' ? (
+                            navigator.language?.toLowerCase().startsWith('nl') ? 'Uitbetaling naar IBAN' : 'Payout to IBAN'
+                          ) : (
+                            t.merchantName
+                          )}
+                        </div>
+                        <div style={{ 
+                          fontSize: 12, 
+                          fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          color: '#100B1C',
+                          opacity: 0.5,
+                          lineHeight: 1.4
+                        }}>
+                          {new Date(t.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        alignItems: 'flex-end',
+                        justifyContent: 'center',
+                        gap: 4
+                      }}>
+                        <div style={{ 
+                          fontSize: 12, 
+                          fontWeight: 600,
+                          fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          color: '#100B1C',
+                          lineHeight: 1.45,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          €{t.amount.toFixed(2)}
+                        </div>
+                        <div style={{ 
+                          fontSize: 12,
+                          fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          color: '#100B1C',
+                          opacity: 0.5,
+                          lineHeight: 1.4,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {t.state || 'Pending'}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: '#777' }}>{new Date(t.createdAt).toLocaleDateString()} · {t.state}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: t.amount >= 0 ? '#059669' : '#ef4444' }}>€{t.amount.toFixed(2)}</div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            {/* View all transactions link */}
-            <div style={{ marginTop: 12, textAlign: 'center' }}>
-              <button
-                onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl-NL/profile', active: true })}
-                style={{
-                  background: 'transparent',
-                  color: 'var(--action-link-default, #0084FF)',
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                  fontSize: 14,
-                  fontStyle: 'normal',
-                  fontWeight: 500,
-                  lineHeight: '130%',
-                  border: 'none',
-                  padding: 0,
-                  cursor: 'pointer'
-                }}
-              >
-                View all cashback transactions
-              </button>
+                {/* View all transactions link */}
+                <div style={{ marginTop: 8, textAlign: 'center', padding: variant === 'popup' ? '0 16px' : '0' }}>
+                  <button
+                    onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl-NL/profile', active: true })}
+                    style={{
+                      background: 'transparent',
+                      color: '#0084FF',
+                      fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                      fontSize: 14,
+                      fontStyle: 'normal',
+                      fontWeight: 500,
+                      lineHeight: '130%',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    View all transactions
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Woolsocks logo at bottom for popup variant */}
+          {variant === 'popup' && (
+            <div style={{ textAlign: 'center', marginTop: 15 }}>
+              <img
+                src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.svg')}
+                alt="Woolsocks"
+                style={{ height: 33, width: 140 }}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

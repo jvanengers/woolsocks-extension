@@ -3,6 +3,7 @@ import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, 
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
+import { setupOnlineCashbackFlow } from './online-cashback'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -86,6 +87,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     settings: {
       showCashbackPrompt: true,
       showVoucherPrompt: true,
+      autoActivateOnlineCashback: true,
     },
   }
   chrome.storage.local.set({ user: defaultUser })
@@ -93,6 +95,8 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Initialize deals scraper
   await initializeScraper()
   setupScrapingSchedule()
+  // Enable online cashback navigation flow
+  setupOnlineCashbackFlow(setIcon)
 })
 
 // Also fetch language on startup (when browser restarts)
@@ -103,6 +107,8 @@ chrome.runtime.onStartup?.addListener(async () => {
     const lang = setLanguageFromAPI(apiLang)
     console.log(`[WS] Language refreshed from API on startup: ${lang}`)
   }
+  // Ensure online cashback flow is active when service worker wakes up
+  try { setupOnlineCashbackFlow(setIcon) } catch {}
 })
 
 // Domains where the extension should never trigger
@@ -123,6 +129,10 @@ function isExcludedDomain(hostname: string): boolean {
     cleanHostname === domain || cleanHostname.endsWith('.' + domain)
   )
 }
+
+// Debounce evaluateTab per (tabId, host) to avoid repeated partner lookups on noisy events
+const __wsEvalDebounce = new Map<string, number>() // key: `${tabId}:${host}`
+const EVALUATE_DEBOUNCE_MS = 2000
 
 async function evaluateTab(tabId: number, url?: string | null) {
   await ensureLanguageInitialized()
@@ -156,6 +166,14 @@ async function evaluateTab(tabId: number, url?: string | null) {
     // Content script is auto-injected via manifest.json on all pages
     // No manual injection needed - it runs automatically
     
+    // Debounce same tab+host within short window to avoid duplicate API calls
+    const hostKey = `${tabId}:${u.hostname.replace(/^www\./, '').toLowerCase()}`
+    const lastRun = __wsEvalDebounce.get(hostKey) || 0
+    if (Date.now() - lastRun < EVALUATE_DEBOUNCE_MS) {
+      return
+    }
+    __wsEvalDebounce.set(hostKey, Date.now())
+
     // Check if this merchant is supported via API (async, non-blocking)
     // The checkout detector will handle the actual voucher display if needed
     const partner = await getPartnerByHostname(u.hostname)
