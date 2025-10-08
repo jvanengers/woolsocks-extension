@@ -6,9 +6,34 @@
 // This approach works for ANY merchant that Woolsocks supports, without needing a hardcoded partners list.
 
 import type { CheckoutInfo } from '../shared/types'
+import browser from 'webextension-polyfill'
 
 // Reduce noisy checkout logs; keep a single breadcrumb
 try { console.debug('[Woolsocks] checkout script') } catch {}
+
+// App Groups integration for Safari iOS
+async function writeCheckoutToAppGroups(checkoutInfo: CheckoutInfo) {
+  try {
+    // For Safari iOS: browser.storage.local automatically syncs to App Groups
+    // when the extension is configured with App Group entitlements
+    await browser.storage.local.set({
+      checkout_detected: {
+        merchant: checkoutInfo.merchant,
+        timestamp: checkoutInfo.timestamp,
+        cartValue: checkoutInfo.total,
+        currency: checkoutInfo.currency,
+        url: window.location.href
+      }
+    });
+    
+    // Also store in session storage for immediate access
+    try {
+      sessionStorage.setItem('__wsLastCheckout', JSON.stringify(checkoutInfo));
+    } catch {}
+  } catch (error) {
+    console.debug('[Woolsocks] Failed to write checkout to App Groups:', error);
+  }
+}
 
 // Universal amount parsing function with validation
 function parseAmount(text: string | null | undefined): number | null {
@@ -1781,6 +1806,10 @@ const debouncedCheckForCheckout = throttle(() => {
               type: 'CHECKOUT_DETECTED',
               checkoutInfo
             })
+            
+            // Write to App Groups for Safari iOS integration
+            writeCheckoutToAppGroups(checkoutInfo)
+            
             __wsLastSentTotal = checkoutInfo.total
             __wsClearRetry()
             const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')
@@ -1795,6 +1824,10 @@ const debouncedCheckForCheckout = throttle(() => {
       if (checkoutInfo.total && checkoutInfo.total > 0) {
         if (__wsLastSentTotal !== checkoutInfo.total) {
           chrome.runtime.sendMessage({ type: 'CHECKOUT_DETECTED', checkoutInfo })
+          
+          // Write to App Groups for Safari iOS integration
+          writeCheckoutToAppGroups(checkoutInfo)
+          
           __wsLastSentTotal = checkoutInfo.total
           __wsClearRetry()
           const cashbackPrompt = document.getElementById('woolsocks-cashback-prompt')

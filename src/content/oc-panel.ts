@@ -3,6 +3,34 @@
 
 type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
 import { translate, initLanguage } from '../shared/i18n'
+import browser from 'webextension-polyfill'
+
+// App Groups integration for Safari iOS
+async function writeCashbackToAppGroups(merchant: string, deals: Deal[], activated: boolean = false) {
+  try {
+    await browser.storage.local.set({
+      cashback_event: {
+        merchant,
+        deals: deals.map(d => ({ id: d.id, name: d.name, rate: d.rate })),
+        activated,
+        timestamp: Date.now(),
+        url: window.location.href
+      }
+    });
+    
+    // Also store in session storage for immediate access
+    try {
+      sessionStorage.setItem('__wsLastCashback', JSON.stringify({
+        merchant,
+        deals,
+        activated,
+        timestamp: Date.now()
+      }));
+    } catch {}
+  } catch (error) {
+    console.debug('[Woolsocks] Failed to write cashback to App Groups:', error);
+  }
+}
 
 type UiEvent =
   | { kind: 'oc_scan_start'; host: string }
@@ -817,6 +845,8 @@ chrome.runtime.onMessage.addListener((msg: any) => {
     showChecking(ev.host)
   } else if (ev.kind === 'oc_deals_found') {
     showDealsFound(ev.host, ev.deals || [])
+    // Write to App Groups for Safari iOS
+    writeCashbackToAppGroups(ev.host, ev.deals || [])
   } else if (ev.kind === 'oc_redirect_requested') {
     showSettingUp(ev.host)
   } else if (ev.kind === 'oc_blocked') {
@@ -825,12 +855,16 @@ chrome.runtime.onMessage.addListener((msg: any) => {
     // Simplified authenticated UI: show "cashback active minimized" pill only
     ;(async () => { try { await setActivePill(domain, true) } catch {} })()
     showAuthenticatedActivePill()
+    // Write activated cashback to App Groups
+    writeCashbackToAppGroups(domain, ev.deals || [], true)
   } else if (ev.kind === 'oc_login_required') {
     // Simplified unauthenticated state: show minimized pill only
     try { (window as any).__wsLastDeals = ev.deals || [] } catch {}
     try { (window as any).__wsLastProviderId = ev.providerMerchantId } catch {}
     ;(async () => { try { await setActivePill(getDomain(), true) } catch {} })()
     showMinimizedPill({ unauth: true, deals: ev.deals || [] })
+    // Write login required event to App Groups
+    writeCashbackToAppGroups(domain, ev.deals || [])
   }
 })
 

@@ -1,0 +1,130 @@
+{
+  "manifest_version": 3,
+  "name": "Woolsocks: Vouchers",
+  "version": "0.7.0",
+  "description": "Find and buy instant vouchers at checkout for supported merchants.",
+  "action": {
+    "default_title": "Woolsocks",
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon-grey-16.png",
+      "32": "icons/icon-grey-32.png",
+      "48": "icons/icon-grey-48.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "icons": {
+    "16": "icons/icon-grey-16.png",
+    "32": "icons/icon-grey-32.png",
+    "48": "icons/icon-grey-48.png",
+    "128": "icons/icon-yellow-128px16.png"
+  },
+  "options_ui": {
+    "page": "src/options/index.html",
+    "open_in_tab": false
+  },
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms",
+    "notifications",
+    "cookies",
+    "webRequest",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*",
+    "https://woolsocks.eu/*",
+    "https://api.woolsocks.eu/*"
+  ],
+  "content_scripts": [
+    {
+      "js": [
+        "src/content/checkout.ts"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_end",
+      "exclude_matches": [
+        "https://woolsocks.eu/*",
+        "https://*.woolsocks.eu/*",
+        "http://woolsocks.eu/*",
+        "http://*.woolsocks.eu/*"
+      ]
+    },
+    {
+      "js": [
+        "src/content/entrance.ts"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_end",
+      "exclude_matches": [
+        "https://woolsocks.eu/*",
+        "https://*.woolsocks.eu/*",
+        "http://woolsocks.eu/*",
+        "http://*.woolsocks.eu/*"
+      ]
+    },
+    {
+      "js": [
+        "src/content/oc-panel.ts"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_start",
+      "exclude_matches": [
+        "https://woolsocks.eu/*",
+        "https://*.woolsocks.eu/*",
+        "http://woolsocks.eu/*",
+        "http://*.woolsocks.eu/*"
+      ]
+    },
+    {
+      "js": [
+        "src/content/relay.ts"
+      ],
+      "matches": [
+        "https://woolsocks.eu/*",
+        "https://*.woolsocks.eu/*"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "content/*.css",
+        "content/*.js",
+        "icons/state-*.png",
+        "icons/icon-*.png",
+        "public/icons/*.svg",
+        "public/icons/*.png"
+      ],
+      "use_dynamic_url": false
+    },
+    {
+      "matches": [
+        "https://*.woolsocks.eu/*",
+        "https://woolsocks.eu/*"
+      ],
+      "resources": [
+      ],
+      "use_dynamic_url": false
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https: https://woolsocks.eu https://api.woolsocks.eu;"
+  }
+}

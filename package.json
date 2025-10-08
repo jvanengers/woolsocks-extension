@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:chrome": "tsc -b && vite build --config vite.chrome.config.ts",
+    "build:safari": "tsc -b && vite build --config vite.safari.config.ts",
+    "build:safari-xcode": "./scripts/build-safari.sh",
+    "build:all": "npm run build:chrome && npm run build:safari",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -19,6 +23,7 @@
     "@types/chrome": "^0.1.12",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
+    "@types/webextension-polyfill": "^0.12.4",
     "@vitejs/plugin-react": "^5.0.3",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.36.0",
