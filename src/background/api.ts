@@ -52,7 +52,13 @@ async function getUserId(): Promise<string | null> {
       json = rel.data
     }
 
-    const id = (json?.data?.userId || json?.data?.id || null) as string | null
+    const id = (
+      json?.data?.userId ||
+      json?.data?.id ||
+      json?.user?.id ||
+      json?.id ||
+      null
+    ) as string | null
     cachedUserId = id
     resolvingUserId = false
     return id
@@ -65,6 +71,18 @@ async function getUserId(): Promise<string | null> {
 
 // legacy counters removed with ephemeral relay
 const API_RETRY_DELAY = 1000 // 1 second
+
+// Public helper to determine if the user has an active authenticated session
+// Uses the same logic as requestRedirectUrl -> resolves a real user id via
+// user-info endpoint (with relay fallback) and caches within the background SW
+export async function hasActiveSession(): Promise<boolean> {
+  try {
+    const id = await getUserId()
+    return typeof id === 'string' && id.length > 0
+  } catch {
+    return false
+  }
+}
 const MAX_API_RETRIES = 2
 
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
@@ -763,6 +781,43 @@ export async function getUserLanguage(): Promise<string | null> {
     console.warn('[WS API] Failed to fetch user language:', error)
     return null
   }
+}
+
+// --- Server-confirmed clicks --------------------------------------------------
+type UserClickItem = {
+  clickId?: string
+  subId?: string
+  store?: { storeId?: string; name?: string; urlPathSegment?: string; logoSquareUrl?: string; logoRectangularUrl?: string }
+  dealId?: string
+  clickDate?: string
+}
+type UserClicksResponse = { data?: { clicks?: UserClickItem[] }; meta?: any }
+
+let clicksCache: Map<string, { at: number; clicks: UserClickItem[] }> = new Map()
+
+function apexFromHost(host: string): string {
+  try { const h = host.replace(/^www\./i, '').toLowerCase(); const p = h.split('.'); return p.length>=2 ? p.slice(-2).join('.') : h } catch { return host }
+}
+
+export async function fetchRecentClicksForSite(hostname: string): Promise<UserClickItem[]> {
+  const apex = apexFromHost(hostname)
+  const cached = clicksCache.get(apex)
+  if (cached && Date.now() - cached.at < 60_000) return cached.clicks
+
+  // Require real user id; if absent, we cannot call personal endpoint reliably
+  const uid = await getUserId()
+  if (!uid) {
+    clicksCache.set(apex, { at: Date.now(), clicks: [] })
+    return []
+  }
+
+  const res = await fetchViaSiteProxy<UserClicksResponse>('/cashback/api/v1/cashback/clicks', {
+    method: 'GET',
+    headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': String(uid) },
+  })
+  const list = (res?.data?.data?.clicks || []) as UserClickItem[]
+  clicksCache.set(apex, { at: Date.now(), clicks: list })
+  return list
 }
 
 

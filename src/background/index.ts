@@ -1,9 +1,10 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
-import { setupOnlineCashbackFlow } from './online-cashback'
+import { track } from './analytics'
+import { setupOnlineCashbackFlow, getDomainActivationState, removeTabFromOtherDomains } from './online-cashback'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -166,6 +167,16 @@ async function evaluateTab(tabId: number, url?: string | null) {
     // Content script is auto-injected via manifest.json on all pages
     // No manual injection needed - it runs automatically
     
+    // If domain already marked active (within TTL), prioritize green icon and short-circuit
+    try {
+      const active = getDomainActivationState(u.hostname)
+      if (active.active) {
+        setIcon('active', tabId)
+        // Short-circuit: don't let later partner evaluation downgrade the icon
+        return
+      }
+    } catch {}
+
     // Debounce same tab+host within short window to avoid duplicate API calls
     const hostKey = `${tabId}:${u.hostname.replace(/^www\./, '').toLowerCase()}`
     const lastRun = __wsEvalDebounce.get(hostKey) || 0
@@ -173,6 +184,9 @@ async function evaluateTab(tabId: number, url?: string | null) {
       return
     }
     __wsEvalDebounce.set(hostKey, Date.now())
+
+    // Maintain per-tab domain linkage for ActivationRegistry
+    try { removeTabFromOtherDomains(tabId, u.hostname) } catch {}
 
     // Check if this merchant is supported via API (async, non-blocking)
     // The checkout detector will handle the actual voucher display if needed
@@ -358,6 +372,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const data = await getAllPartners()
       sendResponse(data)
     })()
+    return true
+  } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
+    ;(async () => {
+      const active = await hasActiveSession()
+      sendResponse({ active })
+    })()
+    return true
+  } else if (message?.type === 'REQUEST_ACTIVATION_STATE') {
+    try {
+      const { domain } = message
+      const state = getDomainActivationState(domain || '')
+      try { track('oc_state_query', { domain: (domain || '').replace(/^www\./, '').toLowerCase(), active: !!state.active }) } catch {}
+      sendResponse(state)
+    } catch {
+      sendResponse({ active: false })
+    }
     return true
   } else if (message?.type === 'REFRESH_PARTNERS') {
     ;(async () => {
