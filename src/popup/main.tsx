@@ -40,12 +40,12 @@ function App() {
           return
         }
       } catch {}
-      // Final safety fallback: cookie presence
+      // Final safety fallback: cookie presence (any session-like cookie)
       try {
         const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
         const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
         const all = [...site, ...api]
-        const has = all.some(c => c.name === 'ws-session')
+        const has = all.some(c => c.name === 'ws-session' || /session/i.test(String(c?.name || '')))
         setSession(has)
       } catch {
         setSession(false)
@@ -99,7 +99,13 @@ function App() {
 
   // Load balance for the home view (separate from SettingsPanel)
   useEffect(() => {
-    if (session !== true) return
+    if (session !== true) {
+      // As a fallback, if background reports an active session, mark session true so UI shows authenticated state
+      ;(async () => {
+        try { const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' }); if (resp && resp.active) setSession(true) } catch {}
+      })()
+      return
+    }
     ;(async () => {
       try {
         const stored = await chrome.storage.local.get('wsAnonId')
@@ -234,9 +240,10 @@ function App() {
   // Note: Do not early-return when unauthenticated. We still render the popup,
   // but replace the top-left balance with a Login button matching the
   // bottom-right message styling.
+  const brandBg = isTrackingActive ? '#00C275' : '#FDC408'
   return (
     <div style={{ 
-      background: '#FDC408', 
+      background: brandBg, 
       borderRadius: 0, 
       overflow: 'hidden', 
       position: 'relative', 
@@ -244,13 +251,13 @@ function App() {
       maxHeight: 600, 
       display: 'flex', 
       flexDirection: 'column',
-      border: '4px solid #FDC408'
+      border: `4px solid ${brandBg}`
     }}>
       {/* Header */}
       <div style={{ 
         padding: view === 'transactions' ? '16px 0 0 0' : '8px 0 0 0',
         display: 'flex', 
-        justifyContent: view === 'transactions' ? 'space-between' : 'flex-start', 
+        justifyContent: 'space-between', 
         alignItems: 'center',
         paddingLeft: 8,
         paddingRight: 8
@@ -279,28 +286,44 @@ function App() {
           </>
         ) : (
           session === true ? (
-            <button
-              onClick={() => setView('transactions')}
-              style={{ 
-                background: 'rgba(0,0,0,0.05)', 
-                color: '#100B1C', 
-                padding: '6px 10px', 
-                borderRadius: 8, 
-                fontWeight: 500, 
-                display: 'inline-flex', 
-                alignItems: 'center', 
-                gap: 4, 
-                border: 'none', 
-                cursor: 'pointer',
-                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                fontSize: 14
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span id="__ws_balance">€{balance.toFixed(2)}</span>
-            </button>
+            <>
+              {/* Left: balance button */}
+              <button
+                onClick={() => setView('transactions')}
+                style={{ 
+                  background: 'rgba(0,0,0,0.05)', 
+                  color: '#100B1C', 
+                  padding: '6px 10px', 
+                  borderRadius: 8, 
+                  fontWeight: 500, 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: 4, 
+                  border: 'none', 
+                  cursor: 'pointer',
+                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontSize: 14
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span id="__ws_balance">€{balance.toFixed(2)}</span>
+              </button>
+
+              {/* Right: current domain */}
+              <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+                {currentDomain && (
+                  <span style={{
+                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                    fontSize: 12,
+                    color: '#100B1C',
+                    opacity: 0.6,
+                    lineHeight: 1.4
+                  }}>{currentDomain}</span>
+                )}
+              </div>
+            </>
           ) : (
             <button
               onClick={openLogin}
@@ -345,23 +368,7 @@ function App() {
         ) : null
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflowY: 'auto' }}>
-          {/* Deals label - show if there are any deals */}
-          {(onlineCashbackDeals.length > 0 || vouchers.length > 0) && currentDomain && (
-            <div style={{ 
-              textAlign: 'center',
-              padding: '8px 16px 0 16px'
-            }}>
-              <span style={{ 
-                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                fontSize: 14,
-                color: '#100B1C',
-                opacity: 0.5,
-                lineHeight: 1.45
-              }}>
-                {translate('popup.dealsFor', { domain: currentDomain })}
-              </span>
-            </div>
-          )}
+          {/* Removed old "Deals for {domain}" label; domain now shows in header next to balance */}
 
           {/* Tracking Active Status moved inside Online cashback section below the toggle */}
 
@@ -511,17 +518,16 @@ function App() {
                     padding: '8px 0', 
                     display: 'flex', 
                     alignItems: 'center', 
-                    justifyContent: 'center',
+                    justifyContent: 'center', 
                     gap: 8
                   }}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                      <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="#00C275"/>
+                      <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="#268E60"/>
                     </svg>
                     <span style={{ 
                       fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
                       fontSize: 16,
-                      color: '#100B1C',
-                      opacity: 0.5
+                      color: '#268E60'
                     }}>
                       {translate('popup.trackingActive')}
                     </span>
@@ -679,7 +685,7 @@ function App() {
           {/* Logo at bottom */}
           <div style={{ textAlign: 'center', padding: '15px 0' }}>
             <img
-              src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.svg')}
+              src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.png')}
               alt="Woolsocks"
               style={{ height: 33, width: 140 }}
             />

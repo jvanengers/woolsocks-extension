@@ -172,6 +172,8 @@ async function evaluateTab(tabId: number, url?: string | null) {
       const active = getDomainActivationState(u.hostname)
       if (active.active) {
         setIcon('active', tabId)
+        // Short-circuit: don't let later partner evaluation downgrade the icon
+        return
       }
     } catch {}
 

@@ -446,18 +446,33 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         const clicks = await fetchRecentClicksForSite(clean)
         const apex = clean
         const norm = (s?: string) => (s || '').toLowerCase().replace(/\s+/g, '')
+        const slug = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
         const pname = norm(partner.name)
-        const hit = (clicks || []).find(c => {
+        const apexSlug = slug(apex.replace(/\./g, '')) // hema.nl -> hemanl
+        // Find the most recent matching click (scan all)
+        let hit: any = null
+        for (const c of (clicks || [])) {
           const sname = norm(c?.store?.name)
           const seg = String(c?.store?.urlPathSegment || '').toLowerCase()
-          return (sname && (sname===pname || sname.includes(pname) || pname.includes(sname))) || (seg && seg.includes(apex))
-        })
+          const segSlug = slug(seg)
+          const nameMatch = sname && (sname===pname || sname.includes(pname) || pname.includes(sname))
+          const segMatch = !!seg && (seg.includes(apex) || segSlug.includes(apexSlug))
+          if (nameMatch || segMatch) { hit = c; break }
+        }
         if (hit && hit.clickDate) {
           const when = new Date(hit.clickDate).getTime()
           if (Number.isFinite(when) && Date.now() - when <= 10 * 60 * 1000) {
             if (OC_DEBUG) console.log('[WS OC] server-click active', { domain: clean, clickId: hit.clickId, at: hit.clickDate })
             try { markDomainActive(clean, tabId, hit.clickId || undefined) } catch {}
+            try { await setCooldown(clean) } catch {}
             setIcon('active', tabId)
+            try {
+              const key = '__wsOcActivePillByDomain'
+              const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+              const map = current || {}
+              map[clean] = true
+              await chrome.storage.session.set({ [key]: map })
+            } catch {}
             try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null }) } catch {}
             return
           }
