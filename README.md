@@ -7,7 +7,8 @@ A Chrome MV3 extension that shows Woolsocks voucher offers and automatically ena
 - Works with your existing session at `woolsocks.eu` (cookie-based; no token UI)
 - Country: NL default; online cashback filters to your country based on API language/locale
 - Vouchers: shown at checkout/cart/order pages
-- Online cashback: auto-activates on entry of supported sites (1h cooldown per domain)
+- Online cashback: auto-activates on entry of supported sites (10 min cooldown per apex domain)
+- Server‑confirmed activation: if a recent click (≤10 min) exists for the site, we mark active and skip redirect
 - Links for vouchers open canonical product pages like:
   `https://woolsocks.eu/nl-NL/giftcards-shop/products/{providerReferenceId}`
 
@@ -16,12 +17,13 @@ More capabilities (full merchant browse/search, popup lists, non-NL locales) wil
 ## How it works
 
 - Voucher flow: when you reach checkout, a small panel lists applicable voucher deals with name, rate, image and a "Use" button.
-- Online cashback flow:
-  - On any navigation to a merchant page, we look up the merchant and fetch deals.
-  - We filter to dealType CASHBACK, `usageType = ONLINE`, matching `country`.
-  - We request a tracked redirect URL (linkUrl) for the best deal and redirect once.
-  - After landing back on the merchant, we mark cashback active and open the popup with details.
-- The background service worker fetches partner/deals via the Woolsocks API, using first‑party cookies (same origin) relayed through `woolsocks.eu`.
+- Online cashback flow (multi-path activation):
+  - On navigation, we look up the merchant and fetch deals.
+  - Before redirecting, we query `GET /cashback/api/v1/cashback/clicks` via the site proxy with headers `x-application-name: WOOLSOCKS_WEB` and a real `x-user-id`.
+  - If a recent click (≤10 min) matches the site/merchant, we mark active immediately, set cooldown, and skip redirect.
+  - Otherwise we request a tracked redirect URL for the best deal and redirect once; on landing we mark active.
+  - We maintain a short TTL domain‑pending state to recognize landings that open in a new tab.
+- The background service worker fetches via the site-proxy at `https://woolsocks.eu/api/wsProxy/...` with credentials and relay fallback.
 - For voucher links we rely on `providerReferenceId` from the deals response to build the canonical product URL (fallbacks: `productId`, `id`, or UUID in `links.webLink`).
 
 ## Architecture (simplified)
@@ -70,21 +72,28 @@ Load the `dist/` folder in `chrome://extensions` (Developer mode → Load unpack
 See [TESTING.md](TESTING.md) for a short manual test matrix.
 
 ## Permissions
-- `tabs` — read current tab URL for domain detection and to update the URL on affiliate redirect.
-- `scripting` — inject minimal UI for vouchers.
-- `storage` — store user settings, cooldown map, popup data, analytics queue.
-- `alarms` — periodic background tasks (analytics flush).
+- `tabs` — read current tab URL for domain detection and update the URL on affiliate redirect.
+- `scripting` — inject minimal UI for vouchers and the activation pill.
+- `storage` — store user settings, per-domain cooldowns, activation registry, analytics queue.
+- `alarms` — periodic cleanup and analytics flush.
 - `notifications` — user feedback when cashback activates.
-- `cookies` — observe Woolsocks session changes to ensure API calls succeed.
-- `webRequest` — non-blocking observation and to attach headers for site-proxy calls.
-- `webNavigation` — detect top-level navigations to trigger cashback flow.
+- `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
+- `webRequest` — non-blocking observation (diagnostics) while relying on site-proxy for headers.
+- `webNavigation` — detect top-level navigations to trigger cashback flow and re-emit activation.
 - Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
 
 ### Permission justifications
-- The extension must detect merchant domains (tabs/webNavigation) and redirect once to a tracked affiliate URL (tabs.update) to enable cashback.
-- It calls Woolsocks APIs via the site proxy; cookies/webRequest are required to include first‑party session headers safely.
-- storage/alarms support reliable operation (cooldowns, settings, analytics retries).
-- notifications provide clear user feedback on activation.
+- We must detect merchant domains (tabs/webNavigation) and redirect once to a tracked affiliate URL to enable cashback.
+- We call Woolsocks APIs via the site proxy; `cookies/webRequest` are required so the browser includes first‑party cookies for authenticated requests.
+- `storage/alarms` support reliable operation (cooldowns, session activation state, analytics retries).
+- `scripting` is limited to minimal UI components, never injecting into sensitive origins.
+- `notifications` provide clear user feedback on activation.
+
+## UI notes
+- Active state uses brand green background/border `#00C275`.
+- Tracking badge: background `#ECFDF5`, text/icon `#268E60`.
+- Header shows balance on the left and hostname on the right.
+- Footer logo uses `Woolsocks-logo-large.png` (transparent background) for consistent rendering.
 
 ## Settings
 - Popup/Options → "Auto-activate online cashback" toggle (default ON). When OFF, the flow does not auto-redirect; manual re-activate remains available.

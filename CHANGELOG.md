@@ -116,6 +116,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript configuration
 - Build system setup
 
+## [2025.10.08] - Green UI + Server-click activation
+
+### Added
+- Server-confirmed activation via `GET /cashback/api/v1/cashback/clicks` (site-proxy)
+  - Marks active and skips redirect when a matching click ≤10 minutes exists
+  - Sets apex-domain cooldown and activation pill session flag on hit
+- Domain-fallback landing recognition for affiliate flows that open new tabs
+- Popup auth fallback: respects background session check when cookie name varies
+
+### Changed
+- Active theme: container background/border `#00C275`
+- Tracking badge: background `#ECFDF5`, text/icon `#268E60`
+- Header layout: balance left, hostname right
+- Footer logo switched to transparent PNG for reliable rendering
+- Icon logic short-circuits when active to avoid downgrade flicker
+
+### Permissions
+- No new permissions required; README updated with justifications and server-click details
+
 ---
 
 ## Version History Summary
