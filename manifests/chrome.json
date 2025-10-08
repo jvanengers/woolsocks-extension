@@ -33,7 +33,6 @@
     "alarms",
     "notifications",
     "cookies",
-    "webRequest",
     "webNavigation"
   ],
   "host_permissions": [
