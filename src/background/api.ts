@@ -783,4 +783,41 @@ export async function getUserLanguage(): Promise<string | null> {
   }
 }
 
+// --- Server-confirmed clicks --------------------------------------------------
+type UserClickItem = {
+  clickId?: string
+  subId?: string
+  store?: { storeId?: string; name?: string; urlPathSegment?: string; logoSquareUrl?: string; logoRectangularUrl?: string }
+  dealId?: string
+  clickDate?: string
+}
+type UserClicksResponse = { data?: { clicks?: UserClickItem[] }; meta?: any }
+
+let clicksCache: Map<string, { at: number; clicks: UserClickItem[] }> = new Map()
+
+function apexFromHost(host: string): string {
+  try { const h = host.replace(/^www\./i, '').toLowerCase(); const p = h.split('.'); return p.length>=2 ? p.slice(-2).join('.') : h } catch { return host }
+}
+
+export async function fetchRecentClicksForSite(hostname: string): Promise<UserClickItem[]> {
+  const apex = apexFromHost(hostname)
+  const cached = clicksCache.get(apex)
+  if (cached && Date.now() - cached.at < 60_000) return cached.clicks
+
+  // Require real user id; if absent, we cannot call personal endpoint reliably
+  const uid = await getUserId()
+  if (!uid) {
+    clicksCache.set(apex, { at: Date.now(), clicks: [] })
+    return []
+  }
+
+  const res = await fetchViaSiteProxy<UserClicksResponse>('/cashback/api/v1/cashback/clicks', {
+    method: 'GET',
+    headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': String(uid) },
+  })
+  const list = (res?.data?.data?.clicks || []) as UserClickItem[]
+  clicksCache.set(apex, { at: Date.now(), clicks: list })
+  return list
+}
+
 

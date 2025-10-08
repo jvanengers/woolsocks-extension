@@ -2,7 +2,7 @@
 // Hooks webNavigation to detect merchant visits, select best online cashback deal,
 // request a tracked redirect URL, and open the popup once activated.
 
-import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode } from './api'
+import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode, fetchRecentClicksForSite } from './api'
 import { track, initAnalytics } from './analytics'
 import type { Deal, PartnerLite } from '../shared/types'
 
@@ -440,6 +440,29 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (!partner) { if (OC_DEBUG) console.log('[WS OC] no partner for', clean); return }
       track('oc_partner_detected', { domain: clean, partner_name: partner.name })
       if (OC_DEBUG) console.log('[WS OC] partner', { name: partner.name })
+
+      // Server-confirmed activation check: if recent click exists for this merchant/site
+      try {
+        const clicks = await fetchRecentClicksForSite(clean)
+        const apex = clean
+        const norm = (s?: string) => (s || '').toLowerCase().replace(/\s+/g, '')
+        const pname = norm(partner.name)
+        const hit = (clicks || []).find(c => {
+          const sname = norm(c?.store?.name)
+          const seg = String(c?.store?.urlPathSegment || '').toLowerCase()
+          return (sname && (sname===pname || sname.includes(pname) || pname.includes(sname))) || (seg && seg.includes(apex))
+        })
+        if (hit && hit.clickDate) {
+          const when = new Date(hit.clickDate).getTime()
+          if (Number.isFinite(when) && Date.now() - when <= 10 * 60 * 1000) {
+            if (OC_DEBUG) console.log('[WS OC] server-click active', { domain: clean, clickId: hit.clickId, at: hit.clickDate })
+            try { markDomainActive(clean, tabId, hit.clickId || undefined) } catch {}
+            setIcon('active', tabId)
+            try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null }) } catch {}
+            return
+          }
+        }
+      } catch {}
 
       const userCountry = await getUserCountryCode()
       const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
