@@ -5,9 +5,9 @@ import { crx } from '@crxjs/vite-plugin'
 // Minimal MV3 manifest injected by CRXJS during build
 const manifest = {
   manifest_version: 3,
-  name: 'Woolsocks: Vouchers',
-  version: '0.8.0',
-  description: 'Find and buy instant vouchers at checkout for supported merchants.',
+  name: 'Woolsocks',
+  version: '0.91.0',
+  description: 'Activate cashback automatically and discover gift cards at checkout on supported merchants.',
   action: {
     default_title: 'Woolsocks',
     default_popup: 'src/popup/index.html',

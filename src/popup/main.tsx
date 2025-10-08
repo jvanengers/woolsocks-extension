@@ -91,6 +91,20 @@ function App() {
         }
       } catch {}
     })()
+    // Listen for session updates from background (e.g., after login)
+    const listener = (msg: any) => {
+      try {
+        if (msg && msg.type === 'SESSION_UPDATED' && msg.active === true) {
+          setSession(true)
+        }
+      } catch {}
+    }
+    try { chrome.runtime.onMessage.addListener(listener) } catch {}
+    
+    // Cleanup
+    return () => {
+      try { chrome.runtime.onMessage.removeListener(listener) } catch {}
+    }
   }, [])
 
   const openLogin = () => {

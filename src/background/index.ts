@@ -1,5 +1,5 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
@@ -14,10 +14,23 @@ async function refreshWsCookies() {}
 chrome.runtime.onInstalled.addListener(refreshWsCookies)
 // @ts-ignore - onStartup exists in MV3 service workers
 chrome.runtime.onStartup?.addListener(refreshWsCookies)
+let __wsSessionDebounce = 0
 chrome.cookies.onChanged.addListener(({ cookie }) => {
-  if (cookie?.domain && cookie.domain.includes('woolsocks.eu')) {
-    refreshWsCookies()
-  }
+  try {
+    if (cookie?.domain && cookie.domain.includes('woolsocks.eu')) {
+      if (__wsSessionDebounce) clearTimeout(__wsSessionDebounce)
+      __wsSessionDebounce = setTimeout(async () => {
+        try {
+          resetCachedUserId()
+          const active = await hasActiveSession()
+          if (active) {
+            chrome.runtime.sendMessage({ type: 'SESSION_UPDATED', active: true })
+          }
+        } catch {}
+        try { refreshWsCookies() } catch {}
+      }, 500) as unknown as number
+    }
+  } catch {}
 })
 
 // Note: MV3 non-enterprise extensions cannot use blocking webRequest listeners.

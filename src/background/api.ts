@@ -26,6 +26,12 @@ async function getHeaders(): Promise<HeadersInit> {
 // Try to fetch the real user id from the user-info API (cached for the session)
 let cachedUserId: string | null | undefined
 let resolvingUserId = false
+
+// Allow other modules to force a refresh when cookies/session change
+export function resetCachedUserId() {
+  cachedUserId = undefined
+  resolvingUserId = false
+}
 async function getUserId(): Promise<string | null> {
   if (typeof cachedUserId !== 'undefined') return cachedUserId
   if (resolvingUserId) return null
