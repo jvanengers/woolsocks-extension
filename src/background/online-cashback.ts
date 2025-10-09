@@ -11,6 +11,7 @@ const EXCLUDED_HOSTS = new Set<string>([
   'scoupy.nl', 'scoupy.com',
   'ok.nl', 'ok.com',
   'shopbuddies.nl', 'shopbuddies.com',
+  'praxis.nl',
 ])
 
 const COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes cooldown to avoid repeated redirects

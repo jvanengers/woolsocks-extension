@@ -133,7 +133,8 @@ const EXCLUDED_DOMAINS = [
   'ok.nl',
   'ok.com',
   'shopbuddies.nl',
-  'shopbuddies.com'
+  'shopbuddies.com',
+  'praxis.nl'
 ]
 
 // Check if a hostname should be excluded from extension functionality
