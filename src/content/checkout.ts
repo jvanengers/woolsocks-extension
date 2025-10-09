@@ -249,6 +249,53 @@ window.addEventListener('message', (event) => {
     if (!data || typeof data !== 'object') return
     if (data.type === 'WS_OPEN_URL' && typeof data.url === 'string') {
       try { chrome.runtime.sendMessage({ type: 'OPEN_URL', url: data.url }) } catch {}
+    } else if (data.type === 'WS_VOUCHER_CLICK' && data && typeof data === 'object') {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'VOUCHER_CLICK',
+          payload: {
+            domain: window.location.hostname,
+            partner_name: String(data.partner_name || ''),
+            provider_reference_id: String(data.provider_reference_id || ''),
+            rate: typeof data.rate === 'number' ? data.rate : undefined
+          }
+        })
+      } catch {}
+    } else if (data.type === 'WS_VOUCHER_PANEL_SHOWN' && data && typeof data === 'object') {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'VOUCHER_PANEL_SHOWN',
+          payload: {
+            domain: window.location.hostname,
+            partner_name: String(data.partner_name || ''),
+            top_rate: typeof data.top_rate === 'number' ? data.top_rate : undefined
+          }
+        })
+      } catch {}
+    } else if (data.type === 'WS_VOUCHER_VIEW' && data && typeof data === 'object') {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'VOUCHER_VIEW',
+          payload: {
+            domain: window.location.hostname,
+            partner_name: String(data.partner_name || ''),
+            provider_reference_id: String(data.provider_reference_id || ''),
+            rate: typeof data.rate === 'number' ? data.rate : undefined
+          }
+        })
+      } catch {}
+    } else if (data.type === 'WS_VOUCHER_USED' && data && typeof data === 'object') {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'VOUCHER_USED',
+          payload: {
+            domain: window.location.hostname,
+            partner_name: String(data.partner_name || ''),
+            provider_reference_id: String(data.provider_reference_id || ''),
+            rate: typeof data.rate === 'number' ? data.rate : undefined
+          }
+        })
+      } catch {}
     }
   } catch {}
 })

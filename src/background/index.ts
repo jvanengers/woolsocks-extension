@@ -371,6 +371,57 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Missing URL' })
     }
     return false
+  } else if (message?.type === 'VOUCHER_CLICK') {
+    try {
+      const payload = message?.payload || {}
+      const domain = String(payload.domain || '').replace(/^www\./, '').toLowerCase()
+      track('voucher_click', {
+        domain,
+        partner_name: payload.partner_name,
+        provider_reference_id: payload.provider_reference_id,
+        rate: payload.rate
+      })
+    } catch {}
+    sendResponse({ ok: true })
+    return false
+  } else if (message?.type === 'VOUCHER_PANEL_SHOWN') {
+    try {
+      const payload = message?.payload || {}
+      const domain = String(payload.domain || '').replace(/^www\./, '').toLowerCase()
+      track('voucher_panel_shown', {
+        domain,
+        partner_name: payload.partner_name,
+        top_rate: payload.top_rate
+      })
+    } catch {}
+    sendResponse({ ok: true })
+    return false
+  } else if (message?.type === 'VOUCHER_VIEW') {
+    try {
+      const payload = message?.payload || {}
+      const domain = String(payload.domain || '').replace(/^www\./, '').toLowerCase()
+      track('voucher_view', {
+        domain,
+        partner_name: payload.partner_name,
+        provider_reference_id: payload.provider_reference_id,
+        rate: payload.rate
+      })
+    } catch {}
+    sendResponse({ ok: true })
+    return false
+  } else if (message?.type === 'VOUCHER_USED') {
+    try {
+      const payload = message?.payload || {}
+      const domain = String(payload.domain || '').replace(/^www\./, '').toLowerCase()
+      track('voucher_used', {
+        domain,
+        partner_name: payload.partner_name,
+        provider_reference_id: payload.provider_reference_id,
+        rate: payload.rate
+      })
+    } catch {}
+    sendResponse({ ok: true })
+    return false
   } else if (message?.type === 'OPEN_URL') {
     const { url } = message
     if (url && typeof url === 'string') {
@@ -426,6 +477,9 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   const user: AnonymousUser = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
   
   if (!user.settings.showVoucherPrompt) return
+
+  // Track voucher detection as soon as we enter handler
+  try { track('voucher_detected', { domain: String(checkoutInfo.merchant || '').replace(/^www\./, '').toLowerCase() }) } catch {}
 
   // Special case: bol.com always returns Woolsocks All-in-One voucher (bypass API entirely)
   if (checkoutInfo.merchant.includes('bol.com')) {
@@ -814,6 +868,19 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
 
   document.body.appendChild(prompt)
 
+  try {
+    const topRate = Number.isFinite(effectiveRate) ? effectiveRate : undefined
+    window.postMessage({ type: 'WS_VOUCHER_PANEL_SHOWN', partner_name: partner.name, top_rate: topRate }, window.location.origin)
+    // Report initial best voucher view if available
+    try {
+      const pick = best?.url || partner.voucherProductUrl || ''
+      const id = (() => { try { const m = String(pick).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
+      if (id) {
+        window.postMessage({ type: 'WS_VOUCHER_VIEW', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
+      }
+    } catch {}
+  } catch {}
+
   // If user previously minimized on this domain and the cooldown is still active, show the minimized banner immediately
   try {
     const host = window.location.hostname
@@ -967,6 +1034,15 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
             const newAmount = (amount * newRate / 100).toFixed(2)
             cashbackAmountSpan.textContent = `€${newAmount}`
           }
+          // Emit voucher_view for the selected voucher
+          try {
+            const selected = validVouchers[currentIndex]
+            const pick = selected?.url || ''
+            const id = (() => { try { const m = String(pick).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
+            if (id) {
+              window.postMessage({ type: 'WS_VOUCHER_VIEW', partner_name: partner.name, provider_reference_id: id, rate: selected?.cashbackRate }, window.location.origin)
+            }
+          } catch {}
         }
       }
       
@@ -1404,6 +1480,12 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
       const separator = dealUrl.includes('?') ? '&' : '?'
       dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
     }
+    try {
+      const id = ((): string => { try { const m = String(dealUrl).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
+      window.postMessage({ type: 'WS_VOUCHER_CLICK', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
+      // Treat click → used for web flow
+      window.postMessage({ type: 'WS_VOUCHER_USED', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
+    } catch {}
     try {
       // In MAIN world, chrome.runtime is not available. Use page → content bridge.
       window.postMessage({ type: 'WS_OPEN_URL', url: dealUrl }, window.location.origin)

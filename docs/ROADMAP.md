@@ -260,4 +260,27 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
 - Success criteria
   - Meaningful CTR without elevated dismiss/complaint rates; measurable lift in total cashback activations; compliant with platform policies.
 
+---
+
+## 11) Enforce country-scoped deals (vouchers and online cashback)
+
+Problem: Deals from outside the user’s country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
+
+- Goal
+  - Restrict eligibility and presentation of deals to the user’s effective country/locale for both vouchers and online cashback.
+- Country source of truth
+  - Derive from: signed-in profile country; else explicit setting in extension; else browser locale fallback.
+  - Persist in storage; allow override via Settings.
+- Filtering and matching
+  - For vouchers: include only `GIFTCARD` where provider/country matches user country; exclude cross-country products (e.g., amazon.com for NL).
+  - For online cashback: include only `CASHBACK` with `usageType ONLINE` and matching `country` and domain/locale mapping.
+  - Maintain a domain→country/locale map (per partner) to avoid cross-locale hostnames (e.g., `.com` vs `.nl`).
+- UX
+  - If a site is detected but only cross-country deals exist, show a neutral message: “No deals available for your country.” Optionally offer a country switch entry point.
+  - Respect real-time blacklist to suppress prompts on sensitive sites.
+- Analytics
+  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `user_country`, `flow` (voucher/oc).
+- Success criteria
+  - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
+
 
