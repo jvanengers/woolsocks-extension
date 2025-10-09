@@ -6,6 +6,7 @@
 // - Falls back to a content-script relay on a woolsocks.eu tab when cookies are not sent from the background
 
 import type { PartnerLite, Category, Deal } from '../shared/types'
+import { track } from './analytics'
 
 const DIAG = false
 
@@ -110,8 +111,9 @@ async function ensureOffscreenDocument(): Promise<boolean> {
 
 async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
   try {
+    const t0 = Date.now()
     const ok = await ensureOffscreenDocument()
-    if (!ok) return { data: null, status: 0 }
+    if (!ok) { try { track('relay_offscreen_fail', { reason: 'no_offscreen', endpoint }) } catch {} ; return { data: null, status: 0 } }
     const headers = await getHeaders()
     const resp: any = await new Promise((resolve) => {
       try {
@@ -121,11 +123,12 @@ async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): 
         })
       } catch { resolve({ ok: false, status: 0, bodyText: '' }) }
     })
-    if (!resp || !resp.ok) return { data: null, status: Number(resp?.status || 0) }
+    if (!resp || !resp.ok) { try { track('relay_offscreen_fail', { reason: 'resp_not_ok', status: Number(resp?.status || 0), endpoint, duration_ms: Date.now()-t0 }) } catch {} ; return { data: null, status: Number(resp?.status || 0) } }
     let json: any = null
     try { json = resp.bodyText ? JSON.parse(resp.bodyText) : null } catch {}
+    try { track('relay_offscreen_success', { endpoint, status: Number(resp.status || 200), duration_ms: Date.now()-t0 }) } catch {}
     return { data: json as T, status: Number(resp.status || 200) }
-  } catch { return { data: null, status: 0 } }
+  } catch { try { track('relay_offscreen_fail', { reason: 'exception', endpoint }) } catch {} ; return { data: null, status: 0 } }
 }
 
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
@@ -177,6 +180,7 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
   let created = false
   let tabId = 0
   try {
+    const t0 = Date.now()
     const got = await ensureRelayTab()
     tabId = got.tabId
     created = got.created
@@ -189,8 +193,10 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
       tries++
     }
     const result = await send(tabId)
+    try { track('relay_tab_result', { endpoint, created, status: Number(result?.status || 0), duration_ms: Date.now()-t0 }) } catch {}
     return result
   } catch {
+    try { track('relay_tab_result', { endpoint, created, status: 0, duration_ms: 0, error: true }) } catch {}
     return { data: null, status: 0 }
   } finally {
     // Close ephemeral tab if we created it
@@ -253,9 +259,11 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
     
     if (!resp.ok) {
       if (DIAG) console.debug(`[WS API] Response not ok, trying offscreen relay for ${endpoint}`)
+      try { track('relay_attempt_offscreen', { endpoint, reason: 'background_resp_not_ok', status }) } catch {}
       const off = await relayFetchViaOffscreen<T>(endpoint, init)
       if (off.data) return off
       if (DIAG) console.debug(`[WS API] Offscreen relay failed, trying tab relay for ${endpoint}`)
+      try { track('relay_attempt_tab', { endpoint, reason: 'offscreen_failed_after_resp_not_ok', status }) } catch {}
       return await relayFetchViaTab<T>(endpoint, init)
     }
     const json = (await resp.json()) as T
@@ -270,8 +278,10 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
       return await fetchViaSiteProxy<T>(endpoint, init, retryCount + 1)
     }
     if (DIAG) console.debug(`[WS API] Max retries reached, trying offscreen relay for ${endpoint}`)
+    try { track('relay_attempt_offscreen', { endpoint, reason: 'max_retries' }) } catch {}
     const off = await relayFetchViaOffscreen<T>(endpoint, init)
     if (off.data) return off
+    try { track('relay_attempt_tab', { endpoint, reason: 'offscreen_failed_after_retries' }) } catch {}
     return await relayFetchViaTab<T>(endpoint, init)
   }
 }
