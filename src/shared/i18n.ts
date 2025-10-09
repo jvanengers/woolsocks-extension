@@ -75,9 +75,19 @@ export interface Translations {
     enabled: string
     disabled: string
     autoActivateOnlineCashback: string
+    autoActivateOnlineCashbackDescription: string
+    manualActivationDescription: string
+    showCashbackReminders: string
+    showCashbackRemindersDescription: string
+    affiliateDisclosure: string
     qaBypassTitle: string
     payoutToIban: string
     pending: string
+    // Transaction statuses
+    statusConfirmed: string
+    statusPending: string
+    statusCancelled: string
+    statusRejected: string
   }
   // Onboarding copy
   onboarding?: {
@@ -93,6 +103,14 @@ export interface Translations {
     settingsContent: string
     privacyTitle: string
     privacyContent: string
+    cashbackActivationTitle: string
+    cashbackActivationContent: string
+    automaticWithCountdown: string
+    automaticWithCountdownDescription: string
+    askMeEachTime: string
+    askMeEachTimeDescription: string
+    dontRemindMe: string
+    dontRemindMeDescription: string
   }
   // OC panel (content script) strings
   ocPanel?: {
@@ -105,6 +123,9 @@ export interface Translations {
     shopAndPayNormally: string
     acceptCookiesDisableAdblock: string
     earnRateCashback: string // Earn {rate}% cashback
+    countdownTitle: string // Auto-activating cashback in {seconds}...
+    countdownCancel: string // Cancel
+    activateNow: string // Activate cashback now
   }
 }
 
@@ -170,11 +191,21 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'View all transactions',
       enabled: 'Enabled',
       disabled: 'Disabled',
-      autoActivateOnlineCashback: 'Auto-activate online cashback',
-      qaBypassTitle: 'QA: Always show voucher (ignore dismissals)',
-      payoutToIban: 'Payout to IBAN',
-      pending: 'Pending',
-    },
+    autoActivateOnlineCashback: 'Auto-activate online cashback',
+    autoActivateOnlineCashbackDescription: 'Automatically redirect through affiliate links with 3-second countdown',
+    manualActivationDescription: 'Show activation button, you click when you want cashback',
+    showCashbackReminders: 'Show cashback reminders',
+    showCashbackRemindersDescription: 'Detect and show cashback opportunities on partner sites',
+    affiliateDisclosure: 'We earn commission when you shop through our links',
+    qaBypassTitle: 'QA: Always show voucher (ignore dismissals)',
+    payoutToIban: 'Payout to IBAN',
+    pending: 'Pending',
+    // Transaction statuses
+    statusConfirmed: 'Confirmed',
+    statusPending: 'Pending',
+    statusCancelled: 'Cancelled',
+    statusRejected: 'Rejected',
+  },
     onboarding: {
       welcomeTitle: 'Welcome to Woolsocks!',
       welcomeContent: 'Never miss cashback again. This extension will help you earn money back on your online purchases.',
@@ -188,6 +219,14 @@ const translations: Record<Language, Translations> = {
       settingsContent: 'Adjust notifications in settings. You can turn off popups but keep icon color changes.',
       privacyTitle: 'Your Privacy Matters',
       privacyContent: "We only check the website you're on for deals. No browsing history or personal data is collected.",
+      cashbackActivationTitle: 'Cashback Activation',
+      cashbackActivationContent: 'How would you like to activate cashback when you visit partner stores?',
+      automaticWithCountdown: 'Automatic with countdown',
+      automaticWithCountdownDescription: 'Auto-redirect with 3-second countdown and cancel option',
+      askMeEachTime: 'Ask me each time',
+      askMeEachTimeDescription: 'Show activation button, I\'ll click when I want cashback',
+      dontRemindMe: 'Don\'t remind me',
+      dontRemindMeDescription: 'No cashback detection or reminders'
     },
     ocPanel: {
       dealsFoundAt: 'Deals found at {host}',
@@ -199,6 +238,9 @@ const translations: Record<Language, Translations> = {
       shopAndPayNormally: 'Shop and pay like you do normally',
       acceptCookiesDisableAdblock: 'Accept all cookies and disable adblockers',
       earnRateCashback: 'Earn {rate}% cashback',
+      countdownTitle: 'Auto-activating cashback in {seconds}...',
+      countdownCancel: 'Cancel',
+      activateNow: 'Activate cashback now'
     },
   },
   
@@ -264,9 +306,19 @@ const translations: Record<Language, Translations> = {
       enabled: 'Ingeschakeld',
       disabled: 'Uitgeschakeld',
       autoActivateOnlineCashback: 'Online cashback automatisch activeren',
+      autoActivateOnlineCashbackDescription: 'Automatisch omleiden via affiliate links met 3-seconden aftelling',
+      manualActivationDescription: 'Toon activatieknop, jij klikt wanneer je cashback wilt',
+      showCashbackReminders: 'Cashback herinneringen tonen',
+      showCashbackRemindersDescription: 'Detecteer en toon cashback mogelijkheden op partnersites',
+      affiliateDisclosure: 'Wij verdienen commissie wanneer je via onze links winkelt',
       qaBypassTitle: 'QA: Toon voucher altijd (negeer sluiten)',
       payoutToIban: 'Uitbetaling naar IBAN',
       pending: 'In behandeling',
+      // Transaction statuses
+      statusConfirmed: 'Goedgekeurd',
+      statusPending: 'In behandeling',
+      statusCancelled: 'Geannuleerd',
+      statusRejected: 'Afgewezen',
     },
     onboarding: {
       welcomeTitle: 'Welkom bij Woolsocks!',
@@ -281,6 +333,14 @@ const translations: Record<Language, Translations> = {
       settingsContent: 'Stel meldingen in bij instellingen. Je kunt pop-ups uitzetten maar de icoonkleur behouden.',
       privacyTitle: 'Jouw privacy is belangrijk',
       privacyContent: 'We controleren alleen de website waarop je je bevindt op deals. Geen browsegeschiedenis of persoonlijke gegevens worden verzameld.',
+      cashbackActivationTitle: 'Cashback-activatie',
+      cashbackActivationContent: 'Hoe wil je cashback activeren wanneer je partnersites bezoekt?',
+      automaticWithCountdown: 'Automatisch met aftelling',
+      automaticWithCountdownDescription: 'Auto-omleiding met 3-seconden aftelling en annuleeroptie',
+      askMeEachTime: 'Vraag me elke keer',
+      askMeEachTimeDescription: 'Toon activatieknop, ik klik wanneer ik cashback wil',
+      dontRemindMe: 'Herinner me niet',
+      dontRemindMeDescription: 'Geen cashback-detectie of herinneringen'
     },
     ocPanel: {
       dealsFoundAt: 'Deals gevonden op {host}',
@@ -292,6 +352,9 @@ const translations: Record<Language, Translations> = {
       shopAndPayNormally: 'Winkel en betaal zoals je normaal doet',
       acceptCookiesDisableAdblock: 'Accepteer alle cookies en schakel adblockers uit',
       earnRateCashback: 'Verdien {rate}% cashback',
+      countdownTitle: 'Cashback wordt automatisch geactiveerd over {seconds}...',
+      countdownCancel: 'Annuleren',
+      activateNow: 'Activeer cashback nu'
     },
   },
   
@@ -331,6 +394,35 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Zeige Gutscheinangebot für {name} mit {rate}% Cashback',
       scriptInjected: 'Universelles Checkout-Skript injiziert für Tab {tabId} auf {hostname}',
     },
+    options: {
+      title: 'Einstellungen',
+      sectionTitle: 'Einstellungen',
+      checkingSession: 'Sitzung wird überprüft…',
+      noActiveSession: 'Keine aktive Sitzung',
+      loginAtWs: 'Bei Woolsocks anmelden',
+      greeting: 'Hallo {name} 👋',
+      cashbackSock: 'Cashback-Sock',
+      refresh: 'Aktualisieren',
+      recentTransactions: 'Letzte Transaktionen',
+      noRecentTransactions: 'Keine letzten Transaktionen',
+      viewAllTransactions: 'Alle Transaktionen anzeigen',
+      enabled: 'Aktiviert',
+      disabled: 'Deaktiviert',
+      autoActivateOnlineCashback: 'Online-Cashback automatisch aktivieren',
+      autoActivateOnlineCashbackDescription: 'Cashback automatisch aktivieren, wenn verfügbar',
+      manualActivationDescription: 'Aktivierungsschaltfläche anzeigen, Sie klicken, wenn Sie Cashback möchten',
+      showCashbackReminders: 'Cashback-Erinnerungen anzeigen',
+      showCashbackRemindersDescription: 'Cashback-Möglichkeiten auf Partner-Websites erkennen und anzeigen',
+      affiliateDisclosure: 'Wir verdienen Provision, wenn Sie über unsere Links einkaufen',
+      qaBypassTitle: 'QA: Gutschein immer anzeigen (Schließen ignorieren)',
+      payoutToIban: 'Auszahlung auf IBAN',
+      pending: 'Ausstehend',
+      // Transaction statuses
+      statusConfirmed: 'Bestätigt',
+      statusPending: 'Ausstehend',
+      statusCancelled: 'Storniert',
+      statusRejected: 'Abgelehnt',
+    },
   },
   
   fr: {
@@ -368,6 +460,35 @@ const translations: Record<Language, Translations> = {
       noVouchers: 'Aucun bon disponible pour le marchand: {name}',
       showingOffer: 'Affichage de l\'offre de bon pour {name} avec {rate}% de cashback',
       scriptInjected: 'Script de paiement universel injecté pour l\'onglet {tabId} sur {hostname}',
+    },
+    options: {
+      title: 'Paramètres',
+      sectionTitle: 'Paramètres',
+      checkingSession: 'Vérification de la session…',
+      noActiveSession: 'Aucune session active',
+      loginAtWs: 'Se connecter à Woolsocks',
+      greeting: 'Salut {name} 👋',
+      cashbackSock: 'Chaussette Cashback',
+      refresh: 'Actualiser',
+      recentTransactions: 'Transactions récentes',
+      noRecentTransactions: 'Aucune transaction récente',
+      viewAllTransactions: 'Voir toutes les transactions',
+      enabled: 'Activé',
+      disabled: 'Désactivé',
+      autoActivateOnlineCashback: 'Activer automatiquement le cashback en ligne',
+      autoActivateOnlineCashbackDescription: 'Activer automatiquement le cashback quand disponible',
+      manualActivationDescription: 'Afficher le bouton d\'activation, vous cliquez quand vous voulez du cashback',
+      showCashbackReminders: 'Afficher les rappels de cashback',
+      showCashbackRemindersDescription: 'Détecter et afficher les opportunités de cashback sur les sites partenaires',
+      affiliateDisclosure: 'Nous gagnons une commission quand vous achetez via nos liens',
+      qaBypassTitle: 'QA: Toujours afficher le bon (ignorer les fermetures)',
+      payoutToIban: 'Paiement vers IBAN',
+      pending: 'En attente',
+      // Transaction statuses
+      statusConfirmed: 'Confirmé',
+      statusPending: 'En attente',
+      statusCancelled: 'Annulé',
+      statusRejected: 'Rejeté',
     },
   },
   
@@ -407,6 +528,35 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Visualizzazione offerta voucher per {name} con {rate}% di cashback',
       scriptInjected: 'Script di checkout universale iniettato per la scheda {tabId} su {hostname}',
     },
+    options: {
+      title: 'Impostazioni',
+      sectionTitle: 'Impostazioni',
+      checkingSession: 'Controllo sessione…',
+      noActiveSession: 'Nessuna sessione attiva',
+      loginAtWs: 'Accedi a Woolsocks',
+      greeting: 'Ciao {name} 👋',
+      cashbackSock: 'Calzino Cashback',
+      refresh: 'Aggiorna',
+      recentTransactions: 'Transazioni recenti',
+      noRecentTransactions: 'Nessuna transazione recente',
+      viewAllTransactions: 'Visualizza tutte le transazioni',
+      enabled: 'Abilitato',
+      disabled: 'Disabilitato',
+      autoActivateOnlineCashback: 'Attiva automaticamente il cashback online',
+      autoActivateOnlineCashbackDescription: 'Attiva automaticamente il cashback quando disponibile',
+      manualActivationDescription: 'Mostra il pulsante di attivazione, clicchi quando vuoi il cashback',
+      showCashbackReminders: 'Mostra promemoria cashback',
+      showCashbackRemindersDescription: 'Rileva e mostra le opportunità di cashback sui siti partner',
+      affiliateDisclosure: 'Guadagniamo una commissione quando acquisti tramite i nostri link',
+      qaBypassTitle: 'QA: Mostra sempre il voucher (ignora le chiusure)',
+      payoutToIban: 'Pagamento a IBAN',
+      pending: 'In sospeso',
+      // Transaction statuses
+      statusConfirmed: 'Confermato',
+      statusPending: 'In sospeso',
+      statusCancelled: 'Annullato',
+      statusRejected: 'Rifiutato',
+    },
   },
   
   es: {
@@ -444,6 +594,35 @@ const translations: Record<Language, Translations> = {
       noVouchers: 'No hay cupones disponibles para el comerciante: {name}',
       showingOffer: 'Mostrando oferta de cupón para {name} con {rate}% de cashback',
       scriptInjected: 'Script de checkout universal inyectado para la pestaña {tabId} en {hostname}',
+    },
+    options: {
+      title: 'Configuración',
+      sectionTitle: 'Configuración',
+      checkingSession: 'Verificando sesión…',
+      noActiveSession: 'No hay sesión activa',
+      loginAtWs: 'Iniciar sesión en Woolsocks',
+      greeting: 'Hola {name} 👋',
+      cashbackSock: 'Calcetín Cashback',
+      refresh: 'Actualizar',
+      recentTransactions: 'Transacciones recientes',
+      noRecentTransactions: 'No hay transacciones recientes',
+      viewAllTransactions: 'Ver todas las transacciones',
+      enabled: 'Habilitado',
+      disabled: 'Deshabilitado',
+      autoActivateOnlineCashback: 'Activar automáticamente el cashback online',
+      autoActivateOnlineCashbackDescription: 'Activar automáticamente el cashback cuando esté disponible',
+      manualActivationDescription: 'Mostrar botón de activación, haces clic cuando quieres cashback',
+      showCashbackReminders: 'Mostrar recordatorios de cashback',
+      showCashbackRemindersDescription: 'Detectar y mostrar oportunidades de cashback en sitios socios',
+      affiliateDisclosure: 'Ganamos una comisión cuando compras a través de nuestros enlaces',
+      qaBypassTitle: 'QA: Mostrar siempre el cupón (ignorar cierres)',
+      payoutToIban: 'Pago a IBAN',
+      pending: 'Pendiente',
+      // Transaction statuses
+      statusConfirmed: 'Confirmado',
+      statusPending: 'Pendiente',
+      statusCancelled: 'Cancelado',
+      statusRejected: 'Rechazado',
     },
   },
 }
@@ -504,6 +683,28 @@ export function translate(key: string, variables?: Record<string, string | numbe
   }
   
   return value
+}
+
+// Translate transaction status
+export function translateTransactionStatus(status: string | undefined | null): string {
+  if (!status) return translate('options.statusPending')
+  
+  const normalizedStatus = status.toLowerCase()
+  
+  switch (normalizedStatus) {
+    case 'confirmed':
+      return translate('options.statusConfirmed')
+    case 'pending':
+      return translate('options.statusPending')
+    case 'cancelled':
+    case 'canceled':
+      return translate('options.statusCancelled')
+    case 'rejected':
+      return translate('options.statusRejected')
+    default:
+      // For unknown statuses, return the original status or fallback to pending
+      return status || translate('options.statusPending')
+  }
 }
 
 // Set language preference

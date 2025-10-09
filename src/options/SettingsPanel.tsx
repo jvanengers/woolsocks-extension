@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { translate, initLanguage } from '../shared/i18n'
+import { translate, initLanguage, translateTransactionStatus } from '../shared/i18n'
 
 type WsProfile = any
 type WsTransaction = any
@@ -111,6 +111,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
   const [autoOc, setAutoOc] = useState<boolean>(true)
+  const [showReminders, setShowReminders] = useState<boolean>(true)
 
   useEffect(() => {
     try { initLanguage() } catch {}
@@ -122,6 +123,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         loadTransactions()
         loadQaBypass()
         loadAutoOc()
+        loadShowReminders()
       }
     })
   }, [])
@@ -165,6 +167,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     setAutoOc(enabled !== false)
   }
 
+  async function loadShowReminders() {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { settings: {} }
+    const enabled = user.settings?.showCashbackReminders
+    setShowReminders(enabled !== false)
+  }
+
   async function saveQaBypass(next: boolean) {
     const result = await chrome.storage.local.get('user')
     const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true } }
@@ -181,6 +190,15 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     user.settings.autoActivateOnlineCashback = next
     await chrome.storage.local.set({ user })
     setAutoOc(next)
+  }
+
+  async function saveShowReminders(next: boolean) {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, showCashbackReminders: true } }
+    user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, showCashbackReminders: true }
+    user.settings.showCashbackReminders = next
+    await chrome.storage.local.set({ user })
+    setShowReminders(next)
   }
 
   const firstName: string | undefined =
@@ -252,15 +270,37 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           )}
 
-          {/* Online cashback auto-activation toggle - only show in options page */}
+          {/* Cashback reminders toggle - only show in options page */}
           {variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.showCashbackReminders')}</div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={showReminders} onChange={(e) => saveShowReminders(e.target.checked)} />
+                  <span style={{ fontSize: 12, color: '#6B7280' }}>{showReminders ? translate('options.enabled') : translate('options.disabled')}</span>
+                </label>
+              </div>
+              <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4 }}>
+                {translate('options.showCashbackRemindersDescription')}
+              </div>
+            </div>
+          )}
+
+          {/* Online cashback auto-activation toggle - only show in options page */}
+          {variant !== 'popup' && showReminders && (
+            <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.autoActivateOnlineCashback')}</div>
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input type="checkbox" checked={autoOc} onChange={(e) => saveAutoOc(e.target.checked)} />
                   <span style={{ fontSize: 12, color: '#6B7280' }}>{autoOc ? translate('options.enabled') : translate('options.disabled')}</span>
                 </label>
+              </div>
+              <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4, marginBottom: 8 }}>
+                {autoOc ? translate('options.autoActivateOnlineCashbackDescription') : translate('options.manualActivationDescription')}
+              </div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', lineHeight: 1.3 }}>
+                {translate('options.affiliateDisclosure')}
               </div>
             </div>
           )}
@@ -400,7 +440,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                           lineHeight: 1.4,
                           whiteSpace: 'nowrap'
                         }}>
-                          {t.state || translate('options.pending')}
+                          {translateTransactionStatus(t.state)}
                         </div>
                       </div>
                     </div>

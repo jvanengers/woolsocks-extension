@@ -11,6 +11,9 @@ type UiEvent =
   | { kind: 'oc_blocked'; reason: 'no_deals' | 'settings' | 'cooldown' | string; host: string }
   | { kind: 'oc_activated'; host: string; deals: Deal[]; dealId?: string | number; providerMerchantId?: string | number }
   | { kind: 'oc_login_required'; host: string; deals: Deal[]; providerMerchantId?: string | number }
+  | { kind: 'oc_countdown_start'; host: string; dealInfo: Deal; countdown: number }
+  | { kind: 'oc_countdown_cancel'; host: string }
+  | { kind: 'oc_countdown_complete'; host: string }
 
 // Brand logos from design system (exposed via web_accessible_resources)
 const WS_LOGO = {
@@ -353,6 +356,131 @@ function ensureMount(): ShadowRoot {
       padding: 8px !important; 
       white-space: nowrap !important;
     }
+    .countdown-banner {
+      pointer-events: auto !important;
+      background: #FFFFFF !important;
+      border-radius: 16px !important;
+      box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
+      padding: 16px !important;
+      min-width: 280px !important;
+      max-width: 400px !important;
+    }
+    .countdown-content {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+    .countdown-header {
+      display: flex !important;
+      align-items: center !important;
+      gap: 12px !important;
+    }
+    .countdown-text {
+      flex: 1 !important;
+    }
+    .countdown-title {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      color: #0F0B1C !important;
+      line-height: 1.4 !important;
+    }
+    .countdown-deal {
+      font-size: 14px !important;
+      color: #0F0B1C !important;
+      opacity: 0.7 !important;
+      line-height: 1.4 !important;
+      margin-top: 2px !important;
+    }
+    .countdown-actions {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 12px !important;
+    }
+    .countdown-cancel-btn {
+      background: #F5F5F6 !important;
+      color: #0F0B1C !important;
+      border: none !important;
+      border-radius: 8px !important;
+      padding: 8px 16px !important;
+      font-size: 14px !important;
+      font-weight: 500 !important;
+      cursor: pointer !important;
+      font-family: inherit !important;
+    }
+    .countdown-cancel-btn:hover {
+      background: #E5E7EB !important;
+    }
+    .countdown-number {
+      width: 48px !important;
+      height: 48px !important;
+      border-radius: 50% !important;
+      background: #FF6B35 !important;
+      color: #FFFFFF !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      font-size: 20px !important;
+      font-weight: 700 !important;
+      font-family: inherit !important;
+    }
+    .logo-24 { width: 24px !important; height: 24px !important; }
+    .manual-activation-banner {
+      pointer-events: auto !important;
+      background: #FFFFFF !important;
+      border-radius: 16px !important;
+      box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
+      padding: 16px !important;
+      min-width: 280px !important;
+      max-width: 400px !important;
+    }
+    .manual-activation-content {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+    .manual-activation-header {
+      display: flex !important;
+      align-items: center !important;
+      gap: 12px !important;
+    }
+    .manual-activation-text {
+      flex: 1 !important;
+    }
+    .manual-activation-title {
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      color: #0F0B1C !important;
+      line-height: 1.4 !important;
+    }
+    .manual-activation-deal {
+      font-size: 14px !important;
+      color: #0F0B1C !important;
+      opacity: 0.7 !important;
+      line-height: 1.4 !important;
+      margin-top: 2px !important;
+    }
+    .manual-activation-actions {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 12px !important;
+    }
+    .manual-activate-btn {
+      background: #00C275 !important;
+      color: #FFFFFF !important;
+      border: none !important;
+      border-radius: 8px !important;
+      padding: 12px 20px !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      font-family: inherit !important;
+      flex: 1 !important;
+    }
+    .manual-activate-btn:hover {
+      background: #00A865 !important;
+    }
     .icon-btn { background: transparent !important; border: none !important; cursor: pointer !important; padding: 0 !important; display:flex !important; align-items:center !important; justify-content:center !important; width: 48px !important; height: 48px !important; }
     .cta-btn { 
       display:flex !important; align-items:center !important; justify-content:center !important;
@@ -520,6 +648,7 @@ function getContainer(): HTMLElement {
 function clearTimers() {
   if (stateTimer) { window.clearTimeout(stateTimer); stateTimer = null }
   if (deckTimer) { window.clearTimeout(deckTimer); deckTimer = null }
+  clearCountdown()
 }
 
 function render(el: HTMLElement, html: string) {
@@ -808,6 +937,119 @@ function hideAll() {
 function escapeHtml(s: string): string { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c]) }
 function formatRate(d: Deal): string { if ((d.amountType||'').toUpperCase()==='FIXED') return `${d.currency||'€'}${d.rate}`; const r = typeof d.rate==='number'? d.rate:0; return `${r}%` }
 
+// Countdown banner for auto-activation
+let countdownTimer: number | null = null
+let countdownSeconds = 0
+
+function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: number = 3) {
+  const r = ensureMount(); clearTimers()
+  countdownSeconds = initialCountdown
+  
+  const banner = document.createElement('div')
+  banner.className = 'countdown-banner'
+  banner.innerHTML = `
+    <div class="countdown-content">
+      <div class="countdown-header">
+        <img class="logo logo-24" alt="Woolsocks" src="${WS_LOGO.yellow}">
+        <div class="countdown-text">
+          <div class="countdown-title">${translate('ocPanel.countdownTitle', { seconds: countdownSeconds })}</div>
+          <div class="countdown-deal">${formatRate(dealInfo)} cashback on ${escapeHtml(domain)}</div>
+        </div>
+      </div>
+      <div class="countdown-actions">
+        <button class="countdown-cancel-btn" id="ws-countdown-cancel">${translate('ocPanel.countdownCancel')}</button>
+        <div class="countdown-number" id="ws-countdown-number">${countdownSeconds}</div>
+      </div>
+    </div>
+  `
+  
+  r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
+  
+  // Start countdown
+  countdownTimer = window.setInterval(() => {
+    countdownSeconds--
+    const numberEl = document.getElementById('ws-countdown-number')
+    if (numberEl) {
+      numberEl.textContent = countdownSeconds.toString()
+    }
+    
+    if (countdownSeconds <= 0) {
+      clearCountdown()
+      // Notify background that countdown completed
+      chrome.runtime.sendMessage({ 
+        type: 'OC_COUNTDOWN_COMPLETE', 
+        domain: domain,
+        dealInfo: dealInfo 
+      })
+      hideAll()
+    }
+  }, 1000)
+  
+  // Cancel button handler
+  banner.querySelector('#ws-countdown-cancel')?.addEventListener('click', () => {
+    clearCountdown()
+    // Notify background that countdown was cancelled
+    chrome.runtime.sendMessage({ 
+      type: 'OC_COUNTDOWN_CANCEL', 
+      domain: domain 
+    })
+    hideAll()
+  })
+}
+
+function clearCountdown() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+  countdownSeconds = 0
+}
+
+
+// Manual activation banner for Safari or manual mode
+function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal | null) {
+  const r = ensureMount(); clearTimers()
+  
+  const banner = document.createElement('div')
+  banner.className = 'manual-activation-banner'
+  const rate = bestDeal ? formatRate(bestDeal) : '0%'
+  
+  banner.innerHTML = `
+    <div class="manual-activation-content">
+      <div class="manual-activation-header">
+        <img class="logo logo-24" alt="Woolsocks" src="${WS_LOGO.yellow}">
+        <div class="manual-activation-text">
+          <div class="manual-activation-title">${translate('ocPanel.activateNow')}</div>
+          <div class="manual-activation-deal">${rate} cashback on ${escapeHtml(host)}</div>
+        </div>
+      </div>
+      <div class="manual-activation-actions">
+        <button class="manual-activate-btn" id="ws-manual-activate">${translate('ocPanel.activateNow')}</button>
+        <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
+      </div>
+    </div>
+  `
+  
+  r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
+  
+  // Manual activation button handler
+  banner.querySelector('#ws-manual-activate')?.addEventListener('click', () => {
+    // Notify background to perform manual activation
+    chrome.runtime.sendMessage({ 
+      type: 'OC_MANUAL_ACTIVATE', 
+      domain: host,
+      dealInfo: bestDeal 
+    })
+    hideAll()
+  })
+  
+  // Dismiss button handler
+  banner.querySelector('#ws-dismiss')?.addEventListener('click', async () => {
+    try { await setActivePill(getDomain(), false) } catch {}
+    hideAll()
+  })
+}
+
 // Message handling from background
 chrome.runtime.onMessage.addListener((msg: any) => {
   if (!msg || !msg.__wsOcUi) return
@@ -816,7 +1058,16 @@ chrome.runtime.onMessage.addListener((msg: any) => {
   if (ev.kind === 'oc_scan_start') {
     showChecking(ev.host)
   } else if (ev.kind === 'oc_deals_found') {
-    showDealsFound(ev.host, ev.deals || [])
+    // Check if we should show manual activation (Safari or manual mode)
+    const platform = (ev as any).platform || 'chrome'
+    const isManualMode = (ev as any).isManualMode || false
+    
+    if (platform === 'safari' || isManualMode) {
+      const bestDeal = ev.deals && ev.deals.length ? ev.deals.sort((a, b) => (b.rate || 0) - (a.rate || 0))[0] : null
+      showManualActivationBanner(ev.host, ev.deals || [], bestDeal)
+    } else {
+      showDealsFound(ev.host, ev.deals || [])
+    }
   } else if (ev.kind === 'oc_redirect_requested') {
     showSettingUp(ev.host)
   } else if (ev.kind === 'oc_blocked') {
@@ -831,6 +1082,9 @@ chrome.runtime.onMessage.addListener((msg: any) => {
     try { (window as any).__wsLastProviderId = ev.providerMerchantId } catch {}
     ;(async () => { try { await setActivePill(getDomain(), true) } catch {} })()
     showMinimizedPill({ unauth: true, deals: ev.deals || [] })
+  } else if (ev.kind === 'oc_countdown_start') {
+    // Show countdown banner for auto-activation
+    showCountdownBanner(ev.host, ev.dealInfo, ev.countdown)
   }
 })
 

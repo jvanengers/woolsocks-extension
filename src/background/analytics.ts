@@ -27,6 +27,15 @@ const OC_EVENT_DESCRIPTIONS: Record<string, string> = {
   oc_state_reemit: 'Re-broadcasted activation state to ensure UI consistency',
   oc_state_mark_active: 'Marked domain active without a fresh redirect (state restore)',
   oc_restore_deeplink: 'Restored original deep link after affiliate hop',
+  // New consent and countdown events
+  oc_countdown_shown: 'Showed countdown banner for auto-activation',
+  oc_countdown_cancelled: 'User cancelled countdown before auto-redirect',
+  oc_countdown_completed: 'Countdown completed and auto-redirect executed',
+  oc_manual_activation_shown: 'Showed manual activation button (Safari or manual mode)',
+  oc_manual_activation_clicked: 'User clicked manual activation button',
+  consent_shown: 'Showed onboarding consent step for auto-activation',
+  consent_accepted: 'User accepted auto-activation during onboarding',
+  consent_declined: 'User declined auto-activation during onboarding',
 }
 
 async function getClientId(): Promise<string> {

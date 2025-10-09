@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { translate, initLanguage } from '../shared/i18n'
+import { translate, initLanguage, translateTransactionStatus } from '../shared/i18n'
 import { createRoot } from 'react-dom/client'
 
 type WsProfile = any
@@ -229,7 +229,7 @@ function Options() {
                         t.merchantName
                       )}
                     </div>
-                    <div style={{ fontSize: 11, color: '#777' }}>{new Date(t.createdAt).toLocaleDateString()} · {t.state || translate('options.pending')}</div>
+                    <div style={{ fontSize: 11, color: '#777' }}>{new Date(t.createdAt).toLocaleDateString()} · {translateTransactionStatus(t.state)}</div>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: t.amount >= 0 ? '#059669' : '#ef4444' }}>€{t.amount.toFixed(2)}</div>
                 </div>

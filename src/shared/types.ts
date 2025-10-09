@@ -57,6 +57,8 @@ export interface AnonymousUser {
     qaBypassVoucherDismissal?: boolean
     // When false, disables automatic online cashback activation on navigation
     autoActivateOnlineCashback?: boolean
+    // When false, disables all cashback detection and reminders
+    showCashbackReminders?: boolean
   }
 }
 

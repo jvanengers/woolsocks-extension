@@ -4,6 +4,7 @@
 
 import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode, fetchRecentClicksForSite } from './api'
 import { track, initAnalytics } from './analytics'
+import { getPlatform, allowsAutoRedirect, requiresUserGesture } from '../shared/platform'
 import type { Deal, PartnerLite } from '../shared/types'
 
 const EXCLUDED_HOSTS = new Set<string>([
@@ -415,14 +416,6 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         } catch {}
       }
 
-      // Respect user setting
-      try {
-        const result = await chrome.storage.local.get('user')
-        const user = result.user || { settings: {} }
-        const enabled = user?.settings?.autoActivateOnlineCashback !== false
-        if (!enabled) { return }
-      } catch {}
-
       const until = await getCooldownUntil(clean)
       if (until && Date.now() - until < COOLDOWN_MS) {
         track('oc_blocked', { domain: clean, reason: 'cooldown' })
@@ -486,6 +479,36 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const eligible = filterOnlineCountry(ocCategory.deals as Deal[], userCountry)
       if (!eligible.length) { track('oc_blocked', { domain: clean, reason: 'no_country_match', country: userCountry }); if (OC_DEBUG) console.log('[WS OC] no eligible deals for country', userCountry); return }
 
+      // Respect user settings
+      try {
+        const result = await chrome.storage.local.get('user')
+        const user = result.user || { settings: {} }
+        const showReminders = user?.settings?.showCashbackReminders !== false
+        const autoActivate = user?.settings?.autoActivateOnlineCashback !== false
+        
+        // If reminders are disabled, don't show any UI
+        if (!showReminders) { 
+          track('oc_blocked', { domain: clean, reason: 'reminders_disabled' })
+          return 
+        }
+        
+        // If auto-activation is disabled, show manual activation UI instead
+        if (!autoActivate) {
+          // Show manual activation UI (will be handled by content script)
+          try { 
+            chrome.tabs.sendMessage(tabId, { 
+              __wsOcUi: true, 
+              kind: 'oc_deals_found', 
+              host: clean, 
+              deals: eligible,
+              platform: getPlatform(),
+              isManualMode: true
+            }) 
+          } catch {}
+          return
+        }
+      } catch {}
+
       const best = pickBestCashback(eligible)
       if (!best || !best.id) { track('oc_blocked', { domain: clean, reason: 'no_link' }); if (OC_DEBUG) console.log('[WS OC] best deal missing id', best); return }
 
@@ -512,46 +535,56 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
         return
       }
-      try { const h = new URL(redir.url).hostname; track('oc_redirect_issued', { domain: clean, deal_id: best.id, link_host: h, click_id: redir.clickId }) } catch { track('oc_redirect_issued', { domain: clean, deal_id: best.id, click_id: redir.clickId }) }
-      if (OC_DEBUG) console.log('[WS OC] navigating to affiliate', { url: redir.url })
-
-      // Stash state for when we land back (also keep all deals for deck page 1)
+      // Check platform and user settings to determine redirect behavior
+      const platform = getPlatform()
+      const supportsAuto = allowsAutoRedirect()
+      const requiresGesture = requiresUserGesture()
+      
+      // Stash redirect info for later use
       best.affiliateUrl = redir.url
       best.clickId = redir.clickId
       ;(best as any).providerMerchantId = (best as any).providerMerchantId || eligible[0]?.providerMerchantId
-      const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best }
-      ;(enrich as any).deals = eligible
-      tabRedirectState.set(tabId, enrich)
-      // Also set domain-scoped pending fallback (2.5 minutes TTL)
-      try {
-        let affiliateHost = ''
-        try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
-        const until = Date.now() + 150000
-        pendingByDomain.set(clean, { affiliateHost, clickId: redir.clickId, partnerName: partner.name, deal: best, originalUrl: url, until })
-        if (OC_DEBUG) console.log('[WS OC] set domain-pending', { key: clean, affiliateHost, until })
-      } catch {}
-
-      try {
-        // Save original deep URL before performing the affiliate hop
-        let affiliateHost = ''
-        try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
-        tabRedirectState.set(tabId, { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url, affiliateHost, createdAt: Date.now() })
-        await chrome.tabs.update(tabId, { url: redir.url })
-        track('oc_redirect_navigated', { domain: clean, deal_id: best.id, click_id: redir.clickId })
-      } catch (e) {
-        // Fallback: open in new tab if updating current tab is blocked
-        try {
-          const created = await chrome.tabs.create({ url: redir.url, active: true })
-          if (created?.id) {
-            // Save original deep URL for the newly opened tab as well
-            let affiliateHost2 = ''
-            try { affiliateHost2 = cleanHost(new URL(redir.url).hostname) } catch {}
-            tabRedirectState.set(created.id, { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url, affiliateHost: affiliateHost2, createdAt: Date.now() })
-            track('oc_redirect_navigated', { domain: clean, deal_id: best.id, click_id: redir.clickId })
-            if (OC_DEBUG) console.log('[WS OC] opened new tab for affiliate', { tabId: created.id })
-          }
+      
+      if (supportsAuto && !requiresGesture) {
+        // Chrome/Firefox: Show countdown banner for auto-activation
+        track('oc_countdown_shown', { domain: clean, deal_id: best.id, platform })
+        try { 
+          chrome.tabs.sendMessage(tabId, { 
+            __wsOcUi: true, 
+            kind: 'oc_countdown_start', 
+            host: clean, 
+            dealInfo: best, 
+            countdown: 3 
+          }) 
         } catch {}
-        tabRedirectState.delete(tabId)
+        
+        // Store redirect state for when countdown completes
+        const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url }
+        ;(enrich as any).deals = eligible
+        tabRedirectState.set(tabId, enrich)
+        
+        // Set domain-scoped pending fallback (2.5 minutes TTL)
+        try {
+          let affiliateHost = ''
+          try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
+          const until = Date.now() + 150000
+          pendingByDomain.set(clean, { affiliateHost, clickId: redir.clickId, partnerName: partner.name, deal: best, originalUrl: url, until })
+          if (OC_DEBUG) console.log('[WS OC] set domain-pending', { key: clean, affiliateHost, until })
+        } catch {}
+        
+      } else {
+        // Safari or manual mode: Show manual activation button
+        track('oc_manual_activation_shown', { domain: clean, deal_id: best.id, platform })
+        try { 
+          chrome.tabs.sendMessage(tabId, { 
+            __wsOcUi: true, 
+            kind: 'oc_deals_found', 
+            host: clean, 
+            deals: eligible,
+            platform: platform,
+            isManualMode: true
+          }) 
+        } catch {}
       }
     }, { url: [{ schemes: ['http', 'https'] }] })
 
@@ -574,6 +607,181 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
     }, { url: [{ schemes: ['http', 'https'] }] })
   } catch (e) {
     console.warn('[WS] webNavigation listener could not be registered:', e)
+  }
+}
+
+// Handle countdown completion and cancellation messages from content script
+chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
+  if (message.type === 'OC_COUNTDOWN_COMPLETE') {
+    handleCountdownComplete(message.domain, message.dealInfo, sender.tab?.id)
+  } else if (message.type === 'OC_COUNTDOWN_CANCEL') {
+    handleCountdownCancel(message.domain, sender.tab?.id)
+  } else if (message.type === 'OC_MANUAL_ACTIVATE') {
+    handleManualActivation(message.domain, message.dealInfo, sender.tab?.id)
+  }
+})
+
+async function handleCountdownComplete(domain: string, dealInfo: any, tabId?: number) {
+  if (!tabId) return
+  
+  const pending = tabRedirectState.get(tabId)
+  if (!pending || !pending.deal.affiliateUrl) {
+    console.warn('[WS OC] countdown completed but no pending redirect found')
+    return
+  }
+  
+  try {
+    track('oc_countdown_completed', { domain, deal_id: dealInfo.id, platform: getPlatform() })
+    
+    // Perform the redirect
+    const redirUrl = pending.deal.affiliateUrl
+    try { 
+      const h = new URL(redirUrl).hostname
+      track('oc_redirect_issued', { domain, deal_id: dealInfo.id, link_host: h, click_id: pending.deal.clickId }) 
+    } catch { 
+      track('oc_redirect_issued', { domain, deal_id: dealInfo.id, click_id: pending.deal.clickId }) 
+    }
+    
+    if (OC_DEBUG) console.log('[WS OC] navigating to affiliate after countdown', { url: redirUrl })
+    
+    try {
+      await chrome.tabs.update(tabId, { url: redirUrl })
+      track('oc_redirect_navigated', { domain, deal_id: dealInfo.id, click_id: pending.deal.clickId })
+    } catch (e) {
+      // Fallback: open in new tab if updating current tab is blocked
+      try {
+        const created = await chrome.tabs.create({ url: redirUrl, active: true })
+        if (created?.id) {
+          let affiliateHost = ''
+          try { affiliateHost = cleanHost(new URL(redirUrl).hostname) } catch {}
+          tabRedirectState.set(created.id, { 
+            expectedFinalHost: domain, 
+            partnerName: pending.partnerName, 
+            deal: pending.deal, 
+            originalUrl: pending.originalUrl, 
+            affiliateHost, 
+            createdAt: Date.now() 
+          })
+          track('oc_redirect_navigated', { domain, deal_id: dealInfo.id, click_id: pending.deal.clickId })
+          if (OC_DEBUG) console.log('[WS OC] opened new tab for affiliate', { tabId: created.id })
+        }
+      } catch {}
+      tabRedirectState.delete(tabId)
+    }
+  } catch (error) {
+    console.error('[WS OC] error handling countdown completion:', error)
+  }
+}
+
+async function handleCountdownCancel(domain: string, tabId?: number) {
+  if (!tabId) return
+  
+  try {
+    track('oc_countdown_cancelled', { domain, platform: getPlatform() })
+    
+    // Clear pending redirect state
+    tabRedirectState.delete(tabId)
+    
+    // Set short cooldown to avoid re-prompting immediately
+    try { await setCooldown(domain) } catch {}
+    
+    if (OC_DEBUG) console.log('[WS OC] countdown cancelled by user', { domain })
+  } catch (error) {
+    console.error('[WS OC] error handling countdown cancellation:', error)
+  }
+}
+
+async function handleManualActivation(domain: string, dealInfo: any, tabId?: number) {
+  if (!tabId) return
+  
+  try {
+    track('oc_manual_activation_clicked', { domain, deal_id: dealInfo?.id, platform: getPlatform() })
+    
+    // Get partner and deals for this domain
+    const partner = await getPartnerByHostname(domain)
+    if (!partner) {
+      console.warn('[WS OC] manual activation: no partner found for domain', domain)
+      return
+    }
+    
+    const userCountry = await getUserCountryCode()
+    const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
+    if (!ocCategory) {
+      console.warn('[WS OC] manual activation: no online cashback category found')
+      return
+    }
+    
+    const eligible = filterOnlineCountry(ocCategory.deals as Deal[], userCountry)
+    const best = pickBestCashback(eligible)
+    if (!best || !best.id) {
+      console.warn('[WS OC] manual activation: no valid deal found')
+      return
+    }
+    
+    // Request redirect URL
+    let redir: { url: string; clickId?: string } | null = null
+    try {
+      redir = await requestRedirectUrl(best.id)
+    } catch (e) {
+      console.error('[WS OC] manual activation: failed to get redirect URL', e)
+      return
+    }
+    
+    if (!redir || !redir.url) {
+      console.warn('[WS OC] manual activation: no redirect URL returned')
+      return
+    }
+    
+    // Perform the redirect
+    try { 
+      const h = new URL(redir.url).hostname
+      track('oc_redirect_issued', { domain, deal_id: best.id, link_host: h, click_id: redir.clickId, reason: 'manual_activation' }) 
+    } catch { 
+      track('oc_redirect_issued', { domain, deal_id: best.id, click_id: redir.clickId, reason: 'manual_activation' }) 
+    }
+    
+    // Store redirect state for landing detection
+    best.affiliateUrl = redir.url
+    best.clickId = redir.clickId
+    const enrich: any = { expectedFinalHost: domain, partnerName: partner.name, deal: best, originalUrl: `https://${domain}` }
+    ;(enrich as any).deals = eligible
+    tabRedirectState.set(tabId, enrich)
+    
+    // Set domain-scoped pending fallback
+    try {
+      let affiliateHost = ''
+      try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
+      const until = Date.now() + 150000
+      pendingByDomain.set(domain, { affiliateHost, clickId: redir.clickId, partnerName: partner.name, deal: best, originalUrl: `https://${domain}`, until })
+    } catch {}
+    
+    // Perform redirect
+    try {
+      await chrome.tabs.update(tabId, { url: redir.url })
+      track('oc_redirect_navigated', { domain, deal_id: best.id, click_id: redir.clickId, reason: 'manual_activation' })
+      if (OC_DEBUG) console.log('[WS OC] manual activation redirect completed', { url: redir.url })
+    } catch (e) {
+      // Fallback: open in new tab
+      try {
+        const created = await chrome.tabs.create({ url: redir.url, active: true })
+        if (created?.id) {
+          let affiliateHost = ''
+          try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
+          tabRedirectState.set(created.id, { 
+            expectedFinalHost: domain, 
+            partnerName: partner.name, 
+            deal: best, 
+            originalUrl: `https://${domain}`, 
+            affiliateHost, 
+            createdAt: Date.now() 
+          })
+          track('oc_redirect_navigated', { domain, deal_id: best.id, click_id: redir.clickId, reason: 'manual_activation' })
+        }
+      } catch {}
+      tabRedirectState.delete(tabId)
+    }
+  } catch (error) {
+    console.error('[WS OC] error handling manual activation:', error)
   }
 }
 
