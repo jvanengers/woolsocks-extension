@@ -78,13 +78,13 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - `alarms` — periodic cleanup and analytics flush.
 - `notifications` — user feedback when cashback activates.
 - `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
-- `webRequest` — non-blocking observation (diagnostics) while relying on site-proxy for headers.
+- ~~`webRequest`~~ — removed (not used in current implementation)
 - `webNavigation` — detect top-level navigations to trigger cashback flow and re-emit activation.
 - Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
 
 ### Permission justifications
 - We must detect merchant domains (tabs/webNavigation) and redirect once to a tracked affiliate URL to enable cashback.
-- We call Woolsocks APIs via the site proxy; `cookies/webRequest` are required so the browser includes first‑party cookies for authenticated requests.
+- We call Woolsocks APIs via the site proxy; `cookies` are required so the browser includes first‑party cookies for authenticated requests.
 - `storage/alarms` support reliable operation (cooldowns, session activation state, analytics retries).
 - `scripting` is limited to minimal UI components, never injecting into sensitive origins.
 - `notifications` provide clear user feedback on activation.
@@ -113,6 +113,8 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - Locale support beyond NL
 - Popup browse/search of partners
 - Broader cashback metrics and user controls
+
+See the full roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 MIT
