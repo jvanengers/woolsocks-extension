@@ -35,9 +35,17 @@ Goal: Support realtime blacklists for two flows and provide a fallback experienc
 
 ## 2) Voucher analytics and BI integration
 
-Status: Completed — 2025-10-09 (see commit `6bb5ac3`)
+Status: Blocked, Waiting for BI integratiom details
 
-Moved to Completed items.
+Goal: Deliver BI export and reporting for voucher funnel metrics using a data warehouse (e.g., BigQuery) and dashboards.
+
+- Data export
+  - Define export path (GA4 → BigQuery export or server-side relay).
+  - Confirm schemas, retention, PII policy, and event sampling constraints.
+- Reporting
+  - Build dashboards for impressions → clicks → usage; define KPIs and filters by domain/partner/country.
+- Validation
+  - Reconcile event counts between GA and warehouse; document known gaps and sampling.
 
 ---
 
@@ -278,12 +286,12 @@ Problem: Deals from outside the user’s country are considered and shown today,
 
 ## Completed items
 
-### Voucher analytics and BI integration
+### Voucher analytics (events only)
 
 Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
 
-- Events (GA4 Measurement Protocol)
+- Implemented events (GA4 Measurement Protocol)
   - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
   - Key parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
 - Key events designated: `voucher_click`, `voucher_used`
-- BI integration: prepared for export to data warehouse (e.g., BigQuery or server-side relay)
+- BI export and dashboards remain pending (tracked in active item 2)
