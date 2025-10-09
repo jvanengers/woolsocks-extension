@@ -51,7 +51,7 @@ Goal: Deliver BI export and reporting for voucher funnel metrics using a data wa
 
 ## 3) Anonymous (not logged in) behaviors
 
-Status: Ready for refinement
+Status: Completed — 2025-01-27
 
 Goal: Ensure utility without a session.
 
@@ -61,6 +61,18 @@ Goal: Ensure utility without a session.
   - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
 - Success criteria
   - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
+
+### Implementation Details
+
+Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous user behaviors for popup and reminders)
+
+- Removed session guard from popup deal loading to allow anonymous users to view deals
+- Added analytics tracking for anonymous user interactions (`anonymous_deals_viewed`, `anonymous_login_clicked`)
+- Added `ANALYTICS_TRACK` message handler in background script
+- Reduced popup vertical padding by 50% for improved UX
+- Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
+- Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
+- Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
 
 ---
 
