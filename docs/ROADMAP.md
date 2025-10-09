@@ -206,7 +206,7 @@ User can disable auto activation. All activity should be transparent.
 
 ## 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
 
-Status: Completed — 2025-01-27
+Status: Completed — 2025-10-09
 
 Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows (e.g., relay, cookie-first proxying, activation confirmation) and determine if we can eliminate or hide them while preserving all functionality and policy compliance.
 
@@ -288,7 +288,7 @@ Problem: Deals from outside the user’s country are considered and shown today,
 
 ### Offscreen relay (eliminate visible woolsocks.eu tab flashes)
 
-Completed: 2025-01-27 — commit `7b6800a` (feat(relay): add Chrome offscreen relay with hidden iframe, prefer offscreen over tab relay; manifest updates; content relay postMessage; refs roadmap #9)
+Completed: 2025-10-09 — commit `7b6800a` (feat(relay): add Chrome offscreen relay with hidden iframe, prefer offscreen over tab relay; manifest updates; content relay postMessage; refs roadmap #9)
 
 - Implemented Chrome MV3 offscreen document with hidden iframe to `woolsocks.eu`
 - Added platform guards: Chrome uses offscreen relay, Firefox/Safari reuse existing tabs only
