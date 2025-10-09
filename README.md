@@ -114,5 +114,11 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - Popup browse/search of partners
 - Broader cashback metrics and user controls
 
+<<<<<<< HEAD
+=======
+See the full roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
+See the implementation plan for Dual Blacklists in [docs/feature-dual-blacklists-remote-config.md](docs/feature-dual-blacklists-remote-config.md).
+
+>>>>>>> f57c766 (docs: add plan for dual blacklists via Firebase Remote Config and link from README)
 ## License
 MIT
