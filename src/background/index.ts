@@ -372,6 +372,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: false, error: 'Missing URL' })
     }
     return false
+  } else if (message?.type === 'ANALYTICS_TRACK') {
+    try {
+      track(message.event, message.params)
+      sendResponse({ ok: true })
+    } catch (error: any) {
+      sendResponse({ ok: false, error: error?.message })
+    }
+    return false
   } else if (message?.type === 'VOUCHER_CLICK') {
     try {
       const payload = message?.payload || {}

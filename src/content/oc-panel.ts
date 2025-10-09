@@ -350,7 +350,7 @@ function ensureMount(): ShadowRoot {
       background: #FFFFFF !important; 
       border-radius: 16px !important; 
       box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important; 
-      padding: 16px !important; 
+      padding: 8px !important; 
       white-space: nowrap !important;
     }
     .icon-btn { background: transparent !important; border: none !important; cursor: pointer !important; padding: 0 !important; display:flex !important; align-items:center !important; justify-content:center !important; width: 48px !important; height: 48px !important; }
@@ -362,7 +362,7 @@ function ensureMount(): ShadowRoot {
       font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
       font-size: 14px !important; font-weight: 500 !important; line-height: 1.4 !important;
     }
-    .pill-row { display:flex !important; align-items:center !important; gap:8px !important; white-space: nowrap !important; padding: 16px !important; }
+    .pill-row { display:flex !important; align-items:center !important; gap:8px !important; white-space: nowrap !important; padding: 8px !important; }
     .label-text { white-space: nowrap !important; font-weight:400 !important; color:#0F0B1C !important; font-size:16px !important; line-height:1.45 !important; opacity:0.5 !important; }
     .active-pill { display:flex !important; align-items:center !important; gap:12px !important; background: rgba(0,194,117,0.12) !important; border-radius: 16px !important; padding: 8px 16px !important; white-space: nowrap !important; }
     .active-text { color:#268E60 !important; font-size:16px !important; line-height:1.45 !important; font-weight:500 !important; }

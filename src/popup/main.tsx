@@ -108,6 +108,19 @@ function App() {
   }, [])
 
   const openLogin = () => {
+    // Track anonymous user login clicks
+    if (session !== true) {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'ANALYTICS_TRACK',
+          event: 'anonymous_login_clicked',
+          params: {
+            source: 'popup_header',
+            user_type: 'anonymous'
+          }
+        })
+      } catch {}
+    }
     chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
   }
 
@@ -167,7 +180,6 @@ function App() {
 
   // Load deals from current tab
   useEffect(() => {
-    if (session !== true) return
     ;(async () => {
       try {
         // Get current tab
@@ -229,6 +241,23 @@ function App() {
           }
 
           // Tracking active state already handled above independent of partner
+        }
+
+        // Track anonymous user deal views
+        if (session !== true && (onlineCashbackDeals.length > 0 || vouchers.length > 0)) {
+          try {
+            chrome.runtime.sendMessage({
+              type: 'ANALYTICS_TRACK',
+              event: 'anonymous_deals_viewed',
+              params: {
+                domain: hostname.replace(/^www\./, ''),
+                deal_count: onlineCashbackDeals.length + vouchers.length,
+                has_oc_deals: onlineCashbackDeals.length > 0,
+                has_voucher_deals: vouchers.length > 0,
+                user_type: 'anonymous'
+              }
+            })
+          } catch {}
         }
       } catch (err) {
         console.error('Failed to load deals:', err)
