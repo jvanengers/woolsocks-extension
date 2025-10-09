@@ -91,6 +91,43 @@ export async function hasActiveSession(): Promise<boolean> {
 }
 const MAX_API_RETRIES = 2
 
+async function ensureOffscreenDocument(): Promise<boolean> {
+  try {
+    // @ts-ignore chrome.offscreen types may not be present
+    const has = await (chrome.offscreen as any).hasDocument?.()
+    if (has) return true
+  } catch {}
+  try {
+    // @ts-ignore createDocument API in MV3
+    await (chrome.offscreen as any).createDocument?.({
+      url: chrome.runtime.getURL('src/offscreen/relay.html'),
+      reasons: ['IFRAME_SCRIPTING'],
+      justification: 'Credentialed fetch via woolsocks.eu in offscreen iframe to avoid visible tabs',
+    })
+    return true
+  } catch { return false }
+}
+
+async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+  try {
+    const ok = await ensureOffscreenDocument()
+    if (!ok) return { data: null, status: 0 }
+    const headers = await getHeaders()
+    const resp: any = await new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'WS_RELAY_FETCH', payload: { url: `${SITE_BASE}/api/wsProxy${endpoint}`, init: { ...init, headers, credentials: 'include' } } }, (r) => {
+          if (chrome.runtime.lastError || !r) resolve({ ok: false, status: 0, bodyText: '' })
+          else resolve(r)
+        })
+      } catch { resolve({ ok: false, status: 0, bodyText: '' }) }
+    })
+    if (!resp || !resp.ok) return { data: null, status: Number(resp?.status || 0) }
+    let json: any = null
+    try { json = resp.bodyText ? JSON.parse(resp.bodyText) : null } catch {}
+    return { data: json as T, status: Number(resp.status || 200) }
+  } catch { return { data: null, status: 0 } }
+}
+
 async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
   const headers = await getHeaders()
 
@@ -215,8 +252,10 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
     if (DIAG) console.debug(`[WS API] Response status: ${status}, ok: ${resp.ok}`)
     
     if (!resp.ok) {
-      if (DIAG) console.debug(`[WS API] Response not ok, trying relay for ${endpoint}`)
-      // Fallback to relay via page context when cookies are not included
+      if (DIAG) console.debug(`[WS API] Response not ok, trying offscreen relay for ${endpoint}`)
+      const off = await relayFetchViaOffscreen<T>(endpoint, init)
+      if (off.data) return off
+      if (DIAG) console.debug(`[WS API] Offscreen relay failed, trying tab relay for ${endpoint}`)
       return await relayFetchViaTab<T>(endpoint, init)
     }
     const json = (await resp.json()) as T
@@ -230,7 +269,9 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
       await new Promise(resolve => setTimeout(resolve, API_RETRY_DELAY * (retryCount + 1)))
       return await fetchViaSiteProxy<T>(endpoint, init, retryCount + 1)
     }
-    if (DIAG) console.debug(`[WS API] Max retries reached, trying relay for ${endpoint}`)
+    if (DIAG) console.debug(`[WS API] Max retries reached, trying offscreen relay for ${endpoint}`)
+    const off = await relayFetchViaOffscreen<T>(endpoint, init)
+    if (off.data) return off
     return await relayFetchViaTab<T>(endpoint, init)
   }
 }

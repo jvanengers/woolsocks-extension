@@ -24,6 +24,25 @@ window.addEventListener('message', (event) => {
       reportToken(data.token)
     }
   }
+  // Offscreen iframe handshake: acknowledge ping
+  if (data && data.type === 'WS_PING') {
+    try { window.parent?.postMessage({ type: 'WS_PING_ACK' }, window.location.origin) } catch {}
+  }
+  // Offscreen iframe fetch relay: perform credentialed fetch and return result
+  if (data && data.type === 'WS_RELAY_FETCH' && typeof data.url === 'string') {
+    const reqId = data.reqId
+    ;(async () => {
+      try {
+        const resp = await fetch(data.url, { credentials: 'include', ...(data.init || {}), headers: { ...(data.init?.headers || {}), 'x-application-name': 'WOOLSOCKS_WEB' } })
+        const headers: Record<string, string> = {}
+        resp.headers.forEach((v, k) => { headers[k] = v })
+        const bodyText = await resp.text()
+        window.parent?.postMessage({ type: 'WS_RELAY_FETCH_RESULT', reqId, ok: resp.ok, status: resp.status, statusText: resp.statusText, headers, bodyText }, window.location.origin)
+      } catch (e: any) {
+        window.parent?.postMessage({ type: 'WS_RELAY_FETCH_RESULT', reqId, ok: false, status: 500, statusText: String(e?.message || 'error'), headers: {}, bodyText: '' }, window.location.origin)
+      }
+    })()
+  }
 })
 
 // Inject a script into the page context to hook fetch/XMLHttpRequest

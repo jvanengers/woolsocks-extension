@@ -31,7 +31,7 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest', 'webNavigation'],
+  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest', 'webNavigation', 'offscreen'],
   host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {
@@ -99,6 +99,7 @@ export default defineConfig({
         entrance: 'src/content/entrance.ts',
         ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
+        offscreen: 'src/offscreen/relay.html',
       },
     },
   },
