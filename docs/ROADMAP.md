@@ -12,6 +12,8 @@ This roadmap outlines planned enhancements across browsers and mobile companions
 
 ## 1) Realtime blacklists and alternative UX
 
+Status: Blocked, Waiting for Firebase setup
+
 Goal: Support realtime blacklists for two flows and provide a fallback experience that avoids proactive reminders while still allowing usage.
 
 - Realtime blacklist types
@@ -33,6 +35,8 @@ Goal: Support realtime blacklists for two flows and provide a fallback experienc
 
 ## 2) Voucher analytics and BI integration
 
+Status: Blocked, Waiting for BI integratiom details
+
 Goal: Expand analytics to cover voucher funnel and make key events available to BI.
 
 - Events (GA4 Measurement Protocol)
@@ -49,6 +53,8 @@ Goal: Expand analytics to cover voucher funnel and make key events available to 
 
 ## 3) Anonymous (not logged in) behaviors
 
+Status: Ready for refinement
+
 Goal: Ensure utility without a session.
 
 - Popup
@@ -61,6 +67,8 @@ Goal: Ensure utility without a session.
 ---
 
 ## 4) Anonymous online cashback clickouts and claim-after-login
+
+Status: Blocked, Waiting for backend changes
 
 Goal: Allow clickouts when anonymous and let users claim cashback later.
 
@@ -77,6 +85,8 @@ Goal: Allow clickouts when anonymous and let users claim cashback later.
 ---
 
 ## 5) Safari Extensions (macOS & iOS/iPadOS)
+
+Status: In progress. See branch feature/safari-ios-extension
 
 ### iOS/iPadOS (Mobile Safari)
 
@@ -110,6 +120,8 @@ Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder 
 
 ## 6) Firefox support (desktop and mobile)
 
+Status: Ready for refinement
+
 Goal: Port MV3 functionality to Firefox variants.
 
 - Desktop
@@ -125,6 +137,8 @@ Goal: Port MV3 functionality to Firefox variants.
 
 ## 7) Android companion app (VPN-based reminders)
 
+Status: Ready for refinement
+
 Goal: Provide cross-browser reminders on Android using a local VPN service to observe domains. No checkout detection.
 
 - Network observation
@@ -137,6 +151,8 @@ Goal: Provide cross-browser reminders on Android using a local VPN service to ob
   - Works across all Android browsers; low battery impact; no content inspection; user can deep link to web/app flows.
 
 ## 8) Explicit auto-activation consent per platform
+
+Status: Ready for refinement
 
 Goal: Define platform-specific rules for auto-activating cashback via redirects, with explicit consent where allowed and compliant fallbacks where not.
 
@@ -192,6 +208,8 @@ User can disable auto activation. All activity should be transparent.
 
 ## 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
 
+Status: Ready for refinement
+
 Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows (e.g., relay, cookie-first proxying, activation confirmation) and determine if we can eliminate or hide them while preserving all functionality and policy compliance.
 
 - Background
@@ -218,6 +236,8 @@ Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows
 ---
 
 ## 10) Competitor suggestions when no cashback is available
+
+Status: Ready for refinement
 
 Goal: When a user visits a site without an available Woolsocks cashback/voucher deal, provide an unobtrusive suggestion to use an alternative partner where we do offer cashback (e.g., visiting `booking.com` → suggest `expedia.com`).
 
