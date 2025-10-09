@@ -115,6 +115,7 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - Broader cashback metrics and user controls
 
 See the full roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
+See the implementation plan for Dual Blacklists in [docs/feature-dual-blacklists-remote-config.md](docs/feature-dual-blacklists-remote-config.md).
 
 ## License
 MIT
