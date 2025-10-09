@@ -12,6 +12,11 @@ const DIAG = false
 
 const SITE_BASE = 'https://woolsocks.eu'
 
+function canCreateRelayTab(): boolean {
+  // Allow programmatic relay tab creation only on Chrome (offscreen supported)
+  try { return !!(chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function' } catch { return false }
+}
+
 async function getHeaders(): Promise<HeadersInit> {
   const userId = await getUserId()
   const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
@@ -137,6 +142,10 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
   async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
     const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
     if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    if (!canCreateRelayTab()) {
+      // Do not create a visible tab on platforms without offscreen support
+      throw new Error('Relay tab creation disabled on this platform')
+    }
     const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
     return { tabId: t.id!, created: true }
   }
@@ -211,6 +220,9 @@ async function relayFetchViaTabCustomHeaders<T>(endpoint: string, headersOverrid
   async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
     const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
     if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    if (!canCreateRelayTab()) {
+      throw new Error('Relay tab creation disabled on this platform')
+    }
     const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
     return { tabId: t.id!, created: true }
   }
