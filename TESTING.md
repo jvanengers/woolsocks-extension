@@ -1,10 +1,38 @@
 # Testing Guide (Manual / E2E)
 
-Current scope: NL users, voucher checkout detection.
+Current scope: NL users, voucher checkout detection, anonymous user behaviors.
 
 ## Session
 1. Open `https://woolsocks.eu/nl/profile` and sign in (cookies must exist)
 2. Open the extension Options page and verify it says "Hi {firstname}" and shows a sock value
+
+## Anonymous user behaviors (roadmap #3)
+1. **Setup**: Ensure you're NOT logged in to woolsocks.eu (clear cookies or use incognito)
+2. **Popup functionality**:
+   - Visit a supported partner site (e.g., `https://www.zalando.nl/`, `https://www.hema.nl/`)
+   - Click the extension icon
+   - Verify popup shows available deals with correct rates
+   - Verify "Login" button is visible instead of balance
+   - Click login button - should open `https://woolsocks.eu/nl/profile`
+3. **Online cashback reminder**:
+   - As anonymous user, navigate to partner homepage
+   - Verify cashback reminder pill appears with "Login" button
+   - Verify correct cashback rate is displayed
+   - Verify pill has reduced vertical padding (more compact)
+4. **Checkout detection**:
+   - As anonymous user, add items to cart on supported site
+   - Proceed to checkout page
+   - Verify voucher panel appears (if vouchers available)
+   - Verify vouchers are clickable and work without authentication
+5. **Analytics verification**:
+   - Open service worker console (chrome://extensions → Inspect service worker)
+   - As anonymous user, interact with popup and reminders
+   - Verify `anonymous_deals_viewed` and `anonymous_login_clicked` events are tracked
+6. **Session transition**:
+   - Start as anonymous user viewing deals in popup
+   - Login to woolsocks.eu in another tab
+   - Return to extension popup and refresh
+   - Verify UI updates to show balance and authenticated state
 
 ## Offscreen relay (roadmap #9) — Chrome
 1. Ensure the extension is built and loaded (unpacked) in Chrome.
