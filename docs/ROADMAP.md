@@ -1,0 +1,243 @@
+## Woolsocks Extension Roadmap
+
+This roadmap outlines planned enhancements across browsers and mobile companions. It will be maintained in Git and updated as scope clarifies.
+
+### Guiding principles
+- Privacy-first, minimal data collection; clear user consent.
+- Operate gracefully without a logged-in session; unlock more when signed in.
+- Consistent UX across Chrome, Safari (desktop/mobile), Firefox, and Android companion.
+- Resilient affiliate tracking with idempotency and explicit user feedback.
+
+---
+
+## 1) Realtime blacklists and alternative UX
+
+Goal: Support realtime blacklists for two flows and provide a fallback experience that avoids proactive reminders while still allowing usage.
+
+- Realtime blacklist types
+  - Online cashback
+  - Voucher checkout
+- Delivery
+  - Fetch blacklist config at startup and on interval; accept push/remote overrides.
+  - Cache with short TTL; fail-open with last-known good and versioning.
+- Behavior
+  - When blacklisted, suppress proactive reminders and redirects for the matching flow.
+  - Show alternative UI: inline, unobtrusive “Try cashback” or “See vouchers” affordance the user can pull, without auto prompts.
+  - Log reasons (e.g., domain rule, partner rule, policy) for audit.
+- Analytics
+  - Emit `*_blocked` with `reason`, `policy_version`, and `flow`.
+- Success criteria
+  - Config propagates within 5 minutes; zero proactive prompts on blacklisted sites; manual affordance available and functional.
+
+---
+
+## 2) Voucher analytics and BI integration
+
+Goal: Expand analytics to cover voucher funnel and make key events available to BI.
+
+- Events (GA4 Measurement Protocol)
+  - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
+  - Parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
+- Key events
+  - Mark `voucher_click` and `voucher_used` as Key events.
+- BI integration
+  - Export events to the data warehouse (e.g., BigQuery export or server-side relay) for dashboarding.
+- Success criteria
+  - Funnel dashboards exist for impressions → clicks → usage; event volume sampled < 5% or unsampled.
+
+---
+
+## 3) Anonymous (not logged in) behaviors
+
+Goal: Ensure utility without a session.
+
+- Popup
+  - When not logged in, tapping the icon should still show eligible deals for the current site.
+- Reminders
+  - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
+- Success criteria
+  - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
+
+---
+
+## 4) Anonymous online cashback clickouts and claim-after-login
+
+Goal: Allow clickouts when anonymous and let users claim cashback later.
+
+- Clickout flow (anonymous)
+  - Generate ephemeral click/session id client-side; store locally with timestamp and domain.
+  - Redirect through affiliate with id embedded (or mapped server-side via relay endpoint if required).
+- Claim flow
+  - On later login, reconcile recent anonymous clicks (time/windowed) with cookie-authorized session; attach to user.
+- Fraud/abuse controls
+  - Include domain, IP coarse hash, and UA fingerprint hash (privacy-preserving) for dedupe/risk.
+- Success criteria
+  - Anonymous click leads to tracked activation; upon login within window, click is associated and visible in account.
+
+---
+
+## 5) Safari Extensions (macOS & iOS/iPadOS)
+
+### iOS/iPadOS (Mobile Safari)
+
+Goal: Bundle a Safari Web Extension inside the Woolsocks app with app group storage and deep links to in-app voucher checkout.
+
+- App group
+  - Share settings/session signals via `App Group` between host app and extension.
+- Deep linking
+  - From extension UI, open app to voucher checkout via universal link; pass context (partner, product, rate).
+- Build & distribution
+  - Xcode workspace with extension target; align entitlements and provisioning; TestFlight.
+- Success criteria
+  - Extension runs on iOS Safari; deep link opens app at voucher checkout; settings sync via app group.
+
+### macOS (Desktop Safari)
+
+Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder UI, voucher panel, and manual cashback activation (no auto-redirects without a user gesture per Apple policy).
+
+- Packaging
+  - macOS app container with a Safari Web Extension target; signed and notarized via Developer ID; distributed via Mac App Store or direct (if applicable).
+- Entitlements & storage
+  - Configure required entitlements; use shared container or app group if pairing with a macOS host app; persist settings in extension storage.
+- UX constraints
+  - Activation must be user-initiated (click/tap). Provide clear “Activate cashback” controls in popup or page UI; visible feedback after activation.
+- Testing
+  - Validate on latest macOS/Safari versions; cover permission prompts, content injection, and gesture-gated redirects.
+- Success criteria
+  - Extension installs and runs on Desktop Safari; partner detection, reminders, voucher panel work; activation adheres to Apple review guidelines.
+
+---
+
+## 6) Firefox support (desktop and mobile)
+
+Goal: Port MV3 functionality to Firefox variants.
+
+- Desktop
+  - Validate APIs parity (alarms, storage, webNavigation, cookies). Replace gaps with polyfills/workarounds.
+- Android (Firefox Mobile)
+  - Optimize for limited APIs; ensure popup/options UI renders and core detection works.
+- Packaging
+  - WebExtension manifest adjustments; AMO listing and signing.
+- Success criteria
+  - Feature parity for detection, reminders, voucher panel, and cashback activation on desktop; core flows on mobile.
+
+---
+
+## 7) Android companion app (VPN-based reminders)
+
+Goal: Provide cross-browser reminders on Android using a local VPN service to observe domains. No checkout detection.
+
+- Network observation
+  - Local VPN captures outbound domains (never payload); maintain in-memory recent domain ring.
+- Reminder engine
+  - When visiting a supported domain, trigger a system notification offering vouchers/cashback; open deep link to web or app.
+- Privacy & controls
+  - On-device only; explicit opt-in; clear pause/disable and data deletion.
+- Success criteria
+  - Works across all Android browsers; low battery impact; no content inspection; user can deep link to web/app flows.
+
+## 8) Explicit auto-activation consent per platform
+
+Goal: Define platform-specific rules for auto-activating cashback via redirects, with explicit consent where allowed and compliant fallbacks where not.
+
+### Chrome Web Store (Google) — upfront consent + countdown notification with opt out
+We should adapt the automatic redirection pattern so it follows these guidelines:
+	1.	During onboarding, ask explicitly:
+“Do you want Woolsocks to auto-activate cashback (redirect via affiliate link) when you visit partner stores?”
+→ Options: Enable auto mode / Ask me each time
+	2.	If user enables auto mode, you remember their preference, but you do not silently redirect.
+	3.	At each partner store load, show a small but obvious UI element (banner, toast, modal) saying:
+“Auto-activating cashback in 3…2…1 — click here to cancel”
+Or
+“Activate cashback now → [button]”
+	4.	If needed, you can implement a countdown (3→2→1) before redirect, as long as the countdown is visible, counts down in the UI, and the user can cancel or see that it’s happening.
+	5.	Always let the user opt-out later (in settings or toggle) and make the auto behavior reversible.
+	6.	In your extension listing/privacy docs, clearly disclose the affiliate monetization and redirection behavior.
+Don’t do background tabs that user doesn’t see. Don’t silently override cookies. Everything must be traceable and visible.
+	3.	Respect existing affiliate attribution
+Don’t override someone’s affiliate tags or tracking codes already present (unless you’re absolutely sure it’s expired or invalid).
+	5.	Always let user opt out or revoke
+User can disable auto activation. All activity should be transparent.
+
+### Safari (macOS & iOS) — automatic redirects not allowed
+
+- Policy
+  - Apple reviewers reject automatic redirects that are not triggered by explicit user action at that moment.
+  - Prior consent does not suffice; each redirect must be user-initiated (click/tap).
+- UX pattern
+  - Always present an explicit action: “Activate cashback” button in popup, page action, or inline panel.
+  - No background auto-redirects; show state after user taps: “Cashback activated for {domain}”.
+- Implementation
+  - Ensure redirect occurs strictly from a user gesture handler.
+  - Keep settings to remember preference for showing prompts, but never bypass the click requirement.
+- Success criteria
+  - All activations require a user gesture; passes App Store/Safari Extension review.
+
+### Android / Play Store — allowed for native apps (not Chrome extensions)
+
+- Policy
+  - Native apps may perform auto-activation if clearly explained during onboarding and togglable later.
+  - Chrome-based extensions follow Chrome Web Store rules (see Chrome section).
+- Recommended UX (native app)
+  - Onboarding prompt:
+    - “Enable automatic cashback activation when you open partner stores?”
+    - [Yes, activate automatically] / [No, remind me first]
+- Implementation
+  - Store consent in app settings; provide toggle to change later.
+  - Show notification/toast upon activation for transparency.
+- Success criteria
+  - Clear opt-in, revocable; transparent activation feedback; compliant with Play policies.
+
+---
+
+## 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
+
+Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows (e.g., relay, cookie-first proxying, activation confirmation) and determine if we can eliminate or hide them while preserving all functionality and policy compliance.
+
+- Background
+  - The extension may open a `woolsocks.eu` tab to relay authenticated API requests or confirm activation when background contexts lack cookie access.
+  - Users can observe brief tab flashes, which is undesirable UX.
+- Investigation
+  - Map every code path that opens a `woolsocks.eu` tab: purpose, triggering event, required cookies/headers, lifetime, and close conditions.
+  - Measure frequency, duration, and user-visible impact across key sites and flows.
+  - Review browser policies for hidden/offscreen contexts per platform.
+- Alternatives to evaluate
+  - Background fetch with credentials via site-proxy where allowed; re-check MV3 constraints.
+  - Offscreen documents (Chrome MV3) for fetch/UI-less work; lifecycle and permission review.
+  - Extension `cookies` permission with first-party partitioned cookies where applicable.
+  - Content-script relay on an existing `woolsocks.eu` tab (only when user has it open), avoiding programmatic opens.
+  - Using `declarativeNetRequest` or `webRequest` alternatives for redirect confirmation without a visible tab (policy constraints permitting).
+  - For Safari: evaluate app group messaging and XPC to avoid tab opens; for Firefox: equivalent background capabilities.
+- Risks & constraints
+  - Some flows may require a foreground browsing context for cookie inclusion or redirect completion, depending on browser.
+  - Offscreen or hidden contexts differ by browser and review policies.
+- Success criteria
+  - No user-visible `woolsocks.eu` tab opens/closes during standard flows on supported browsers, or tab flashes reduced by >95% with no loss of functionality.
+  - All changes remain compliant with Chrome Web Store, App Store (Safari), and AMO policies.
+
+---
+
+## 10) Competitor suggestions when no cashback is available
+
+Goal: When a user visits a site without an available Woolsocks cashback/voucher deal, provide an unobtrusive suggestion to use an alternative partner where we do offer cashback (e.g., visiting `booking.com` → suggest `expedia.com`).
+
+- Detection
+  - If current domain is not eligible for any active deal in the user’s locale, and not blacklisted, trigger competitor suggestion logic.
+  - Use a curated mapping from domain → alternative partners, with country-aware fallbacks and A/B variants.
+- UX
+  - Show a subtle, dismissible prompt (popup panel or page badge) with: “No cashback here. Try Expedia for cashback.” and an action button.
+  - Never block the user’s current flow; easy dismiss; respect cooldown per domain.
+  - Honor real-time blacklist to suppress suggestions on sensitive sites.
+- Attribution and routing
+  - Clicking the suggestion opens the partner via our standard tracked clickout flow (subject to consent/policy per platform).
+  - Do not auto-redirect; always user-initiated.
+- Policy & ethics
+  - Avoid misleading claims; clearly label as partner suggestion with potential cashback.
+  - Respect competing affiliate tags on the current site; do not interfere.
+  - Platform rules apply (e.g., Safari requires explicit user action for redirects).
+- Analytics
+  - Emit `comp_suggested`, `comp_view`, `comp_click` with `source_domain`, `suggested_partner`, `country`, `reason`.
+- Success criteria
+  - Meaningful CTR without elevated dismiss/complaint rates; measurable lift in total cashback activations; compliant with platform policies.
+
+
