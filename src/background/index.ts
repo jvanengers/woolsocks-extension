@@ -520,7 +520,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
     ]
     const assets = {
       uspIconUrl: asset('public/icons/Circle checkmark.svg'),
-      wsLogoUrl: asset('public/icons/Woolsocks-logo-large.svg'),
+      wsLogoUrl: asset('public/icons/Woolsocks-logo-large.png'),
       externalIconUrl: asset('public/icons/External-link.svg'),
       paymentIconUrls: paymentIconFiles.map(asset),
     }
@@ -583,7 +583,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   ]
   const assets = {
     uspIconUrl: asset('public/icons/Circle checkmark.svg'),
-    wsLogoUrl: asset('public/icons/Woolsocks-logo-large.svg'),
+    wsLogoUrl: asset('public/icons/Woolsocks-logo-large.png'),
     externalIconUrl: asset('public/icons/External-link.svg'),
     paymentIconUrls: paymentIconFiles.map(asset),
   }

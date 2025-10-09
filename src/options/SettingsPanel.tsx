@@ -415,7 +415,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           {variant === 'popup' && (
             <div style={{ textAlign: 'center', marginTop: 15 }}>
               <img
-                src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.svg')}
+                src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.png')}
                 alt="Woolsocks"
                 style={{ height: 33, width: 140 }}
               />
