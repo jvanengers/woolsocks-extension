@@ -30,6 +30,25 @@ async function fetchUserInfo(): Promise<WsProfile | null> {
   }
 }
 
+async function fetchWalletData(): Promise<any> {
+  try {
+    const anonId = await getAnonId()
+    const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true'
+    const resp = await fetch(url, {
+      credentials: 'include',
+      headers: {
+        'x-application-name': 'WOOLSOCKS_WEB',
+        'x-user-id': anonId,
+      },
+    })
+    if (!resp.ok) return null
+    const data = await resp.json()
+    return data
+  } catch {
+    return null
+  }
+}
+
 async function fetchTransactions(): Promise<WsTransaction[]> {
   try {
     const anonId = await getAnonId()
@@ -88,6 +107,7 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
 export default function SettingsPanel({ variant = 'options', onBalance }: { variant?: 'popup' | 'options'; onBalance?: (balance: number) => void }) {
   const [session, setSession] = useState<boolean | null>(null)
   const [profile, setProfile] = useState<WsProfile | null>(null)
+  const [walletData, setWalletData] = useState<any>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
   const [autoOc, setAutoOc] = useState<boolean>(true)
@@ -98,6 +118,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       setSession(has)
       if (has) {
         loadProfile()
+        loadWalletData()
         loadTransactions()
         loadQaBypass()
         loadAutoOc()
@@ -119,6 +140,11 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   async function loadProfile() {
     const p = await fetchUserInfo()
     setProfile(p)
+  }
+
+  async function loadWalletData() {
+    const w = await fetchWalletData()
+    setWalletData(w)
   }
 
   async function loadTransactions() {
@@ -165,13 +191,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     (profile as any)?.data?.email || (profile as any)?.email || (profile as any)?.user?.email || (profile as any)?.profile?.email
   const isQaUser = !!email && /@(woolsocks\.eu|apcreation\.nl)$/i.test(email)
 
-  const sockValueRaw: number | undefined =
-    profile?.data?.sockValue ??
-    profile?.data?.cashback?.sockValue ??
-    profile?.data?.cashbackSock ??
-    profile?.data?.balance ??
-    profile?.sockValue ??
-    profile?.balance
+  const sockValueRaw: number | undefined = walletData?.data?.balance?.totalAmount
 
   const sockValue = typeof sockValueRaw === 'number' ? sockValueRaw : 0
 

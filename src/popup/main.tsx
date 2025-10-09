@@ -125,20 +125,13 @@ function App() {
         const stored = await chrome.storage.local.get('wsAnonId')
         const anonId: string = stored?.wsAnonId || crypto.randomUUID()
         if (!stored?.wsAnonId) await chrome.storage.local.set({ wsAnonId: anonId })
-        const resp = await fetch('https://woolsocks.eu/api/wsProxy/user-info/api/v0', {
+        const resp = await fetch('https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true', {
           credentials: 'include',
           headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId },
         })
         if (!resp.ok) return
         const data: any = await resp.json()
-        const raw:
-          number | undefined =
-          data?.data?.sockValue ??
-          data?.data?.cashback?.sockValue ??
-          data?.data?.cashbackSock ??
-          data?.data?.balance ??
-          data?.sockValue ??
-          data?.balance
+        const raw: number | undefined = data?.data?.balance?.totalAmount
         const b = typeof raw === 'number' ? raw : 0
         setBalance(b)
         const el = document.getElementById('__ws_balance')
