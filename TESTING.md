@@ -6,6 +6,22 @@ Current scope: NL users, voucher checkout detection.
 1. Open `https://woolsocks.eu/nl/profile` and sign in (cookies must exist)
 2. Open the extension Options page and verify it says "Hi {firstname}" and shows a sock value
 
+## Offscreen relay (roadmap #9) — Chrome
+1. Ensure the extension is built and loaded (unpacked) in Chrome.
+2. Open Chrome extension service worker console (chrome://extensions → Inspect service worker).
+3. Visit a supported merchant homepage (e.g., `https://www.zalando.nl/`).
+4. Verify no visible `woolsocks.eu` tab opens/closes during background API calls.
+5. In the SW console, confirm analytics events appear over time:
+   - `relay_attempt_offscreen`, `relay_offscreen_success` (status 200)
+   - No frequent `relay_offscreen_fail` for common endpoints
+6. Trigger a cashback redirect from popup and confirm no `woolsocks.eu` flashes occur.
+
+## Relay behavior — Firefox/Safari
+1. Load the extension build in Firefox or Safari.
+2. Visit a supported merchant.
+3. Confirm no programmatic `woolsocks.eu` tab creation occurs; if a `woolsocks.eu` tab is already open, relay may reuse it.
+4. Basic flows (popup session check, voucher fetch) should still work; if a call requires cookies and reuse is unavailable, expect graceful fallback without tab flashes.
+
 ## Voucher panel
 1. Visit a supported partner checkout/cart page (examples)
    - Zalando: `https://www.zalando.nl/cart/`
@@ -38,3 +54,5 @@ Open the service worker console (chrome://extensions → Inspect service worker)
 - If the panel does not appear, verify checkout URL and session
 - If links 404, confirm `providerReferenceId` exists in RAW deals and matches the product URL
 - If amounts show €0.00 initially, wait a moment; the detector re-checks as the page renders
+ - If offscreen relay fails on Chrome, check `chrome.offscreen` API availability and reload the extension
+ - If analytics do not show relay events, verify background initialized analytics and network access is allowed
