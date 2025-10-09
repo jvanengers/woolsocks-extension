@@ -12,6 +12,23 @@ let queue: AnalyticsEvent[] = []
 let flushing = false
 let initialized = false
 
+// Human-readable descriptions for online cashback lifecycle events.
+// These are sent as the GA4 event parameter `oc_event_desc` so they can be
+// registered as an event-scoped custom dimension for reporting.
+const OC_EVENT_DESCRIPTIONS: Record<string, string> = {
+  oc_partner_detected: 'Recognized current site as a supported cashback partner',
+  oc_eligible: 'Visit is eligible for cashback based on rules and country',
+  oc_redirect_requested: 'Requested tracked redirect via affiliate link',
+  oc_redirect_issued: 'Generated affiliate/tracking URL and initiated navigation',
+  oc_redirect_navigated: 'Browser navigated to affiliate/merchant as part of redirect',
+  oc_blocked: 'Flow blocked due to settings, cooldown, or missing requirements',
+  oc_state_query: 'Checked current activation/attribution state for this domain',
+  oc_activated: 'Cashback tracking is active for this domain/tab',
+  oc_state_reemit: 'Re-broadcasted activation state to ensure UI consistency',
+  oc_state_mark_active: 'Marked domain active without a fresh redirect (state restore)',
+  oc_restore_deeplink: 'Restored original deep link after affiliate hop',
+}
+
 async function getClientId(): Promise<string> {
   const stored = await chrome.storage.local.get('wsAnonId')
   let id = stored?.wsAnonId as string | undefined
@@ -52,8 +69,14 @@ export async function track(name: string, params?: Record<string, any>): Promise
     // Always enrich with extension version and timestamp
     const version = chrome.runtime.getManifest().version
     const now = Date.now()
+    // Auto-attach human-readable description for oc_* events, unless caller
+    // already provided one.
+    const desc = (params && typeof params.oc_event_desc === 'string' && params.oc_event_desc)
+      || OC_EVENT_DESCRIPTIONS[name]
+      || undefined
     const enriched = {
       ...params,
+      ...(desc ? { oc_event_desc: desc } : {}),
       ext_version: version,
       ts: now,
     }
