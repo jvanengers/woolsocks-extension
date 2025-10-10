@@ -146,7 +146,7 @@ export interface Translations {
 const translations: Record<Language, Translations> = {
   en: {
     voucher: {
-      title: 'Voucher',
+      title: 'Voucher', // Test change for Lokalise sync
       purchaseAmount: 'Purchase amount',
       cashbackText: "You'll get ",
       cashbackSuffix: ' of cashback',
