@@ -6,7 +6,7 @@ import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
 import { track } from './analytics'
 import { setupOnlineCashbackFlow, getDomainActivationState, removeTabFromOtherDomains } from './online-cashback'
 import { fetchWalletDataCached, fetchTransactionsCached, fetchUserProfileCached } from '../shared/cached-api'
-import { getStats, cleanupExpired, restoreFromPersistent, CACHE_NAMESPACES } from '../shared/cache'
+import { getStats, restoreFromPersistent, CACHE_NAMESPACES } from '../shared/cache'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -579,44 +579,67 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     })()
     return true
+  } else if (message?.type === 'CACHE_PRELOAD_REQUEST') {
+    // Handle cache preload request from popup
+    ;(async () => {
+      try {
+        await preloadPopularMerchants()
+        sendResponse({ success: true })
+      } catch (error) {
+        console.warn('[Cache] Preload request failed:', error)
+        sendResponse({ success: false, error: (error as Error)?.message })
+      }
+    })()
+    return true
   }
 })
 
 // --- Cache Management and Background Refresh --------------------------------
 
-// Set up cache cleanup alarm
-chrome.alarms.create('cache-cleanup', {
-  delayInMinutes: 24 * 60, // 24 hours
-  periodInMinutes: 24 * 60 // Every 24 hours
-})
+// Event-driven cache cleanup and preload (replaces chrome.alarms)
+let cleanupThrottle = 0
+const CLEANUP_THROTTLE_MS = 60 * 60 * 1000 // 1 hour
 
-// Set up cache preload alarm
-chrome.alarms.create('cache-preload', {
-  delayInMinutes: 30, // 30 minutes
-  periodInMinutes: 30 // Every 30 minutes
-})
-
-// Handle cache-related alarms
-chrome.alarms.onAlarm.addListener(async (alarm) => {
+/**
+ * Trigger cache cleanup if needed (throttled to once per hour)
+ */
+async function triggerCleanupIfNeeded() {
+  const now = Date.now()
+  if (now - cleanupThrottle < CLEANUP_THROTTLE_MS) return
+  
+  cleanupThrottle = now
   try {
-    if (alarm.name === 'cache-cleanup') {
-      const removed = await cleanupExpired()
-      console.log(`[Cache] Cleanup removed ${removed} expired entries`)
-    } else if (alarm.name === 'cache-preload') {
-      // Pre-warm cache for popular merchants
-      const popularMerchants = ['bol.com', 'zalando.nl', 'coolblue.nl', 'wehkamp.nl', 'mediamarkt.nl', 'ikea.nl', 'hema.nl']
-      for (const merchant of popularMerchants) {
-        try {
-          await getPartnerByHostname(merchant)
-        } catch (error) {
-          console.warn(`[Cache] Failed to preload ${merchant}:`, error)
-        }
-      }
-    }
+    // Cleanup main cache
+    const { cleanupIfNeeded } = await import('../shared/cache')
+    await cleanupIfNeeded()
+    
+    // Cleanup scraper cache
+    const { cleanupScraperCacheIfNeeded } = await import('./deals-scraper')
+    await cleanupScraperCacheIfNeeded()
   } catch (error) {
-    console.warn('[Cache] Alarm handler error:', error)
+    console.warn('[Cache] Event-driven cleanup failed:', error)
   }
-})
+}
+
+/**
+ * Preload popular merchants cache
+ */
+async function preloadPopularMerchants() {
+  const popularMerchants = ['bol.com', 'zalando.nl', 'coolblue.nl', 'wehkamp.nl', 'mediamarkt.nl', 'ikea.nl', 'hema.nl']
+  const { getPartnerByHostname } = await import('./api')
+  
+  for (const merchant of popularMerchants) {
+    try {
+      await getPartnerByHostname(merchant)
+    } catch (error) {
+      console.warn(`[Cache] Failed to preload ${merchant}:`, error)
+    }
+  }
+}
+
+// Event-driven cleanup triggers
+chrome.tabs.onActivated.addListener(() => triggerCleanupIfNeeded())
+chrome.webNavigation.onCompleted.addListener(() => triggerCleanupIfNeeded())
 
 // Initialize cache on startup
 chrome.runtime.onStartup?.addListener(async () => {
@@ -628,8 +651,21 @@ chrome.runtime.onStartup?.addListener(async () => {
       CACHE_NAMESPACES.PARTNER_CONFIG,
     ])
     console.log('[Cache] Restored from persistent storage on startup')
+    
+    // Trigger cleanup and preload on startup
+    await triggerCleanupIfNeeded()
+    await preloadPopularMerchants()
   } catch (error) {
-    console.warn('[Cache] Error restoring from persistent storage:', error)
+    console.warn('[Cache] Error during startup initialization:', error)
+  }
+})
+
+// Also trigger preload on install
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    await preloadPopularMerchants()
+  } catch (error) {
+    console.warn('[Cache] Error during install preload:', error)
   }
 })
 

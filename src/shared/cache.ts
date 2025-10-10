@@ -346,6 +346,33 @@ export async function getStats(): Promise<CacheStats> {
   }
 }
 
+// Cache cleanup throttling constants
+const LAST_CLEANUP_KEY = '__ws_last_cleanup_timestamp'
+const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours
+
+/**
+ * Check if cleanup is needed and run it if so
+ * Throttles cleanup to run at most once per 24 hours
+ */
+export async function cleanupIfNeeded(): Promise<number> {
+  const stored = await chrome.storage.local.get(LAST_CLEANUP_KEY)
+  const lastCleanup = stored[LAST_CLEANUP_KEY] || 0
+  const now = Date.now()
+  
+  if (now - lastCleanup < CLEANUP_INTERVAL) {
+    return 0 // Skip cleanup
+  }
+  
+  const removed = await cleanupExpired()
+  await chrome.storage.local.set({ [LAST_CLEANUP_KEY]: now })
+  
+  if (removed > 0) {
+    console.log(`[Cache] Cleanup removed ${removed} expired entries`)
+  }
+  
+  return removed
+}
+
 /**
  * Cleanup expired entries from persistent storage
  */

@@ -70,6 +70,7 @@ export interface Translations {
     cashbackSock: string
     refresh: string
     recentTransactions: string
+    myCashbackTransactions: string
     noRecentTransactions: string
     viewAllTransactions: string
     enabled: string
@@ -200,6 +201,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Cashback sock',
       refresh: 'Refresh',
       recentTransactions: 'Recent transactions',
+      myCashbackTransactions: 'My cashback transactions',
       noRecentTransactions: 'No recent transactions found.',
       viewAllTransactions: 'View all transactions',
       enabled: 'Enabled',
@@ -326,6 +328,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Cashbacksock',
       refresh: 'Vernieuwen',
       recentTransactions: 'Recente transacties',
+      myCashbackTransactions: 'Mijn cashbacktransacties',
       noRecentTransactions: 'Geen recente transacties gevonden.',
       viewAllTransactions: 'Bekijk alle transacties',
       enabled: 'Ingeschakeld',
@@ -452,6 +455,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Cashback-Sock',
       refresh: 'Aktualisieren',
       recentTransactions: 'Letzte Transaktionen',
+      myCashbackTransactions: 'Meine Cashback-Transaktionen',
       noRecentTransactions: 'Keine letzten Transaktionen',
       viewAllTransactions: 'Alle Transaktionen anzeigen',
       enabled: 'Aktiviert',
@@ -570,6 +574,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Chaussette Cashback',
       refresh: 'Actualiser',
       recentTransactions: 'Transactions récentes',
+      myCashbackTransactions: 'Mes transactions de cashback',
       noRecentTransactions: 'Aucune transaction récente',
       viewAllTransactions: 'Voir toutes les transactions',
       enabled: 'Activé',
@@ -688,6 +693,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Calzino Cashback',
       refresh: 'Aggiorna',
       recentTransactions: 'Transazioni recenti',
+      myCashbackTransactions: 'Le mie transazioni cashback',
       noRecentTransactions: 'Nessuna transazione recente',
       viewAllTransactions: 'Visualizza tutte le transazioni',
       enabled: 'Abilitato',
@@ -806,6 +812,7 @@ const translations: Record<Language, Translations> = {
       cashbackSock: 'Calcetín Cashback',
       refresh: 'Actualizar',
       recentTransactions: 'Transacciones recientes',
+      myCashbackTransactions: 'Mis transacciones de cashback',
       noRecentTransactions: 'No hay transacciones recientes',
       viewAllTransactions: 'Ver todas las transacciones',
       enabled: 'Habilitado',

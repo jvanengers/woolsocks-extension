@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { translate, initLanguage } from './i18n'
-import { ONBOARDING_STEPS, getCashbackActivationOptions, applyCashbackActivationPreference } from './onboarding'
+import { getOnboardingSteps, getCashbackActivationOptions, applyCashbackActivationPreference } from './onboarding'
 import { getPlatform } from './platform'
 import StepIndicator from './StepIndicator'
 
@@ -43,10 +43,11 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
     }
   }, [])
 
-  const cashbackStepIndex = ONBOARDING_STEPS.findIndex(s => s.id === 'cashback-activation')
+  const onboardingSteps = getOnboardingSteps()
+  const cashbackStepIndex = onboardingSteps.findIndex(s => s.id === 'cashback-activation')
   const effectiveStepIndex = cashbackOnly ? cashbackStepIndex : currentStep
-  const isLastStep = cashbackOnly ? true : effectiveStepIndex === ONBOARDING_STEPS.length - 1
-  const isCashbackActivationStep = ONBOARDING_STEPS[effectiveStepIndex]?.id === 'cashback-activation'
+  const isLastStep = cashbackOnly ? true : effectiveStepIndex === onboardingSteps.length - 1
+  const isCashbackActivationStep = onboardingSteps[effectiveStepIndex]?.id === 'cashback-activation'
   const cashbackOptions = isCashbackActivationStep ? getCashbackActivationOptions() : []
 
   const handleNext = async () => {
@@ -89,7 +90,7 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
     }
   }
 
-  const step = ONBOARDING_STEPS[effectiveStepIndex]
+  const step = onboardingSteps[effectiveStepIndex]
   if (!step) return null
 
   return (
@@ -144,7 +145,7 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
       {!cashbackOnly && (
         <StepIndicator
           currentStep={currentStep}
-          totalSteps={ONBOARDING_STEPS.length}
+          totalSteps={onboardingSteps.length}
           onStepClick={(i) => setCurrentStep(i)}
           style={{ marginBottom: 16 }}
         />
@@ -164,7 +165,7 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
                   position: 'relative',
                   display: 'flex', alignItems: 'center', gap: 16,
                   border, borderRadius: 8, padding: 16, cursor: 'pointer',
-                  background: selected ? '#E5F3FF' : '#FFFFFF'
+                  background: '#FAFAFA'
                 }}
               >
                 {/* Radio */}

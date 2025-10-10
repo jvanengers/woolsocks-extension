@@ -31,7 +31,7 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'alarms', 'notifications', 'cookies', 'webRequest', 'webNavigation', 'offscreen'],
+  permissions: ['tabs', 'scripting', 'storage', 'notifications', 'cookies', 'webRequest', 'webNavigation', 'offscreen'],
   host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {

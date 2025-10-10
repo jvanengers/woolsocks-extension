@@ -1270,29 +1270,41 @@ export async function initializeScraper(): Promise<void> {
   console.log('On-demand scraper initialized')
 }
 
-// Set up periodic cache cleanup (remove old entries)
+// Scraper cache cleanup throttling constants
+const LAST_SCRAPER_CLEANUP_KEY = '__ws_last_scraper_cleanup_timestamp'
+const SCRAPER_CLEANUP_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours
+
+// Set up event-driven cache cleanup (replaces alarm-based cleanup)
 export function setupScrapingSchedule(): void {
-  // Clear existing alarm
-  chrome.alarms.clear('cache-cleanup')
+  // No longer needed - cleanup is handled by event-driven triggers in background/index.ts
+  console.log('Scraper schedule setup (event-driven cleanup enabled)')
+}
+
+/**
+ * Check if scraper cache cleanup is needed and run it if so
+ * Throttles cleanup to run at most once per 24 hours
+ */
+export async function cleanupScraperCacheIfNeeded(): Promise<number> {
+  const stored = await chrome.storage.local.get(LAST_SCRAPER_CLEANUP_KEY)
+  const lastCleanup = stored[LAST_SCRAPER_CLEANUP_KEY] || 0
+  const now = Date.now()
   
-  // Set new alarm for every 24 hours to clean up old cache entries
-  chrome.alarms.create('cache-cleanup', {
-    delayInMinutes: 24 * 60,
-    periodInMinutes: 24 * 60
-  })
+  if (now - lastCleanup < SCRAPER_CLEANUP_INTERVAL) {
+    return 0 // Skip cleanup
+  }
   
-  // Listen for alarm
-  chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'cache-cleanup') {
-      cleanupOldCacheEntries().catch(error => {
-        console.warn('Cache cleanup failed:', error)
-      })
-    }
-  })
+  const removed = await cleanupOldCacheEntries()
+  await chrome.storage.local.set({ [LAST_SCRAPER_CLEANUP_KEY]: now })
+  
+  if (removed > 0) {
+    console.log(`[Scraper] Cleanup removed ${removed} old cache entries`)
+  }
+  
+  return removed
 }
 
 // Clean up old cache entries
-async function cleanupOldCacheEntries(): Promise<void> {
+async function cleanupOldCacheEntries(): Promise<number> {
   try {
     const result = await chrome.storage.local.get(CACHE_KEY)
     const cache: MerchantCache = result[CACHE_KEY] || {}
@@ -1306,9 +1318,12 @@ async function cleanupOldCacheEntries(): Promise<void> {
       }
     }
     
+    const removed = Object.keys(cache).length - Object.keys(cleanedCache).length
     await chrome.storage.local.set({ [CACHE_KEY]: cleanedCache })
-    console.log(`Cache cleanup completed. Removed ${Object.keys(cache).length - Object.keys(cleanedCache).length} old entries.`)
+    console.log(`Cache cleanup completed. Removed ${removed} old entries.`)
+    return removed
   } catch (error) {
     console.warn('Failed to cleanup cache:', error)
+    return 0
   }
 }

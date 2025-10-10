@@ -10,38 +10,43 @@ export interface OnboardingStep {
 import { translate } from './i18n'
 import { getPlatform, allowsAutoRedirect } from './platform'
 
-export const ONBOARDING_STEPS: OnboardingStep[] = [
-  {
-    id: 'welcome',
-    title: translate('onboarding.welcomeTitle'),
-    content: translate('onboarding.welcomeContent'),
-    icon: '🎉'
-  },
-  {
-    id: 'cashback',
-    title: translate('onboarding.cashbackTitle'),
-    content: translate('onboarding.cashbackContent'),
-    icon: '💰'
-  },
-  {
-    id: 'activation',
-    title: translate('onboarding.activationTitle'),
-    content: translate('onboarding.activationContent'),
-    icon: '✅'
-  },
-  {
-    id: 'vouchers',
-    title: translate('onboarding.vouchersTitle'),
-    content: translate('onboarding.vouchersContent'),
-    icon: '🎁'
-  },
-  {
-    id: 'cashback-activation',
-    title: translate('onboarding.cashbackActivationTitle'),
-    content: translate('onboarding.cashbackActivationContent'),
-    icon: '⚡'
-  }
-]
+export function getOnboardingSteps(): OnboardingStep[] {
+  return [
+    {
+      id: 'welcome',
+      title: translate('onboarding.welcomeTitle'),
+      content: translate('onboarding.welcomeContent'),
+      icon: '🎉'
+    },
+    {
+      id: 'cashback',
+      title: translate('onboarding.cashbackTitle'),
+      content: translate('onboarding.cashbackContent'),
+      icon: '💰'
+    },
+    {
+      id: 'activation',
+      title: translate('onboarding.activationTitle'),
+      content: translate('onboarding.activationContent'),
+      icon: '✅'
+    },
+    {
+      id: 'vouchers',
+      title: translate('onboarding.vouchersTitle'),
+      content: translate('onboarding.vouchersContent'),
+      icon: '🎁'
+    },
+    {
+      id: 'cashback-activation',
+      title: translate('onboarding.cashbackActivationTitle'),
+      content: translate('onboarding.cashbackActivationContent'),
+      icon: '⚡'
+    }
+  ]
+}
+
+// Keep the old export for backward compatibility, but mark as deprecated
+export const ONBOARDING_STEPS = getOnboardingSteps()
 
 export function hasCompletedOnboarding(): boolean {
   return localStorage.getItem('woolsocks-onboarding-completed') === 'true'

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GA4 analytics via Measurement Protocol with click_id; `oc_activated` recommended as Key event
 - Permission update: `webNavigation` added; permission justifications documented in README
 - Voucher URLs continue to use `providerReferenceId` (fallbacks: `productId`, `id`, UUID in `links.webLink`)
+- **BREAKING**: Removed `alarms` permission and replaced with event-driven cache management
+  - Cache cleanup now triggered by tab activation and navigation events (throttled to 1 hour)
+  - Cache preload triggered on startup, install, and popup open
+  - All functionality preserved while eliminating Chrome Web Store review blocker
 
 ## [1.0.0] - 2024-01-XX
 

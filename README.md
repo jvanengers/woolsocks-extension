@@ -75,7 +75,6 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - `tabs` — read current tab URL for domain detection and update the URL on affiliate redirect.
 - `scripting` — inject minimal UI for vouchers and the activation pill.
 - `storage` — store user settings, per-domain cooldowns, activation registry, analytics queue.
-- `alarms` — periodic cleanup and analytics flush.
 - `notifications` — user feedback when cashback activates.
 - `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
 - ~~`webRequest`~~ — removed (not used in current implementation)
@@ -86,7 +85,7 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 ### Permission justifications
 - We must detect merchant domains (tabs/webNavigation) and redirect once to a tracked affiliate URL to enable cashback.
 - We call Woolsocks APIs via the site proxy; `cookies` are required so the browser includes first‑party cookies for authenticated requests.
-- `storage/alarms` support reliable operation (cooldowns, session activation state, analytics retries).
+- `storage` supports reliable operation (cooldowns, session activation state, analytics retries).
 - `scripting` is limited to minimal UI components, never injecting into sensitive origins.
 - `notifications` provide clear user feedback on activation.
  - `offscreen` is necessary to eliminate brief visible `woolsocks.eu` tab opens/closes on Chrome when relaying credentialed site‑proxy requests. The offscreen document hosts a hidden iframe under `woolsocks.eu` origin so first‑party cookies are included, while keeping the experience invisible and policy‑compliant. On browsers without `offscreen`, we do not programmatically open tabs; we reuse an existing `woolsocks.eu` tab if present.

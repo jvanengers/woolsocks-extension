@@ -39,6 +39,15 @@ function App() {
     // Check if onboarding should be shown
     const completed = hasCompletedOnboarding()
     setShowOnboarding(!completed)
+    
+    // Trigger cache preload on popup open (once per session)
+    ;(async () => {
+      try {
+        await chrome.runtime.sendMessage({ type: 'CACHE_PRELOAD_REQUEST' })
+      } catch (error) {
+        console.warn('[Popup] Cache preload request failed:', error)
+      }
+    })()
     ;(async () => {
       try {
         // Ask background to check via user-info with relay fallback
@@ -295,9 +304,10 @@ function App() {
   // bottom-right message styling.
   const brandBg = isTrackingActive ? '#00C275' : '#FDC408'
   const isConsentView = view === 'consent'
+  const isTransactionsView = view === 'transactions'
   return (
     <div style={{ 
-      background: isConsentView ? '#FFFFFF' : brandBg, 
+      background: isConsentView ? '#FFFFFF' : isTransactionsView ? '#F5F5F6' : brandBg, 
       borderRadius: 0, 
       overflow: 'hidden', 
       position: 'relative', 
@@ -305,16 +315,14 @@ function App() {
       maxHeight: 600, 
       display: 'flex', 
       flexDirection: 'column',
-      border: isConsentView ? '4px solid #FFFFFF' : `4px solid ${brandBg}`
+      border: isConsentView ? '4px solid #FFFFFF' : isTransactionsView ? '4px solid #F5F5F6' : `4px solid ${brandBg}`
     }}>
       {/* Header */}
       <div style={{ 
-        padding: view === 'transactions' ? '16px 0 0 0' : '8px 0 0 0',
+        padding: view === 'transactions' ? '16px 8px 0 8px' : '8px 8px 0 8px',
         display: 'flex', 
         justifyContent: 'space-between', 
-        alignItems: 'center',
-        paddingLeft: 8,
-        paddingRight: 8
+        alignItems: 'center'
       }}>
         {view === 'consent' ? (
           <>
@@ -331,11 +339,14 @@ function App() {
                 padding: 4,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                borderRadius: 8
               }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path fillRule="evenodd" clipRule="evenodd" d="M6.41421 13.0001L10.7071 17.293L9.29289 18.7072L3.29289 12.7072C2.90237 12.3167 2.90237 11.6835 3.29289 11.293L9.29289 5.29297L10.7071 6.70718L6.41421 11.0001H20V13.0001H6.41421Z" fill="#0F0B1C"/>
+                <path d="M15 18L9 12L15 6" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
             {/* Center spacer */}
@@ -345,6 +356,7 @@ function App() {
           </>
         ) : view === 'transactions' ? (
           <>
+            {/* Left: back button */}
             <button
               onClick={() => setView('home')}
               aria-label="Back"
@@ -357,13 +369,41 @@ function App() {
                 padding: 4,
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                borderRadius: 8
               }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path fillRule="evenodd" clipRule="evenodd" d="M6.41421 13.0001L10.7071 17.293L9.29289 18.7072L3.29289 12.7072C2.90237 12.3167 2.90237 11.6835 3.29289 11.293L9.29289 5.29297L10.7071 6.70718L6.41421 11.0001H20V13.0001H6.41421Z" fill="#0F0B1C"/>
+                <path d="M15 18L9 12L15 6" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
+
+            {/* Right: balance display */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 4, 
+              padding: '6px 10px',
+              background: 'rgba(0,0,0,0.05)',
+              borderRadius: 8,
+              height: 32
+            }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ 
+                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                fontSize: 14, 
+                fontWeight: 500, 
+                color: '#100B1C',
+                lineHeight: 1.45,
+                letterSpacing: '0.1px'
+              }}>
+                €{balance.toFixed(2)}
+              </span>
+            </div>
           </>
         ) : (
           session === true ? (
@@ -450,18 +490,16 @@ function App() {
         </div>
       ) : view === 'transactions' ? (
         session === true ? (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <SettingsPanel
-              variant="popup"
-              onBalance={(b) => {
-                try {
-                  setBalance(b)
-                  const el = document.getElementById('__ws_balance')
-                  if (el) el.textContent = `€${b.toFixed(2)}`
-                } catch {}
-              }}
-            />
-          </div>
+          <SettingsPanel
+            variant="popup"
+            onBalance={(b) => {
+              try {
+                setBalance(b)
+                const el = document.getElementById('__ws_balance')
+                if (el) el.textContent = `€${b.toFixed(2)}`
+              } catch {}
+            }}
+          />
         ) : null
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, overflowY: 'auto' }}>

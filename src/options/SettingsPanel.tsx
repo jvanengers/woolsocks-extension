@@ -252,8 +252,9 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       width: variant === 'popup' ? '100%' : 320, 
       padding: variant === 'popup' ? 0 : 16, 
       borderRadius: variant === 'popup' ? 0 : 12, 
-      background: variant === 'popup' ? 'transparent' : '#fff', 
-      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' 
+      background: variant === 'popup' ? '#F5F5F6' : '#fff', 
+      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+      minHeight: variant === 'popup' ? '100vh' : 'auto'
     }}>
 
       {session === null && (
@@ -312,45 +313,20 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
           {variant === 'popup' ? (
             <>
-              {/* Balance display - centered with coin icon */}
+              {/* Page title only - no back button or balance since they're in the main header */}
               <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                gap: 4, 
-                padding: '8px 10px',
-                background: 'rgba(0,0,0,0.05)',
-                borderRadius: 8,
-                margin: '0 auto',
-                width: 'fit-content'
+                padding: '16px 8px 16px 8px'
               }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ 
+                <h1 style={{ 
                   fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                  fontSize: 14, 
-                  fontWeight: 700, 
+                  fontSize: 16, 
+                  fontWeight: 500, 
                   color: '#100B1C',
-                  lineHeight: 1.45,
-                  letterSpacing: '0.1px'
+                  lineHeight: 1.3,
+                  margin: 0
                 }}>
-                  €{sockValue.toFixed(2)}
-                </span>
-              </div>
-              
-              {/* Recent transactions label */}
-              <div style={{ 
-                textAlign: 'center', 
-                marginTop: 15,
-                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                fontSize: 14, 
-                color: '#100B1C',
-                opacity: 0.5,
-                lineHeight: 1.45,
-                letterSpacing: '0.1px'
-              }}>
-                {translate('options.recentTransactions')}
+                  {translate('options.myCashbackTransactions')}
+                </h1>
               </div>
             </>
           ) : (
@@ -362,7 +338,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           )}
 
           {/* Recent transactions */}
-          <div style={{ marginTop: variant === 'popup' ? 15 : 24 }}>
+          <div style={{ marginTop: variant === 'popup' ? 0 : 24 }}>
             {variant !== 'popup' && (
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{translate('options.recentTransactions')}</div>
             )}
@@ -379,21 +355,57 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                 borderRadius: variant === 'popup' ? '16px 16px 16px 16px' : 0,
                 padding: variant === 'popup' ? '16px 0' : '0'
               }}>
+                {/* Recent transactions label for popup */}
+                {variant === 'popup' && (
+                  <div style={{ 
+                    padding: '0 16px 16px 16px',
+                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                    fontSize: 14, 
+                    color: '#100B1C',
+                    opacity: 0.5,
+                    lineHeight: 1.45,
+                    letterSpacing: '0.1px'
+                  }}>
+                    {translate('options.recentTransactions')}
+                  </div>
+                )}
                 <div style={{ 
                   display: 'flex', 
                   flexDirection: 'column',
                   gap: 8
                 }}>
                   {transactions.map((t) => (
-                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: variant === 'popup' ? '8px 16px' : '12px 0' }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 4, overflow: 'hidden', background: '#FFFFFF', border: '0.5px solid #ECEBED', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div key={t.id} style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: variant === 'popup' ? '8px 16px' : '12px 0',
+                      gap: 8
+                    }}>
+                      <div style={{ 
+                        width: 40, 
+                        height: 40, 
+                        borderRadius: 4, 
+                        overflow: 'hidden', 
+                        background: '#FFFFFF', 
+                        border: '0.5px solid #ECEBED', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
                         {t.logo ? (
                           <img src={t.logo} alt={t.merchantName} style={{ width: 36, height: 36, objectFit: 'contain' }} />
                         ) : (
                           <div style={{ fontSize: 12, color: '#999' }}>{t.merchantName?.[0] || '?'}</div>
                         )}
                       </div>
-                      <div style={{ flex: 1, marginLeft: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ 
+                        flex: 1, 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: 4,
+                        minWidth: 0
+                      }}>
                         <div style={{ 
                           fontSize: 12, 
                           fontWeight: 600,
@@ -425,7 +437,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                         flexDirection: 'column',
                         alignItems: 'flex-end',
                         justifyContent: 'center',
-                        gap: 4
+                        gap: 4,
+                        flexShrink: 0
                       }}>
                         <div style={{ 
                           fontSize: 12, 
@@ -453,7 +466,11 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                 </div>
 
                 {/* View all transactions link */}
-                <div style={{ marginTop: 8, textAlign: 'center', padding: variant === 'popup' ? '0 16px' : '0' }}>
+                <div style={{ 
+                  marginTop: 8, 
+                  textAlign: 'center', 
+                  padding: variant === 'popup' ? '0 16px' : '0' 
+                }}>
                   <button
                     onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl-NL/profile', active: true })}
                     style={{
@@ -466,7 +483,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                       lineHeight: '130%',
                       border: 'none',
                       padding: 0,
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      textDecoration: 'none'
                     }}
                   >
                     {translate('options.viewAllTransactions')}
