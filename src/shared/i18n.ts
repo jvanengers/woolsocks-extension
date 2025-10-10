@@ -352,7 +352,7 @@ const translations: Record<Language, Translations> = {
       statusRejected: 'Afgewezen',
     },
     onboarding: {
-      welcomeTitle: 'Welkom bij Woolsocks (TEST2)!', // Testing Lokalise sync - API token fixed
+      welcomeTitle: 'Welkom bij Woolsocks (TEST3)!', // Testing Lokalise sync - jq JSON fix
       welcomeContent: 'Mis nooit meer cashback. Deze extensie helpt je geld terug te verdienen op je online aankopen.',
       cashbackTitle: 'Cashback-detectie',
       cashbackContent: 'Wanneer je partnersites zoals Amazon of Zalando bezoekt, kleurt ons icoon geel om aan te geven dat er cashback beschikbaar is.',
