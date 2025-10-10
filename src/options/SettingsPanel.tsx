@@ -110,7 +110,6 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
   const [autoOc, setAutoOc] = useState<boolean>(true)
-  const [showReminders, setShowReminders] = useState<boolean>(true)
 
   useEffect(() => {
     try { initLanguage() } catch {}
@@ -122,7 +121,6 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         loadTransactions()
         loadQaBypass()
         loadAutoOc()
-        loadShowReminders()
       }
     })
   }, [])
@@ -169,12 +167,6 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     setAutoOc(enabled !== false)
   }
 
-  async function loadShowReminders() {
-    const result = await chrome.storage.local.get('user')
-    const user = result.user || { settings: {} }
-    const enabled = user.settings?.showCashbackReminders
-    setShowReminders(enabled !== false)
-  }
 
   async function saveQaBypass(next: boolean) {
     const result = await chrome.storage.local.get('user')
@@ -194,14 +186,6 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     setAutoOc(next)
   }
 
-  async function saveShowReminders(next: boolean) {
-    const result = await chrome.storage.local.get('user')
-    const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, showCashbackReminders: true } }
-    user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, showCashbackReminders: true }
-    user.settings.showCashbackReminders = next
-    await chrome.storage.local.set({ user })
-    setShowReminders(next)
-  }
 
   const firstName: string | undefined =
     profile?.data?.firstName || profile?.firstName || profile?.user?.firstName
@@ -272,24 +256,9 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           )}
 
-          {/* Cashback reminders toggle - shown in both options and popup */}
-          {(
-            <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.showCashbackReminders')}</div>
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={showReminders} onChange={(e) => saveShowReminders(e.target.checked)} />
-                  <span style={{ fontSize: 12, color: '#6B7280' }}>{showReminders ? translate('options.enabled') : translate('options.disabled')}</span>
-                </label>
-              </div>
-              <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4 }}>
-                {translate('options.showCashbackRemindersDescription')} — vouchers are also suppressed when off.
-              </div>
-            </div>
-          )}
 
           {/* Online cashback auto-activation toggle - only show in options page */}
-          {variant !== 'popup' && showReminders && (
+          {variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.autoActivateOnlineCashback')}</div>
