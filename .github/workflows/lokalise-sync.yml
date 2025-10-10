@@ -54,15 +54,35 @@ jobs:
             if [ -f "$file_path" ]; then
               echo "Uploading $lang translations..."
               
-              # Upload file to Lokalise
-              response=$(curl -s -X POST \
+              # Base64 encode the file content
+              file_content=$(base64 -w 0 "$file_path")
+              
+              # Upload file to Lokalise using correct API v2 format
+              response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
                 "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/upload" \
                 -H "X-Api-Token: $API_TOKEN" \
-                -F "data=$(cat $file_path)" \
-                -F "lang_iso=$lang" \
-                -F "replace_modified=1")
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"data\": \"$file_content\",
+                  \"filename\": \"$lang.json\",
+                  \"lang_iso\": \"$lang\",
+                  \"replace_modified\": true,
+                  \"convert_placeholders\": true
+                }")
               
-              echo "Upload response for $lang: $response"
+              # Extract HTTP status code
+              http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
+              response_body=$(echo "$response" | sed '/HTTP_CODE:/d')
+              
+              echo "Upload response for $lang (HTTP $http_code): $response_body"
+              
+              # Check if upload was successful
+              if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+                echo "✅ Successfully uploaded $lang translations"
+              else
+                echo "❌ Failed to upload $lang translations (HTTP $http_code)"
+                echo "Response: $response_body"
+              fi
             else
               echo "File $file_path not found, skipping $lang"
             fi
