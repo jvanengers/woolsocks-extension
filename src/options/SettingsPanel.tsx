@@ -215,7 +215,13 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
     const result = await chrome.storage.local.get('user')
     const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true } }
     user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true }
+    
+    // When the checkbox is toggled, set both settings appropriately:
+    // - If enabled: both showCashbackReminders and autoActivateOnlineCashback = true (Automatic mode)
+    // - If disabled: showCashbackReminders = true, autoActivateOnlineCashback = false (Remind me mode)
+    user.settings.showCashbackReminders = true
     user.settings.autoActivateOnlineCashback = next
+    
     await chrome.storage.local.set({ user })
     setAutoOc(next)
   }
