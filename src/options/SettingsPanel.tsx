@@ -476,78 +476,80 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           </div>
 
-          {/* Cache Management */}
-          <div style={{ 
-            background: '#FFFFFF', 
-            borderRadius: 16, 
-            padding: 16, 
-            marginTop: 16,
-            border: '1px solid #E5E7EB'
-          }}>
+          {/* Cache Management - Hidden for end users, kept for debugging */}
+          {false && (
             <div style={{ 
-              fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-              fontSize: 16,
-              fontWeight: 600,
-              color: '#100B1C',
-              marginBottom: 12
+              background: '#FFFFFF', 
+              borderRadius: 16, 
+              padding: 16, 
+              marginTop: 16,
+              border: '1px solid #E5E7EB'
             }}>
-              {translate('options.cacheManagement')}
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <button
-                onClick={async () => {
-                  try {
-                    await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
-                    // Reload data after refresh
-                    loadWalletData()
-                    loadTransactions()
-                  } catch (error) {
-                    console.warn('Error refreshing user data:', error)
-                  }
-                }}
-                style={{
-                  background: '#FDC408',
-                  color: '#100B1C',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '8px 16px',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-                }}
-              >
-                {translate('options.refreshData')}
-              </button>
+              <div style={{ 
+                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                fontSize: 16,
+                fontWeight: 600,
+                color: '#100B1C',
+                marginBottom: 12
+              }}>
+                {translate('options.cacheManagement')}
+              </div>
               
-              <button
-                onClick={async () => {
-                  try {
-                    await chrome.runtime.sendMessage({ type: 'CACHE_INVALIDATE' })
-                    // Reload data after clearing cache
-                    loadWalletData()
-                    loadTransactions()
-                  } catch (error) {
-                    console.warn('Error clearing cache:', error)
-                  }
-                }}
-                style={{
-                  background: '#F3F4F6',
-                  color: '#6B7280',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '8px 16px',
-                  fontSize: 14,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
-                }}
-              >
-                {translate('options.clearCache')}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+                      // Reload data after refresh
+                      loadWalletData()
+                      loadTransactions()
+                    } catch (error) {
+                      console.warn('Error refreshing user data:', error)
+                    }
+                  }}
+                  style={{
+                    background: '#FDC408',
+                    color: '#100B1C',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '8px 16px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+                  }}
+                >
+                  {translate('options.refreshData')}
+                </button>
+                
+                <button
+                  onClick={async () => {
+                    try {
+                      await chrome.runtime.sendMessage({ type: 'CACHE_INVALIDATE' })
+                      // Reload data after clearing cache
+                      loadWalletData()
+                      loadTransactions()
+                    } catch (error) {
+                      console.warn('Error clearing cache:', error)
+                    }
+                  }}
+                  style={{
+                    background: '#F3F4F6',
+                    color: '#6B7280',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '8px 16px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif'
+                  }}
+                >
+                  {translate('options.clearCache')}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Woolsocks logo at bottom for popup variant */}
           {variant === 'popup' && (
