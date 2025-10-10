@@ -89,6 +89,28 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Clicking "Use" opens a voucher product URL:
      `https://woolsocks.eu/nl-NL/giftcards-shop/products/{providerReferenceId}`
 
+## Public API (No Relay) - Roadmap #13
+1. **Clear extension storage and restart**:
+   - Clear all extension data: `chrome.storage.local.clear()`
+   - Reload extension in `chrome://extensions`
+2. **Navigate to partner sites without logging in**:
+   - Visit: `https://www.bol.com/`, `https://www.zalando.nl/`, `https://www.hema.nl/`, `https://www.coolblue.nl/`, `https://www.mediamarkt.nl/`
+   - Verify merchant detection works instantly
+   - Verify NO relay tabs are created (no `woolsocks.eu` tab flashing)
+3. **Monitor analytics in service worker console**:
+   - Open `chrome://extensions` → Inspect service worker
+   - Look for `api_public_success` events (should see these)
+   - Verify NO `relay_attempt_offscreen` or `relay_attempt_tab` events during navigation
+   - Verify merchant detection completes without any relay
+4. **Test activation flow**:
+   - On a partner site, click "Activate cashback" manually
+   - Expect: **one** `relay_attempt_*` event for `requestRedirectUrl` (user-specific)
+   - After landing back on merchant: icon turns green, no additional relay calls
+5. **Verify cache effectiveness**:
+   - Navigate to same sites again quickly
+   - Verify instant detection (cached data)
+   - Verify no additional API calls in console
+
 ## API sanity
 Open the service worker console (chrome://extensions → Inspect service worker) and run:
 ```

@@ -299,6 +299,70 @@ async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryC
   }
 }
 
+/**
+ * Fetch from public API endpoints without authentication
+ * Skips relay fallback entirely - returns null on any failure
+ * Used for merchant discovery/detection to avoid tab flashing
+ */
+async function fetchPublicAPI<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {
+  // Use anonymous headers only (no real userId)
+  const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
+  let anonId = wsAnonId as string | undefined
+  if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
+  
+  const headers: HeadersInit = {
+    'x-application-name': 'WOOLSOCKS_WEB',
+    'x-user-id': anonId,
+    'Content-Type': 'application/json',
+  }
+  
+  const fullUrl = `${SITE_BASE}/api/wsProxy${endpoint}`
+  const t0 = Date.now()
+  
+  if (DIAG) console.debug(`[WS API] fetchPublicAPI: ${fullUrl}`)
+  
+  try {
+    // Try direct fetch WITHOUT credentials to avoid cookie dependency
+    const resp = await fetch(fullUrl, {
+      ...init,
+      headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
+      method: init?.method || 'GET',
+      // Omit credentials to make this truly public
+    })
+    
+    const status = resp.status
+    const duration = Date.now() - t0
+    
+    if (DIAG) console.debug(`[WS API] fetchPublicAPI response: ${status}, ok: ${resp.ok}`)
+    
+    if (!resp.ok) {
+      // Don't retry with relay - just fail fast for public endpoints
+      try { track('api_public_fail', { endpoint, status, duration_ms: duration, reason: 'not_ok' }) } catch {}
+      return { data: null, status }
+    }
+    
+    const json = (await resp.json()) as T
+    if (DIAG) console.debug(`[WS API] fetchPublicAPI data received`)
+    try { track('api_public_success', { endpoint, status, duration_ms: duration }) } catch {}
+    return { data: json, status }
+    
+  } catch (e) {
+    const duration = Date.now() - t0
+    if (DIAG) console.debug(`[WS API] fetchPublicAPI error:`, e)
+    
+    // Retry logic for network errors only (not auth failures)
+    if (retryCount < MAX_API_RETRIES) {
+      if (DIAG) console.debug(`[WS API] Retrying public API (${retryCount + 1}/${MAX_API_RETRIES})`)
+      await new Promise(resolve => setTimeout(resolve, API_RETRY_DELAY * (retryCount + 1)))
+      return await fetchPublicAPI<T>(endpoint, init, retryCount + 1)
+    }
+    
+    // Max retries reached - fail without relay
+    try { track('api_public_fail', { endpoint, status: 0, duration_ms: duration, reason: 'network_error', retries: retryCount }) } catch {}
+    return { data: null, status: 0 }
+  }
+}
+
 function cleanDomain(input: string | undefined | null): string {
   if (!input) return ''
   try {
@@ -527,7 +591,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     const apiUrl = `/merchants-overview/api/v0.0.1/merchants?${params.toString()}`
     console.log(`[WS API] Searching API with URL: ${apiUrl}`)
     
-    const searchRes = await fetchViaSiteProxy<MerchantsOverviewResponse>(apiUrl)
+    const searchRes = await fetchPublicAPI<MerchantsOverviewResponse>(apiUrl)
     console.log(`[WS API] API response status: ${searchRes.status}, data:`, searchRes.data)
     
     const data = searchRes.data?.data
@@ -542,7 +606,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     const apiMerchant = chosen
     if (!apiMerchant?.id) continue
 
-    const dealsRes = await fetchViaSiteProxy<DealsV2Response>(`/merchants-overview/api/v0.0.1/v2/deals?merchantId=${apiMerchant.id}&country=${country}`)
+    const dealsRes = await fetchPublicAPI<DealsV2Response>(`/merchants-overview/api/v0.0.1/v2/deals?merchantId=${apiMerchant.id}&country=${country}`)
     const dealsList = dealsRes.data?.data?.deals || []
     const allCb = dealsList.filter((d: any) => classify(d?.dealType) === 'ONLINE_CASHBACK')
     let providerMerchantId: string | undefined = undefined
@@ -558,7 +622,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     const localeHeader = String(rawLang)
     const languageParam = encodeURIComponent(String(localeHeader.split('-')[0]).toLowerCase())
     const cbRes = providerMerchantId
-      ? await fetchViaSiteProxy<CashbackMerchantResponse>(
+      ? await fetchPublicAPI<CashbackMerchantResponse>(
           `/cashback/api/v1/merchants/${encodeURIComponent(String(providerMerchantId))}?sortRewardsBy=amount%3Adesc&language=${languageParam}`,
           { headers: { 'Accept-Language': localeHeader } }
         )
@@ -653,7 +717,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
       if (!cands.length) return []
       const results = await Promise.all(cands.map(async (c) => {
         try {
-          const res = await fetchViaSiteProxy<any>(`/giftcards/api/v0.0.2/products/${encodeURIComponent(c.id)}`)
+          const res = await fetchPublicAPI<any>(`/giftcards/api/v0.0.2/products/${encodeURIComponent(c.id)}`)
           const product = (res?.data && (res.data.data?.product || res.data.product)) || null
           const usageType = (product?.usageType || '').toString().toUpperCase()
           const normalized = usageType.replace(/[^A-Z]/g, '')

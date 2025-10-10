@@ -43,9 +43,10 @@ src/
 ```
 
 Key points:
-- API calls go to `https://woolsocks.eu/api/wsProxy/...` (credentials: 'include')
+- **Public API calls** (merchant discovery) go to `https://woolsocks.eu/api/wsProxy/...` without credentials
+- **Authenticated API calls** (user actions) use credentials with relay fallback
 - We set required headers: `x-application-name: WOOLSOCKS_WEB`, stable `x-user-id`
-- If the background cannot reach the API directly with cookies, it relays via an inactive `woolsocks.eu` tab (content script `relay.ts`)
+- Relay tabs only used for user-specific actions (activation, balance, clicks) to minimize tab flashing
 
 ## Development
 
