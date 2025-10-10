@@ -333,7 +333,7 @@ const translations: Record<Language, Translations> = {
       vouchersContent: 'Bij het afrekenen stellen we cadeaubonnen voor die je direct cashback geven op je aankoop.',
       vouchersTitle: 'Besparen met cadeaubonnen',
       welcomeContent: 'Mis nooit meer cashback. Deze extensie helpt je geld terug te verdienen op je online aankopen.',
-      welcomeTitle: 'Welkom bij Woolsocks (TEST4)!'
+      welcomeTitle: 'Welkom bij Woolsocks!'
     },
     options: {
       affiliateDisclosure: 'Wij verdienen commissie wanneer je via onze links winkelt',
