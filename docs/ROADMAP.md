@@ -318,6 +318,37 @@ Goal: Implement intelligent caching for cashback balance, transactions, deal inf
 - Success criteria
   - >90% cache hit rate for balance/transactions; <200ms popup load time; 50% reduction in API calls during normal usage.
 
+---
+
+## 15) Remove alarms permission and find alternatives
+
+Goal: Remove the `alarms` permission from the extension manifest to pass Chrome Web Store review, while maintaining all current functionality through alternative approaches.
+
+- Current usage of alarms
+  - Periodic cleanup tasks (storage, analytics queue, cooldown expiration).
+  - Analytics batch flushing and retry mechanisms.
+  - Session timeout and cooldown management.
+- Alternative approaches
+  - Event-driven cleanup: trigger cleanup on storage changes, tab events, or user interactions.
+  - Immediate analytics flush: send analytics events immediately instead of batching with periodic flush.
+  - Lazy cleanup: perform cleanup operations when extension becomes active or on specific user actions.
+  - Use `setTimeout`/`setInterval` in service worker context (limited to service worker lifetime).
+- Implementation strategy
+  - Audit all current alarm usage and map to event-driven alternatives.
+  - Replace periodic analytics flush with immediate sending or event-triggered batching.
+  - Use storage change listeners and tab activation events for cleanup triggers.
+  - Implement graceful degradation when service worker is inactive.
+- Testing requirements
+  - Verify all cleanup operations still work without alarms.
+  - Test analytics delivery without periodic flushing.
+  - Ensure no memory leaks or storage bloat over time.
+- Success criteria
+  - Extension passes Chrome Web Store review without alarms permission.
+  - All current functionality preserved (cleanup, analytics, cooldowns).
+  - No performance degradation or reliability issues.
+
+## Completed items
+
 ### 2) Voucher analytics (events only)
 
 Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
