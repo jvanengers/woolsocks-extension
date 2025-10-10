@@ -45,11 +45,18 @@ jobs:
           # Install Lokalise CLI
           curl -sf https://lokalise.com/cli/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+          # Verify installation
+          echo "Verifying Lokalise CLI installation..."
+          $HOME/.local/bin/lokalise2 --version
       
       - name: Push to Lokalise
         run: |
-          # Set up Lokalise CLI
-          lokalise2 --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
+          # Use full path to lokalise2 CLI
+          LOKALISE_CLI="$HOME/.local/bin/lokalise2"
+          
+          # Upload English translations
+          $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
             --file-path translations/en.json \
             --lang-iso en \
             --replace-modified
@@ -57,7 +64,8 @@ jobs:
           # Upload other language files
           for lang in nl de fr it es; do
             if [ -f "translations/${lang}.json" ]; then
-              lokalise2 --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
+              echo "Uploading ${lang} translations..."
+              $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
                 --file-path translations/${lang}.json \
                 --lang-iso ${lang} \
                 --replace-modified
@@ -85,14 +93,21 @@ jobs:
           # Install Lokalise CLI
           curl -sf https://lokalise.com/cli/install.sh | sh
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+          # Verify installation
+          echo "Verifying Lokalise CLI installation..."
+          $HOME/.local/bin/lokalise2 --version
       
       - name: Pull from Lokalise
         run: |
+          # Use full path to lokalise2 CLI
+          LOKALISE_CLI="$HOME/.local/bin/lokalise2"
+          
           # Create translations directory
           mkdir -p translations
           
           # Download translations from Lokalise
-          lokalise2 --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file download \
+          $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file download \
             --format json \
             --unzip-to translations \
             --export-sort first_added
