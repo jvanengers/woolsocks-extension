@@ -59,15 +59,13 @@ jobs:
               
               # Create temporary JSON file for the payload
               temp_json=$(mktemp)
-              cat > "$temp_json" << EOF
-{
-  "data": "$file_content",
-  "filename": "$lang.json",
-  "lang_iso": "$lang",
-  "replace_modified": true,
-  "convert_placeholders": true
-}
-EOF
+              echo '{' > "$temp_json"
+              echo "  \"data\": \"$file_content\"," >> "$temp_json"
+              echo "  \"filename\": \"$lang.json\"," >> "$temp_json"
+              echo "  \"lang_iso\": \"$lang\"," >> "$temp_json"
+              echo "  \"replace_modified\": true," >> "$temp_json"
+              echo "  \"convert_placeholders\": true" >> "$temp_json"
+              echo '}' >> "$temp_json"
               
               # Upload file to Lokalise using correct API v2 format
               response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
@@ -136,16 +134,14 @@ EOF
           
           # Create temporary JSON file for export request
           temp_export_json=$(mktemp)
-          cat > "$temp_export_json" << EOF
-{
-  "format": "json",
-  "original_filenames": true,
-  "directory_prefix": "",
-  "all_platforms": false,
-  "filter_langs": ["en", "nl", "de", "fr", "it", "es"],
-  "export_empty_as": "skip"
-}
-EOF
+          echo '{' > "$temp_export_json"
+          echo '  "format": "json",' >> "$temp_export_json"
+          echo '  "original_filenames": true,' >> "$temp_export_json"
+          echo '  "directory_prefix": "",' >> "$temp_export_json"
+          echo '  "all_platforms": false,' >> "$temp_export_json"
+          echo '  "filter_langs": ["en", "nl", "de", "fr", "it", "es"],' >> "$temp_export_json"
+          echo '  "export_empty_as": "skip"' >> "$temp_export_json"
+          echo '}' >> "$temp_export_json"
           
           # Trigger export
           export_response=$(curl -s -X POST \
