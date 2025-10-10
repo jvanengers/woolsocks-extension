@@ -324,6 +324,9 @@ Goal: Implement intelligent caching for cashback balance, transactions, deal inf
 
 Goal: Remove the `alarms` permission from the extension manifest to pass Chrome Web Store review, while maintaining all current functionality through alternative approaches.
 
+**Reference: Chrome Web Store Rejection (Item ID: fneoceodefiieccfcapkjanllehpogpj)**
+> "Requesting but not using the following permission(s): alarms. Remove the unused permission(s) listed above from your manifest file. Request access to the narrowest permissions necessary to implement your Product's features or services. Don't attempt to 'future proof' your Product by requesting a permission that might benefit services or features that have not yet been implemented."
+
 - Current usage of alarms
   - Periodic cleanup tasks (storage, analytics queue, cooldown expiration).
   - Analytics batch flushing and retry mechanisms.
