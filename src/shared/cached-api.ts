@@ -94,25 +94,30 @@ export async function fetchTransactionsCached(): Promise<any[]> {
       else if (Array.isArray(json)) list = json
       else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
       
-      // Normalize key fields for UI consistency
+      // Normalize transaction data to match UI expectations
       return list.map((t) => {
-        const merchant = t?.merchant || t?.merchantInfo
-        const amount = t?.amount || t?.value || t?.cashbackAmount
-        const currency = t?.currency || t?.currencyCode || 'EUR'
-        const date = t?.date || t?.createdAt || t?.timestamp
-        const status = t?.status || t?.state || 'completed'
-        const type = t?.type || t?.transactionType || 'cashback'
-        
+        const merchant = t?.merchant || t?.merchantInfo || {}
+        const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
+        const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
+        const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
+
+        const rawAmount =
+          typeof t?.amount === 'number' ? t.amount :
+          typeof t?.amount?.amount === 'number' ? t.amount.amount :
+          typeof t?.amount?.value === 'number' ? t.amount.value :
+          typeof t?.amountCents === 'number' ? t.amountCents / 100 :
+          undefined
+        const amount = typeof rawAmount === 'number' ? rawAmount : 0
+
         return {
-          id: t?.id || t?.transactionId || `${merchant?.name || 'unknown'}_${date}`,
-          merchant: merchant?.name || 'Unknown Merchant',
-          amount: typeof amount === 'number' ? amount : 0,
-          currency,
-          date,
-          status,
-          type,
-          description: t?.description || t?.note || `${type} from ${merchant?.name || 'merchant'}`,
-          original: t, // Keep original for debugging
+          id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
+          amount,
+          currency: t?.currencyCode || t?.currency || 'EUR',
+          merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
+          logo,
+          state: state || 'unknown',
+          recordType: t?.recordType || t?.type || 'Unknown',
+          createdAt: createdAt || new Date().toISOString(),
         }
       })
     },
