@@ -9,7 +9,6 @@ import { fetchWalletDataCached, fetchTransactionsCached, fetchUserProfileCached 
 import { getStats, restoreFromPersistent, CACHE_NAMESPACES } from '../shared/cache'
 
 // --- First-party header injection for woolsocks.eu -------------------------
-const WS_ORIGIN = 'https://woolsocks.eu'
 
 async function refreshWsCookies() {}
 
@@ -35,15 +34,6 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
   } catch {}
 })
 
-// Note: MV3 non-enterprise extensions cannot use blocking webRequest listeners.
-// We keep a non-blocking observer for diagnostics only and rely on API relays for auth.
-try {
-  chrome.webRequest.onBeforeSendHeaders.addListener(
-    (_details) => undefined,
-    { urls: [WS_ORIGIN + '/*'] },
-    ['requestHeaders', 'extraHeaders']
-  )
-} catch {}
 
 let tokenSavedOnce = false
 

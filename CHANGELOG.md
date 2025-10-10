@@ -5,19 +5,38 @@ All notable changes to the Woolsocks Browser Extension will be documented in thi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.10.0] - 2025-10-10
+
+### Added
+- Enhanced merchant-specific checkout detection for 25+ merchants including Rituals, HEMA, Douglas, Etos, Gamma, Bijenkorf, VVV Cadeaukaarten, and more
+- Anonymous user support - extension works without login to show deals and reminders
+- Offscreen relay implementation for Chrome to eliminate visible tab flashes during API calls
+- Comprehensive caching system with TTL for improved performance
+- Event-driven cache management replacing alarm-based cleanup
+
+### Changed
 - Online cashback auto-activation on merchant visit (1h per-domain cooldown)
 - Country-aware CASHBACK deal filtering (`usageType=ONLINE`)
 - Redirect URL via `/rewards/api/v0/rewards/{id}/redirection` (captures `linkUrl` and `clickId`)
 - Popup shows "Cashback tracking enabled" with rate, title, and re-activate button
 - Settings toggle: Auto-activate online cashback (default ON)
 - GA4 analytics via Measurement Protocol with click_id; `oc_activated` recommended as Key event
-- Permission update: `webNavigation` added; permission justifications documented in README
 - Voucher URLs continue to use `providerReferenceId` (fallbacks: `productId`, `id`, UUID in `links.webLink`)
+
+### Removed
 - **BREAKING**: Removed `alarms` permission and replaced with event-driven cache management
   - Cache cleanup now triggered by tab activation and navigation events (throttled to 1 hour)
   - Cache preload triggered on startup, install, and popup open
   - All functionality preserved while eliminating Chrome Web Store review blocker
+- **BREAKING**: Removed unused `webRequest` permission for Chrome Web Store compliance
+  - Permission was only used for non-blocking diagnostics that performed no operations
+  - Removal aligns with Chrome Web Store policy of requesting only necessary permissions
+
+### Technical Improvements
+- Permission justifications documented in README
+- Enhanced checkout detection with improved false positive filtering
+- Server-confirmed activation prevents duplicate redirects
+- Intelligent caching reduces API calls and improves performance
 
 ## [1.0.0] - 2024-01-XX
 

@@ -1,13 +1,16 @@
 {
   "name": "woolsocks-extension",
   "private": true,
-  "version": "0.91.0",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "extract-translations": "node scripts/extract-translations-for-sync.js",
+    "update-translations": "node scripts/update-i18n-from-lokalise.js",
+    "test-sync": "npm run extract-translations && npm run update-translations"
   },
   "dependencies": {
     "react": "^19.1.1",

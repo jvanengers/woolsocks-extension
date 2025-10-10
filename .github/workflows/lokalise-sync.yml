@@ -1,0 +1,94 @@
+name: Lokalise Translation Sync
+
+on:
+  # Push workflow: When translation files change in GitHub, push to Lokalise
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/shared/i18n.ts'
+      - 'translations/**'
+  
+  # Pull workflow: Daily sync from Lokalise to GitHub
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2 AM UTC
+  
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Push changes from GitHub to Lokalise
+  push-to-lokalise:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract translations to JSON
+        run: |
+          # Create translations directory if it doesn't exist
+          mkdir -p translations
+          
+          # Extract translations from i18n.ts to JSON format
+          node scripts/extract-translations-for-sync.js
+      
+      - name: Push to Lokalise
+        uses: lokalise/lokalise-push-action@v1
+        with:
+          api_token: ${{ secrets.LOKALISE_API_TOKEN }}
+          project_id: ${{ secrets.LOKALISE_PROJECT_ID }}
+          branch: main
+          file: 'translations/*.json'
+          lang_iso: 'en'
+          replace_modified: true
+          skip_detect_lang_iso: true
+
+  # Job 2: Pull changes from Lokalise to GitHub
+  pull-from-lokalise:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Pull from Lokalise
+        uses: lokalise/lokalise-pull-action@v1
+        with:
+          api_token: ${{ secrets.LOKALISE_API_TOKEN }}
+          project_id: ${{ secrets.LOKALISE_PROJECT_ID }}
+          branch: main
+          file: 'translations/*.json'
+          lang_iso: 'en'
+          skip_detect_lang_iso: true
+          output_directory: 'translations'
+      
+      - name: Update i18n.ts with new translations
+        run: |
+          # Update the i18n.ts file with translations from Lokalise
+          node scripts/update-i18n-from-lokalise.js
+      
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore: update translations from Lokalise'
+          title: '🌐 Update translations from Lokalise'
+          body: |
+            This PR contains updated translations from Lokalise.
+            
+            **Changes:**
+            - Updated translation files from Lokalise
+            - Updated `src/shared/i18n.ts` with new translations
+            
+            **Review:**
+            - Please review the changes carefully
+            - Test the extension with updated translations
+            - Merge when ready
+          branch: update-translations-from-lokalise
+          delete-branch: true

@@ -1,0 +1,73 @@
+# Lokalise configuration for Woolsocks Extension
+# This file configures the Lokalise project settings for automated sync
+
+project_id: ${LOKALISE_PROJECT_ID}
+api_token: ${LOKALISE_API_TOKEN}
+
+# Base language (English)
+base_language:
+  iso: en
+  name: English
+
+# Supported languages
+languages:
+  - iso: en
+    name: English
+  - iso: nl
+    name: Dutch
+  - iso: de
+    name: German
+  - iso: fr
+    name: French
+  - iso: it
+    name: Italian
+  - iso: es
+    name: Spanish
+
+# File configuration
+files:
+  - path: translations/en.json
+    lang_iso: en
+    type: json
+  - path: translations/nl.json
+    lang_iso: nl
+    type: json
+  - path: translations/de.json
+    lang_iso: de
+    type: json
+  - path: translations/fr.json
+    lang_iso: fr
+    type: json
+  - path: translations/it.json
+    lang_iso: it
+    type: json
+  - path: translations/es.json
+    lang_iso: es
+    type: json
+
+# Sync settings
+sync:
+  # Auto-pull from GitHub when changes are detected
+  auto_pull: true
+  
+  # Auto-push to GitHub when translations are updated in Lokalise
+  auto_push: true
+  
+  # Branch to sync with
+  branch: main
+  
+  # File format settings
+  format: json
+  nested_json: true
+  
+  # Translation key settings
+  key_naming: original
+  plural_format: icu
+  
+  # Import/Export settings
+  replace_modified: true
+  skip_detect_lang_iso: true
+  include_pids: false
+  include_comments: false
+  include_description: false
+  include_tags: false

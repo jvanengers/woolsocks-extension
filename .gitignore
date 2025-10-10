@@ -130,3 +130,6 @@ config.local.json
 
 # Vite cache
 .vite/
+
+# Generated translation files (managed by Lokalise sync)
+translations/

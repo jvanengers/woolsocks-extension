@@ -6,7 +6,7 @@ import { crx } from '@crxjs/vite-plugin'
 const manifest = {
   manifest_version: 3,
   name: 'Woolsocks',
-  version: '0.91.0',
+  version: '0.10.0',
   description: 'Activate cashback automatically and discover gift cards at checkout on supported merchants.',
   action: {
     default_title: 'Woolsocks',
@@ -31,7 +31,7 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'notifications', 'cookies', 'webRequest', 'webNavigation', 'offscreen'],
+  permissions: ['tabs', 'scripting', 'storage', 'notifications', 'cookies', 'webNavigation', 'offscreen'],
   host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {

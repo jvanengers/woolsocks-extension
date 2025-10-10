@@ -333,6 +333,10 @@ Goal: Remove the `alarms` permission from the extension manifest to pass Chrome 
 
 Completed: 2025-01-27 — commit `[TBD]` (feat: remove alarms permission and replace with event-driven alternatives)
 
+### Additional Permission Cleanup
+
+Completed: 2025-10-10 — commit `[TBD]` (feat: remove unused webRequest permission for Chrome Web Store compliance)
+
 - **Replaced alarm-based cache cleanup** with event-driven triggers:
   - Cache cleanup now runs on service worker startup, tab activation, and navigation events
   - Throttled to run at most once per hour to prevent excessive execution

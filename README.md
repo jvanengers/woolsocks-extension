@@ -6,7 +6,7 @@ A Chrome MV3 extension that shows Woolsocks voucher offers and automatically ena
 
 - Works with your existing session at `woolsocks.eu` (cookie-based; no token UI)
 - Country: NL default; online cashback filters to your country based on API language/locale
-- Vouchers: shown at checkout/cart/order pages
+- Vouchers: shown at checkout/cart/order pages with enhanced detection for 25+ merchants
 - Online cashback: auto-activates on entry of supported sites (10 min cooldown per apex domain)
 - Server‑confirmed activation: if a recent click (≤10 min) exists for the site, we mark active and skip redirect
 - Links for vouchers open canonical product pages like:
@@ -78,7 +78,6 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - `storage` — store user settings, per-domain cooldowns, activation registry, analytics queue.
 - `notifications` — user feedback when cashback activates.
 - `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
-- ~~`webRequest`~~ — removed (not used in current implementation)
 - `webNavigation` — detect top-level navigations to trigger cashback flow and re-emit activation.
 - `offscreen` — host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening a visible tab (prevents user-visible tab flashes; used only on Chrome where supported).
 - Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
