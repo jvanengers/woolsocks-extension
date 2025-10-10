@@ -417,13 +417,14 @@ function ensureMount(): ShadowRoot {
       box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
       padding: 16px !important;
       width: auto !important;
-      min-width: 280px !important;
+      min-width: 320px !important;
       max-width: calc(100vw - 32px) !important;
       display: flex !important;
       align-items: center !important;
       gap: 16px !important;
+      flex-wrap: nowrap !important;
     }
-    .manual-activation-left { display:flex !important; align-items:center !important; gap:16px !important; flex:1 !important; }
+    .manual-activation-left { display:flex !important; align-items:center !important; gap:12px !important; flex:1 !important; min-width:0 !important; }
     .manual-activation-title { font-size: 20px !important; font-weight: 700 !important; color:#0F0B1C !important; line-height:1.25 !important; }
     .manual-activation-sub { font-size: 14px !important; color:#6B7280 !important; line-height:1.4 !important; margin-top:6px !important; }
     .manual-activate-btn { background:#211940 !important; color:#FFFFFF !important; border:none !important; border-radius:8px !important; height:48px !important; padding: 0 16px !important; font-size:14px !important; font-weight:600 !important; cursor:pointer !important; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important; }
@@ -985,15 +986,15 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
   const rate = bestDeal ? formatRate(bestDeal) : '0%'
   
   banner.innerHTML = `
-    <div class="manual-activation-left" style="display:flex;align-items:center;gap:12px;min-width:0;">
+    <div class="manual-activation-left" style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
       <img class="logo" alt="Woolsocks" src="${WS_LOGO.yellow}" style="width:40px;height:40px;flex-shrink:0;"/>
-      <div class="manual-activation-text" style="display:flex;flex-direction:column;gap:4px;min-width:0;">
-        <div class="manual-activation-title single-line" style="white-space:nowrap;font-size:18px;font-weight:700;color:#0F0B1C;">${translate('ocPanel.activateTitle', { rate: rate })}</div>
-        <div class="manual-activation-sub single-line" style="white-space:nowrap;font-size:14px;color:#6B7280;">${translate('ocPanel.activateDescription', { host: escapeHtml(host) })}</div>
+      <div class="manual-activation-text" style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;">
+        <div class="manual-activation-title single-line" style="white-space:nowrap;font-size:18px;font-weight:700;color:#0F0B1C;overflow:visible;">${translate('ocPanel.activateTitle', { rate: rate })}</div>
+        <div class="manual-activation-sub single-line" style="white-space:nowrap;font-size:14px;color:#6B7280;overflow:visible;">${translate('ocPanel.activateDescription', { host: escapeHtml(host) })}</div>
       </div>
     </div>
-    <button class="manual-activate-btn" id="ws-manual-activate" style="height:40px;padding:0 16px;border:none;border-radius:8px;background:#211940;color:#FFFFFF;font-weight:700;cursor:pointer;">${translate('ocPanel.activateCta')}</button>
-    <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
+    <button class="manual-activate-btn" id="ws-manual-activate" style="height:40px;padding:0 16px;border:none;border-radius:8px;background:#211940;color:#FFFFFF;font-weight:700;cursor:pointer;flex-shrink:0;">${translate('ocPanel.activateCta')}</button>
+    <button class="icon-btn" id="ws-dismiss" style="flex-shrink:0;"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
   `
   
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
