@@ -60,7 +60,7 @@ jobs:
               
               # Base64 encode the file content (Linux compatible)
               echo "Encoding file to base64..."
-              file_content=$(base64 "$file_path" | tr -d '\n')
+              file_content=$(base64 -w 0 "$file_path")
               echo "Base64 length: ${#file_content} characters"
               
               # Create temporary JSON file for the payload
