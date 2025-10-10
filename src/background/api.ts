@@ -945,22 +945,32 @@ export async function getCachedTransactions(): Promise<any[]> {
       else if (Array.isArray(res)) list = res
       else if ((res as any)?.data?.transactions?.data && Array.isArray((res as any).data.transactions.data)) list = (res as any).data.transactions.data
 
-      // Normalize transaction data
-      return list.map((t) => {
-        const merchant = t?.merchant || t?.merchantInfo
-        return {
-          id: t?.id || t?.transactionId,
-          amount: t?.amount || t?.value || 0,
-          currency: t?.currency || t?.currencyCode || 'EUR',
-          status: t?.status || 'completed',
-          date: t?.date || t?.createdAt || t?.timestamp,
-          description: t?.description || t?.note || '',
-          merchant: merchant ? {
-            name: merchant.name || merchant.merchantName,
-            logo: merchant.logo || merchant.logoUrl
-          } : undefined
-        }
-      })
+              // Normalize transaction data to match UI expectations
+              return list.map((t) => {
+                const merchant = t?.merchant || t?.merchantInfo || {}
+                const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
+                const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
+                const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
+
+                const rawAmount =
+                  typeof t?.amount === 'number' ? t.amount :
+                  typeof t?.amount?.amount === 'number' ? t.amount.amount :
+                  typeof t?.amount?.value === 'number' ? t.amount.value :
+                  typeof t?.amountCents === 'number' ? t.amountCents / 100 :
+                  undefined
+                const amount = typeof rawAmount === 'number' ? rawAmount : 0
+
+                return {
+                  id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
+                  amount,
+                  currency: t?.currencyCode || t?.currency || 'EUR',
+                  merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
+                  logo,
+                  state: state || 'unknown',
+                  recordType: t?.recordType || t?.type || 'Unknown',
+                  createdAt: createdAt || new Date().toISOString(),
+                }
+              })
     },
     { ttl: 10 * 60 * 1000 } // 10 minutes
   )
