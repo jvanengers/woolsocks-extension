@@ -40,37 +40,41 @@ jobs:
           # Extract translations from i18n.ts to JSON format
           node scripts/extract-translations-for-sync.js
       
-      - name: Install Lokalise CLI
+      - name: Push to Lokalise via API
         run: |
-          # Install Lokalise CLI
-          curl -sf https://lokalise.com/cli/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          # Upload translations using Lokalise API directly
+          API_TOKEN="${{ secrets.LOKALISE_API_TOKEN }}"
+          PROJECT_ID="${{ secrets.LOKALISE_PROJECT_ID }}"
           
-          # Verify installation
-          echo "Verifying Lokalise CLI installation..."
-          $HOME/.local/bin/lokalise2 --version
-      
-      - name: Push to Lokalise
-        run: |
-          # Use full path to lokalise2 CLI
-          LOKALISE_CLI="$HOME/.local/bin/lokalise2"
-          
-          # Upload English translations
-          $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
-            --file-path translations/en.json \
-            --lang-iso en \
-            --replace-modified
-          
-          # Upload other language files
-          for lang in nl de fr it es; do
-            if [ -f "translations/${lang}.json" ]; then
-              echo "Uploading ${lang} translations..."
-              $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file upload \
-                --file-path translations/${lang}.json \
-                --lang-iso ${lang} \
-                --replace-modified
+          # Function to upload a translation file
+          upload_file() {
+            local lang=$1
+            local file_path=$2
+            
+            if [ -f "$file_path" ]; then
+              echo "Uploading $lang translations..."
+              
+              # Upload file to Lokalise
+              response=$(curl -s -X POST \
+                "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/upload" \
+                -H "X-Api-Token: $API_TOKEN" \
+                -F "data=$(cat $file_path)" \
+                -F "lang_iso=$lang" \
+                -F "replace_modified=1")
+              
+              echo "Upload response for $lang: $response"
+            else
+              echo "File $file_path not found, skipping $lang"
             fi
-          done
+          }
+          
+          # Upload all language files
+          upload_file "en" "translations/en.json"
+          upload_file "nl" "translations/nl.json"
+          upload_file "de" "translations/de.json"
+          upload_file "fr" "translations/fr.json"
+          upload_file "it" "translations/it.json"
+          upload_file "es" "translations/es.json"
 
   # Job 2: Pull changes from Lokalise to GitHub
   pull-from-lokalise:
@@ -88,29 +92,50 @@ jobs:
         with:
           node-version: '18'
       
-      - name: Install Lokalise CLI
+      - name: Pull from Lokalise via API
         run: |
-          # Install Lokalise CLI
-          curl -sf https://lokalise.com/cli/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          
-          # Verify installation
-          echo "Verifying Lokalise CLI installation..."
-          $HOME/.local/bin/lokalise2 --version
-      
-      - name: Pull from Lokalise
-        run: |
-          # Use full path to lokalise2 CLI
-          LOKALISE_CLI="$HOME/.local/bin/lokalise2"
+          # Download translations using Lokalise API directly
+          API_TOKEN="${{ secrets.LOKALISE_API_TOKEN }}"
+          PROJECT_ID="${{ secrets.LOKALISE_PROJECT_ID }}"
           
           # Create translations directory
           mkdir -p translations
           
-          # Download translations from Lokalise
-          $LOKALISE_CLI --token ${{ secrets.LOKALISE_API_TOKEN }} --project-id ${{ secrets.LOKALISE_PROJECT_ID }} file download \
-            --format json \
-            --unzip-to translations \
-            --export-sort first_added
+          # Download all translations as a bundle
+          echo "Downloading translations from Lokalise..."
+          
+          # Trigger export
+          export_response=$(curl -s -X POST \
+            "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/export" \
+            -H "X-Api-Token: $API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "format": "json",
+              "original_filenames": true,
+              "directory_prefix": "",
+              "all_platforms": false,
+              "filter_langs": ["en", "nl", "de", "fr", "it", "es"],
+              "export_empty_as": "skip"
+            }')
+          
+          echo "Export response: $export_response"
+          
+          # Extract bundle URL from response
+          bundle_url=$(echo "$export_response" | grep -o '"bundle_url":"[^"]*"' | cut -d'"' -f4)
+          
+          if [ -n "$bundle_url" ]; then
+            echo "Downloading bundle from: $bundle_url"
+            
+            # Download and extract the bundle
+            curl -s -L "$bundle_url" -o translations_bundle.zip
+            unzip -o translations_bundle.zip -d translations/
+            rm translations_bundle.zip
+            
+            echo "Translations downloaded successfully"
+          else
+            echo "Failed to get bundle URL from export response"
+            exit 1
+          fi
       
       - name: Update i18n.ts with new translations
         run: |

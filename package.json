@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "extract-translations": "node scripts/extract-translations-for-sync.js",
     "update-translations": "node scripts/update-i18n-from-lokalise.js",
+    "manual-upload": "node scripts/manual-upload-to-lokalise.js",
     "test-sync": "npm run extract-translations && npm run update-translations"
   },
   "dependencies": {
