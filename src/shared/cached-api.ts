@@ -120,6 +120,8 @@ export async function fetchTransactionsCached(): Promise<any[]> {
           createdAt: createdAt || new Date().toISOString(),
         }
       })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5) // Limit to max 5 transactions
     },
     {
       ttl: 10 * 60 * 1000, // 10 minutes
