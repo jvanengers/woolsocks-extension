@@ -888,4 +888,103 @@ export async function fetchRecentClicksForSite(hostname: string): Promise<UserCl
   return list
 }
 
+// --- Cached API methods for performance optimization ---
+
+type WalletResponse = {
+  data?: {
+    balance?: {
+      totalAmount?: number
+    }
+  }
+}
+
+type TransactionsResponse = {
+  data?: {
+    transactions?: any[]
+  }
+  transactions?: any[]
+}
+
+/**
+ * Get cached user balance with automatic refresh
+ */
+export async function getCachedBalance(): Promise<number> {
+  const uid = await getUserId()
+  if (!uid) return 0
+
+  return await cachedFetch(
+    CACHE_NAMESPACES.WALLET,
+    `balance_${uid}`,
+    async () => {
+      const res = await fetchViaSiteProxy<WalletResponse>('/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true')
+      const raw = res?.data?.data?.balance?.totalAmount
+      return typeof raw === 'number' ? raw : 0
+    },
+    { ttl: 10 * 60 * 1000 } // 10 minutes
+  )
+}
+
+/**
+ * Get cached user transactions with automatic refresh
+ */
+export async function getCachedTransactions(): Promise<any[]> {
+  const uid = await getUserId()
+  if (!uid) return []
+
+  return await cachedFetch(
+    CACHE_NAMESPACES.TRANSACTIONS,
+    `transactions_${uid}`,
+    async () => {
+      const res = await fetchViaSiteProxy<TransactionsResponse>('/wallets/api/v0/transactions?excludeAutoRewards=false&direction=forward&limit=20&supportsJsonNote=true')
+      
+      // Handle different response formats
+      let list: any[] = []
+      if (Array.isArray((res as any)?.data?.data?.transactions)) list = (res as any).data.data.transactions
+      else if (Array.isArray((res as any)?.data?.transactions)) list = (res as any).data.transactions
+      else if (Array.isArray((res as any)?.data)) list = (res as any).data
+      else if (Array.isArray(res)) list = res
+      else if ((res as any)?.data?.transactions?.data && Array.isArray((res as any).data.transactions.data)) list = (res as any).data.transactions.data
+
+      // Normalize transaction data
+      return list.map((t) => {
+        const merchant = t?.merchant || t?.merchantInfo
+        return {
+          id: t?.id || t?.transactionId,
+          amount: t?.amount || t?.value || 0,
+          currency: t?.currency || t?.currencyCode || 'EUR',
+          status: t?.status || 'completed',
+          date: t?.date || t?.createdAt || t?.timestamp,
+          description: t?.description || t?.note || '',
+          merchant: merchant ? {
+            name: merchant.name || merchant.merchantName,
+            logo: merchant.logo || merchant.logoUrl
+          } : undefined
+        }
+      })
+    },
+    { ttl: 10 * 60 * 1000 } // 10 minutes
+  )
+}
+
+/**
+ * Force refresh user data (balance and transactions)
+ */
+export async function refreshUserData(): Promise<{ balance: number; transactions: any[] }> {
+  const uid = await getUserId()
+  if (!uid) return { balance: 0, transactions: [] }
+
+  // Force refresh by invalidating cache first
+  const { invalidate } = await import('../shared/cache')
+  await invalidate(CACHE_NAMESPACES.WALLET, `balance_${uid}`)
+  await invalidate(CACHE_NAMESPACES.TRANSACTIONS, `transactions_${uid}`)
+
+  // Fetch fresh data
+  const [balance, transactions] = await Promise.all([
+    getCachedBalance(),
+    getCachedTransactions()
+  ])
+
+  return { balance, transactions }
+}
+
 

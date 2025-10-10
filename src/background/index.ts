@@ -539,6 +539,46 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     })()
     return true
+  } else if (message?.type === 'GET_CACHED_BALANCE') {
+    ;(async () => {
+      try {
+        const { getCachedBalance } = await import('../shared/cached-api')
+        const balance = await getCachedBalance()
+        sendResponse({ balance })
+      } catch (error) {
+        console.warn('[Background] Error getting cached balance:', error)
+        sendResponse({ balance: 0, error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'GET_CACHED_TRANSACTIONS') {
+    ;(async () => {
+      try {
+        const { getCachedTransactions } = await import('../shared/cached-api')
+        const transactions = await getCachedTransactions()
+        sendResponse({ transactions })
+      } catch (error) {
+        console.warn('[Background] Error getting cached transactions:', error)
+        sendResponse({ transactions: [], error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'GET_CACHED_USER_DATA') {
+    ;(async () => {
+      try {
+        const { getCachedBalance, getCachedTransactions, getCachedUserProfile } = await import('../shared/cached-api')
+        const [balance, transactions, profile] = await Promise.all([
+          getCachedBalance(),
+          getCachedTransactions(),
+          getCachedUserProfile()
+        ])
+        sendResponse({ balance, transactions, profile })
+      } catch (error) {
+        console.warn('[Background] Error getting cached user data:', error)
+        sendResponse({ balance: 0, transactions: [], profile: null, error: (error as Error)?.message })
+      }
+    })()
+    return true
   }
 })
 
