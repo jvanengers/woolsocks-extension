@@ -534,25 +534,62 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
           try {
             const active = await hasActiveSession()
             if (!active) {
-              try {
-                chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible })
-              } catch {}
+              // Send message with retry logic for race condition
+              const sendWithRetry = async (message: any, messageType: string, attempts = 3) => {
+                for (let i = 0; i < attempts; i++) {
+                  try {
+                    await chrome.tabs.sendMessage(tabId, message)
+                    console.log(`[WS OC Debug] Successfully sent ${messageType} for ${clean}`)
+                    return
+                  } catch (error) {
+                    if (i < attempts - 1) {
+                      const delay = [100, 500, 1000][i]
+                      console.log(`[WS OC Debug] Retry ${i + 1} sending ${messageType} after ${delay}ms`)
+                      await new Promise(resolve => setTimeout(resolve, delay))
+                    } else {
+                      console.warn(`[WS OC Debug] Failed to send ${messageType} after ${attempts} attempts:`, error)
+                    }
+                  }
+                }
+              }
+              
+              await sendWithRetry(
+                { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible },
+                'oc_login_required'
+              )
               return
             }
           } catch {}
           // Show manual activation UI (will be handled by content script)
-          try {
-            chrome.tabs.sendMessage(tabId, {
+          const sendWithRetry = async (message: any, messageType: string, attempts = 3) => {
+            for (let i = 0; i < attempts; i++) {
+              try {
+                await chrome.tabs.sendMessage(tabId, message)
+                console.log(`[WS OC Debug] Successfully sent ${messageType} for ${clean}`)
+                return
+              } catch (error) {
+                if (i < attempts - 1) {
+                  const delay = [100, 500, 1000][i]
+                  console.log(`[WS OC Debug] Retry ${i + 1} sending ${messageType} after ${delay}ms`)
+                  await new Promise(resolve => setTimeout(resolve, delay))
+                } else {
+                  console.warn(`[WS OC Debug] Failed to send ${messageType} after ${attempts} attempts:`, error)
+                }
+              }
+            }
+          }
+          
+          await sendWithRetry(
+            {
               __wsOcUi: true,
               kind: 'oc_deals_found',
               host: clean,
               deals: eligible,
               platform: getPlatform(),
               isManualMode: true,
-            })
-          } catch (e) {
-            console.error(`[WS OC Debug] Error sending manual activation message for ${clean}:`, e)
-          }
+            },
+            'oc_deals_found (manual mode)'
+          )
           return
         }
       } catch (error) {
