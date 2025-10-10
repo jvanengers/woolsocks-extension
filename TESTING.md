@@ -6,6 +6,33 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
 1. Open `https://woolsocks.eu/nl/profile` and sign in (cookies must exist)
 2. Open the extension Options page and verify it says "Hi {firstname}" and shows a sock value
 
+## Cache Performance (roadmap #14)
+1. **Cache functionality**:
+   - Login to woolsocks.eu and open extension popup
+   - Note the time it takes to load balance (should be instant on subsequent opens)
+   - Open extension options page and verify balance loads instantly
+   - Verify transactions load instantly in options page
+2. **Cache refresh behavior**:
+   - Open popup multiple times quickly - should show cached data instantly
+   - Wait 10+ minutes, open popup - should trigger background refresh
+   - Verify balance updates after background refresh completes
+3. **Cache management UI**:
+   - In options page, find "Cache Management" section
+   - Click "Refresh Data" - verify data reloads and shows fresh information
+   - Click "Clear Cache" - verify cache is cleared and data reloads
+4. **Cache persistence**:
+   - Close browser completely and reopen
+   - Open extension popup - should still show cached balance instantly
+   - Verify cache survives browser restart
+5. **Cache analytics**:
+   - Open service worker console (chrome://extensions → Inspect service worker)
+   - Interact with popup and options page multiple times
+   - Verify cache hit/miss events are tracked in analytics
+6. **Anonymous user cache**:
+   - Log out of woolsocks.eu
+   - Open popup on partner site - should work without cache errors
+   - Verify anonymous users don't trigger balance/transaction cache calls
+
 ## Anonymous user behaviors (roadmap #3)
 1. **Setup**: Ensure you're NOT logged in to woolsocks.eu (clear cookies or use incognito)
 2. **Popup functionality**:

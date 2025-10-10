@@ -74,6 +74,9 @@ export interface Translations {
     viewAllTransactions: string
     enabled: string
     disabled: string
+    cacheManagement: string
+    refreshData: string
+    clearCache: string
     autoActivateOnlineCashback: string
     autoActivateOnlineCashbackDescription: string
     manualActivationDescription: string
@@ -201,6 +204,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'View all transactions',
       enabled: 'Enabled',
       disabled: 'Disabled',
+      cacheManagement: 'Cache Management',
+      refreshData: 'Refresh Data',
+      clearCache: 'Clear Cache',
     autoActivateOnlineCashback: 'Auto-activate online cashback',
     autoActivateOnlineCashbackDescription: 'Automatically redirect through affiliate links with 3-second countdown',
     manualActivationDescription: 'Show activation button, you click when you want cashback',
@@ -324,6 +330,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'Bekijk alle transacties',
       enabled: 'Ingeschakeld',
       disabled: 'Uitgeschakeld',
+      cacheManagement: 'Cache Beheer',
+      refreshData: 'Gegevens Vernieuwen',
+      clearCache: 'Cache Wissen',
       autoActivateOnlineCashback: 'Online cashback automatisch activeren',
       autoActivateOnlineCashbackDescription: 'Automatisch omleiden via affiliate links met 3-seconden aftelling',
       manualActivationDescription: 'Toon activatieknop, jij klikt wanneer je cashback wilt',
@@ -447,6 +456,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'Alle Transaktionen anzeigen',
       enabled: 'Aktiviert',
       disabled: 'Deaktiviert',
+      cacheManagement: 'Cache-Verwaltung',
+      refreshData: 'Daten Aktualisieren',
+      clearCache: 'Cache Löschen',
       autoActivateOnlineCashback: 'Online-Cashback automatisch aktivieren',
       autoActivateOnlineCashbackDescription: 'Cashback automatisch aktivieren, wenn verfügbar',
       manualActivationDescription: 'Aktivierungsschaltfläche anzeigen, Sie klicken, wenn Sie Cashback möchten',
@@ -562,6 +574,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'Voir toutes les transactions',
       enabled: 'Activé',
       disabled: 'Désactivé',
+      cacheManagement: 'Gestion du Cache',
+      refreshData: 'Actualiser les Données',
+      clearCache: 'Vider le Cache',
       autoActivateOnlineCashback: 'Activer automatiquement le cashback en ligne',
       autoActivateOnlineCashbackDescription: 'Activer automatiquement le cashback quand disponible',
       manualActivationDescription: 'Afficher le bouton d\'activation, vous cliquez quand vous voulez du cashback',
@@ -677,6 +692,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'Visualizza tutte le transazioni',
       enabled: 'Abilitato',
       disabled: 'Disabilitato',
+      cacheManagement: 'Gestione Cache',
+      refreshData: 'Aggiorna Dati',
+      clearCache: 'Cancella Cache',
       autoActivateOnlineCashback: 'Attiva automaticamente il cashback online',
       autoActivateOnlineCashbackDescription: 'Attiva automaticamente il cashback quando disponibile',
       manualActivationDescription: 'Mostra il pulsante di attivazione, clicchi quando vuoi il cashback',
@@ -792,6 +810,9 @@ const translations: Record<Language, Translations> = {
       viewAllTransactions: 'Ver todas las transacciones',
       enabled: 'Habilitado',
       disabled: 'Deshabilitado',
+      cacheManagement: 'Gestión de Caché',
+      refreshData: 'Actualizar Datos',
+      clearCache: 'Limpiar Caché',
       autoActivateOnlineCashback: 'Activar automáticamente el cashback online',
       autoActivateOnlineCashbackDescription: 'Activar automáticamente el cashback cuando esté disponible',
       manualActivationDescription: 'Mostrar botón de activación, haces clic cuando quieres cashback',

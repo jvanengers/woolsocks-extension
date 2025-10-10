@@ -143,23 +143,18 @@ function App() {
     }
     ;(async () => {
       try {
-        // Fetch wallet data directly (no cache)
-        const anon = await chrome.storage.local.get('wsAnonId')
-        const anonId = anon?.wsAnonId || crypto.randomUUID()
-        if (!anon?.wsAnonId) await chrome.storage.local.set({ wsAnonId: anonId })
-        const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=0&supportsJsonNote=true'
-        const resp = await fetch(url, {
-          credentials: 'include',
-          headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId }
-        })
-        if (resp.ok) {
-          const walletData = await resp.json()
-          const raw: number | undefined = walletData?.data?.balance?.totalAmount
-          const b = typeof raw === 'number' ? raw : 0
-          setBalance(b)
+        // Use cached balance data for instant loading
+        const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
+        if (resp && typeof resp.balance === 'number') {
+          setBalance(resp.balance)
           const el = document.getElementById('__ws_balance')
-          if (el) el.textContent = `€${b.toFixed(2)}`
+          if (el) el.textContent = `€${resp.balance.toFixed(2)}`
         }
+        
+        // Trigger background refresh for next time
+        try {
+          await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+        } catch {}
       } catch {}
     })()
   }, [session])
