@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import SettingsPanel from '../options/SettingsPanel'
 import { translate, initLanguage } from '../shared/i18n'
 import { track } from '../background/analytics'
+import OnboardingComponent from '../shared/OnboardingComponent'
+import { hasCompletedOnboarding } from '../shared/onboarding'
 
 interface Deal {
   name: string
@@ -16,13 +18,15 @@ interface Deal {
 
 function App() {
   const [session, setSession] = useState<boolean | null>(null)
-  const [view, setView] = useState<'home' | 'transactions'>('home')
+  const [view, setView] = useState<'home' | 'transactions' | 'consent'>('home')
   const [balance, setBalance] = useState<number>(0)
   const [onlineCashbackDeals, setOnlineCashbackDeals] = useState<Deal[]>([])
   const [vouchers, setVouchers] = useState<Deal[]>([])
   const [isTrackingActive, setIsTrackingActive] = useState<boolean>(false)
-  const [autoOc, setAutoOc] = useState<boolean>(true)
+  // Global reminders toggle (gates both cashback prompts and voucher reminders)
+  const [showReminders, setShowReminders] = useState<boolean>(true)
   const [currentDomain, setCurrentDomain] = useState<string>('')
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
 
   useEffect(() => {
     // Ensure language is initialized from storage so translate() uses the user's setting
@@ -31,6 +35,10 @@ function App() {
     document.documentElement.style.background = 'transparent'
     document.body.style.margin = '0'
     document.body.style.background = 'transparent'
+    
+    // Check if onboarding should be shown
+    const completed = hasCompletedOnboarding()
+    setShowOnboarding(!completed)
     ;(async () => {
       try {
         // Ask background to check via user-info with relay fallback
@@ -135,48 +143,40 @@ function App() {
     }
     ;(async () => {
       try {
-        const stored = await chrome.storage.local.get('wsAnonId')
-        const anonId: string = stored?.wsAnonId || crypto.randomUUID()
-        if (!stored?.wsAnonId) await chrome.storage.local.set({ wsAnonId: anonId })
-        const resp = await fetch('https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true', {
+        // Fetch wallet data directly (no cache)
+        const anon = await chrome.storage.local.get('wsAnonId')
+        const anonId = anon?.wsAnonId || crypto.randomUUID()
+        if (!anon?.wsAnonId) await chrome.storage.local.set({ wsAnonId: anonId })
+        const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=0&supportsJsonNote=true'
+        const resp = await fetch(url, {
           credentials: 'include',
-          headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId },
+          headers: { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId }
         })
-        if (!resp.ok) return
-        const data: any = await resp.json()
-        const raw: number | undefined = data?.data?.balance?.totalAmount
-        const b = typeof raw === 'number' ? raw : 0
-        setBalance(b)
-        const el = document.getElementById('__ws_balance')
-        if (el) el.textContent = `€${b.toFixed(2)}`
+        if (resp.ok) {
+          const walletData = await resp.json()
+          const raw: number | undefined = walletData?.data?.balance?.totalAmount
+          const b = typeof raw === 'number' ? raw : 0
+          setBalance(b)
+          const el = document.getElementById('__ws_balance')
+          if (el) el.textContent = `€${b.toFixed(2)}`
+        }
       } catch {}
     })()
   }, [session])
 
-  // Load auto-activate setting
+  // Load global reminders flag for gating voucher section
   useEffect(() => {
-    if (session !== true) return
     ;(async () => {
       try {
         const result = await chrome.storage.local.get('user')
         const user = result.user || { settings: {} }
-        const enabled = user.settings?.autoActivateOnlineCashback
-        setAutoOc(enabled !== false)
+        const flag = user?.settings?.showCashbackReminders
+        setShowReminders(flag !== false)
       } catch {}
     })()
-  }, [session])
+  }, [])
 
-  // Save auto-activate setting
-  async function saveAutoOc(next: boolean) {
-    try {
-      const result = await chrome.storage.local.get('user')
-      const user = result.user || { totalEarnings: 0, activationHistory: [], settings: { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true } }
-      user.settings = user.settings || { showCashbackPrompt: true, showVoucherPrompt: true, autoActivateOnlineCashback: true }
-      user.settings.autoActivateOnlineCashback = next
-      await chrome.storage.local.set({ user })
-      setAutoOc(next)
-    } catch {}
-  }
+  // Auto-activation setting load/save logic removed from popup
 
   // Load deals from current tab
   useEffect(() => {
@@ -273,13 +273,36 @@ function App() {
     )
   }
 
+  // Show onboarding if not completed
+  if (showOnboarding) {
+    return (
+      <div style={{ 
+        background: '#fff', 
+        borderRadius: 0, 
+        overflow: 'hidden', 
+        position: 'relative', 
+        width: 320, 
+        maxHeight: 600, 
+        display: 'flex', 
+        flexDirection: 'column',
+        boxSizing: 'border-box'
+      }}>
+        <OnboardingComponent 
+          variant="popup" 
+          onComplete={() => setShowOnboarding(false)} 
+        />
+      </div>
+    )
+  }
+
   // Note: Do not early-return when unauthenticated. We still render the popup,
   // but replace the top-left balance with a Login button matching the
   // bottom-right message styling.
   const brandBg = isTrackingActive ? '#00C275' : '#FDC408'
+  const isConsentView = view === 'consent'
   return (
     <div style={{ 
-      background: brandBg, 
+      background: isConsentView ? '#FFFFFF' : brandBg, 
       borderRadius: 0, 
       overflow: 'hidden', 
       position: 'relative', 
@@ -287,7 +310,7 @@ function App() {
       maxHeight: 600, 
       display: 'flex', 
       flexDirection: 'column',
-      border: `4px solid ${brandBg}`
+      border: isConsentView ? '4px solid #FFFFFF' : `4px solid ${brandBg}`
     }}>
       {/* Header */}
       <div style={{ 
@@ -298,7 +321,34 @@ function App() {
         paddingLeft: 8,
         paddingRight: 8
       }}>
-        {view === 'transactions' ? (
+        {view === 'consent' ? (
+          <>
+            {/* Left: back button */}
+            <button
+              onClick={() => setView('home')}
+              aria-label="Back"
+              style={{ 
+                appearance: 'none', 
+                background: 'transparent', 
+                border: 'none', 
+                cursor: 'pointer', 
+                lineHeight: 1,
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path fillRule="evenodd" clipRule="evenodd" d="M6.41421 13.0001L10.7071 17.293L9.29289 18.7072L3.29289 12.7072C2.90237 12.3167 2.90237 11.6835 3.29289 11.293L9.29289 5.29297L10.7071 6.70718L6.41421 11.0001H20V13.0001H6.41421Z" fill="#0F0B1C"/>
+              </svg>
+            </button>
+            {/* Center spacer */}
+            <div style={{ flex: 1 }} />
+            {/* Right spacer */}
+            <div style={{ width: 32, height: 32 }} />
+          </>
+        ) : view === 'transactions' ? (
           <>
             <button
               onClick={() => setView('home')}
@@ -347,47 +397,63 @@ function App() {
                 <span id="__ws_balance">€{balance.toFixed(2)}</span>
               </button>
 
-              {/* Right: current domain */}
-              <div style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-                {currentDomain && (
-                  <span style={{
-                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                    fontSize: 12,
-                    color: '#100B1C',
-                    opacity: 0.6,
-                    lineHeight: 1.4
-                  }}>{currentDomain}</span>
-                )}
-              </div>
+              {/* Right: settings icon */}
+              <button
+                onClick={() => setView('consent')}
+                aria-label="Settings"
+                style={{ appearance: 'none', background: 'transparent', border: 'none', cursor: 'pointer', marginLeft: 'auto', padding: 4 }}
+              >
+                <img src={chrome.runtime.getURL('public/icons/Settings.svg')} alt="Settings" width={40} height={40} />
+              </button>
             </>
           ) : (
-            <button
-              onClick={openLogin}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: 32,
-                padding: '0 12px',
-                background: '#211940',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontFamily: 'Woolsocks, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                fontSize: 14,
-                fontWeight: 500,
-                lineHeight: 1.4
-              }}
-            >
-              {translate('popup.login')}
-            </button>
+            <>
+              {/* Left: login button */}
+              <button
+                onClick={openLogin}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: 32,
+                  padding: '0 12px',
+                  background: '#211940',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontFamily: 'Woolsocks, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  lineHeight: 1.4
+                }}
+              >
+                {translate('popup.login')}
+              </button>
+
+              {/* Right: settings icon */}
+              <button
+                onClick={() => setView('consent')}
+                aria-label="Settings"
+                style={{ appearance: 'none', background: 'transparent', border: 'none', cursor: 'pointer', marginLeft: 'auto', padding: 4 }}
+              >
+                <img src={chrome.runtime.getURL('public/icons/Settings.svg')} alt="Settings" width={40} height={40} />
+              </button>
+            </>
           )
         )}
       </div>
 
       {/* Body */}
-      {view === 'transactions' ? (
+      {view === 'consent' ? (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <OnboardingComponent
+            variant="popup"
+            cashbackOnly
+            onComplete={() => setView('home')}
+          />
+        </div>
+      ) : view === 'transactions' ? (
         session === true ? (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <SettingsPanel
@@ -433,16 +499,44 @@ function App() {
                   opacity: 0.5,
                   letterSpacing: '0.15px'
                 }}>
-                  {translate('popup.onlineCashback')}
+                  {`Earn online cashback at ${currentDomain.replace(/^www\./,'')}`}
                 </span>
               </div>
 
               {/* Deals List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 8px' }}>
                 {onlineCashbackDeals.map((deal, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                  <div 
+                    key={index} 
+                    onClick={() => {
+                      // Trigger manual redirection for this specific deal
+                      chrome.runtime.sendMessage({
+                        type: 'OC_MANUAL_ACTIVATE_DEAL',
+                        domain: currentDomain,
+                        dealInfo: deal
+                      })
+                    }}
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 12, 
+                      padding: '12px 8px',
+                      cursor: 'pointer',
+                      borderRadius: 8,
+                      border: '1px solid transparent',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#E5F3FF'
+                      e.currentTarget.style.borderColor = '#0084FF'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                      e.currentTarget.style.borderColor = 'transparent'
+                    }}
+                  >
                     <div style={{ 
-                      background: 'rgba(253,196,8,0.2)', 
+                      background: '#FFF9E6', 
                       borderRadius: 8, 
                       width: 40, 
                       height: 40, 
@@ -463,10 +557,13 @@ function App() {
                     </div>
                     <div style={{ 
                       flex: 1,
-                      fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                      fontSize: 12,
                       color: '#100B1C',
-                      lineHeight: 1.45,
+                      fontFeatureSettings: "'liga' off, 'clig' off",
+                      fontFamily: 'Woolsocks',
+                      fontSize: 16,
+                      fontStyle: 'normal',
+                      fontWeight: 400,
+                      lineHeight: '145%',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       display: '-webkit-box',
@@ -475,75 +572,21 @@ function App() {
                     }}>
                       {deal.description || deal.name}
                     </div>
+                    <img 
+                      src={chrome.runtime.getURL('public/icons/Chevron forward.png')} 
+                      alt="Activate deal"
+                      style={{ 
+                        width: 16, 
+                        height: 16, 
+                        flexShrink: 0,
+                        opacity: 0.6
+                      }}
+                    />
                   </div>
                 ))}
               </div>
 
-              {/* Auto-activation toggle */}
-              <div style={{ padding: '0 16px' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  background: '#F9FAFB',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: 8,
-                  padding: 12
-                }}>
-                  <div style={{ 
-                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#100B1C'
-                  }}>
-                    {translate('popup.autoActivation')}
-                  </div>
-                  <label style={{ 
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}>
-                    <div style={{
-                      position: 'relative',
-                      width: 51,
-                      height: 31,
-                      background: autoOc ? '#FDC408' : '#E5E7EB',
-                      borderRadius: 15.5,
-                      transition: 'background 0.2s',
-                      cursor: 'pointer'
-                    }}>
-                      <input 
-                        type="checkbox" 
-                        checked={autoOc} 
-                        onChange={(e) => saveAutoOc(e.target.checked)}
-                        style={{
-                          position: 'absolute',
-                          opacity: 0,
-                          width: 0,
-                          height: 0
-                        }}
-                      />
-                      <div style={{
-                        position: 'absolute',
-                        top: 2,
-                        left: autoOc ? 22 : 2,
-                        width: 27,
-                        height: 27,
-                        background: '#FFFFFF',
-                        borderRadius: '50%',
-                        transition: 'left 0.2s',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                      }}>
-                        {autoOc && (
-                          <svg xmlns="http://www.w3.org/2000/svg" width="27" height="27" viewBox="0 0 27 27" fill="none" style={{ display: 'block' }}>
-                            <path d="M7 13.5L11.5 18L20 9.5" stroke="#FDC408" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        )}
-                      </div>
-                    </div>
-                  </label>
-                </div>
-              </div>
+              {/* Auto-activation toggle removed; control moved to settings consent screen */}
 
               {/* Tracking Active Status - inside Online cashback, below the toggle */}
               {isTrackingActive && (
@@ -575,8 +618,8 @@ function App() {
             </div>
           )}
 
-          {/* Vouchers Section */}
-          {vouchers.length > 0 && (
+          {/* Vouchers Section (gated by global reminders) */}
+          {showReminders && vouchers.length > 0 && (
             <div style={{ 
               background: '#FFFFFF', 
               borderRadius: onlineCashbackDeals.length > 0 ? '0 0 16px 16px' : 16,
@@ -599,12 +642,12 @@ function App() {
                   opacity: 0.5,
                   letterSpacing: '0.15px'
                 }}>
-                  {translate('popup.payWithVouchers')}
+                  {`Pay with vouchers at ${currentDomain.replace(/^www\./,'')}`}
                 </span>
               </div>
 
               {/* Vouchers List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 8px' }}>
                 {vouchers.map((voucher, index) => (
                   <div 
                     key={index} 
@@ -614,13 +657,24 @@ function App() {
                       }
                     }}
                     style={{ 
-                      background: '#FFFFFF',
                       display: 'flex', 
                       alignItems: 'center', 
-                      gap: 16, 
-                      padding: '8px 16px',
+                      gap: 12, 
+                      padding: '12px 8px',
                       cursor: voucher.dealUrl ? 'pointer' : 'default',
-                      borderRadius: 8
+                      borderRadius: 8,
+                      border: '1px solid transparent',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (voucher.dealUrl) {
+                        e.currentTarget.style.backgroundColor = '#E5F3FF'
+                        e.currentTarget.style.borderColor = '#0084FF'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent'
+                      e.currentTarget.style.borderColor = 'transparent'
                     }}
                   >
                     <div style={{ 
@@ -650,14 +704,13 @@ function App() {
                     }}>
                       <span style={{ 
                         flex: 1,
-                        fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                        fontSize: 12,
-                        fontWeight: 500,
                         color: '#100B1C',
-                        lineHeight: 1.4,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
+                        fontFeatureSettings: "'liga' off, 'clig' off",
+                        fontFamily: 'Woolsocks',
+                        fontSize: 16,
+                        fontStyle: 'normal',
+                        fontWeight: 400,
+                        lineHeight: '145%'
                       }}>
                         {voucher.name || 'Gift Card'}
                       </span>

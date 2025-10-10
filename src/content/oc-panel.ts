@@ -270,6 +270,7 @@ function ensureMount(): ShadowRoot {
       animation: grow 1100ms infinite alternate ease-in-out !important; 
     }
     @keyframes grow { from { width: 30% } to { width: 85% } }
+    /* progress bar removed */
     @keyframes ws-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
     .spin { animation: ws-spin 1.5s linear infinite !important; }
     .panel.compact { min-width: unset !important; max-width: none !important; min-height: auto !important; width: auto !important; }
@@ -365,19 +366,9 @@ function ensureMount(): ShadowRoot {
       min-width: 280px !important;
       max-width: 400px !important;
     }
-    .countdown-content {
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 12px !important;
-    }
-    .countdown-header {
-      display: flex !important;
-      align-items: center !important;
-      gap: 12px !important;
-    }
-    .countdown-text {
-      flex: 1 !important;
-    }
+    .countdown-content { display:block !important; }
+    .countdown-row { display:flex !important; align-items:center !important; gap:16px !important; }
+    .countdown-text { flex: 1 !important; display:flex !important; flex-direction:column !important; gap:6px !important; }
     .countdown-title {
       font-size: 16px !important;
       font-weight: 600 !important;
@@ -391,26 +382,20 @@ function ensureMount(): ShadowRoot {
       line-height: 1.4 !important;
       margin-top: 2px !important;
     }
-    .countdown-actions {
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      gap: 12px !important;
-    }
+    .countdown-actions { display:flex !important; align-items:center !important; justify-content:flex-end !important; }
+    /* progress svg removed */
     .countdown-cancel-btn {
-      background: #F5F5F6 !important;
-      color: #0F0B1C !important;
+      background: #211940 !important;
+      color: #FFFFFF !important;
       border: none !important;
       border-radius: 8px !important;
-      padding: 8px 16px !important;
+      padding: 10px 16px !important;
       font-size: 14px !important;
-      font-weight: 500 !important;
+      font-weight: 600 !important;
       cursor: pointer !important;
       font-family: inherit !important;
     }
-    .countdown-cancel-btn:hover {
-      background: #E5E7EB !important;
-    }
+    .countdown-cancel-btn:hover { opacity: .9 !important; }
     .countdown-number {
       width: 48px !important;
       height: 48px !important;
@@ -431,56 +416,18 @@ function ensureMount(): ShadowRoot {
       border-radius: 16px !important;
       box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
       padding: 16px !important;
+      width: auto !important;
       min-width: 280px !important;
-      max-width: 400px !important;
-    }
-    .manual-activation-content {
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 12px !important;
-    }
-    .manual-activation-header {
+      max-width: calc(100vw - 32px) !important;
       display: flex !important;
       align-items: center !important;
-      gap: 12px !important;
+      gap: 16px !important;
     }
-    .manual-activation-text {
-      flex: 1 !important;
-    }
-    .manual-activation-title {
-      font-size: 16px !important;
-      font-weight: 600 !important;
-      color: #0F0B1C !important;
-      line-height: 1.4 !important;
-    }
-    .manual-activation-deal {
-      font-size: 14px !important;
-      color: #0F0B1C !important;
-      opacity: 0.7 !important;
-      line-height: 1.4 !important;
-      margin-top: 2px !important;
-    }
-    .manual-activation-actions {
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      gap: 12px !important;
-    }
-    .manual-activate-btn {
-      background: #00C275 !important;
-      color: #FFFFFF !important;
-      border: none !important;
-      border-radius: 8px !important;
-      padding: 12px 20px !important;
-      font-size: 14px !important;
-      font-weight: 600 !important;
-      cursor: pointer !important;
-      font-family: inherit !important;
-      flex: 1 !important;
-    }
-    .manual-activate-btn:hover {
-      background: #00A865 !important;
-    }
+    .manual-activation-left { display:flex !important; align-items:center !important; gap:16px !important; flex:1 !important; }
+    .manual-activation-title { font-size: 20px !important; font-weight: 700 !important; color:#0F0B1C !important; line-height:1.25 !important; }
+    .manual-activation-sub { font-size: 14px !important; color:#6B7280 !important; line-height:1.4 !important; margin-top:6px !important; }
+    .manual-activate-btn { background:#211940 !important; color:#FFFFFF !important; border:none !important; border-radius:8px !important; height:48px !important; padding: 0 16px !important; font-size:14px !important; font-weight:600 !important; cursor:pointer !important; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important; }
+    .manual-activate-btn:hover { opacity:.92 !important; }
     .icon-btn { background: transparent !important; border: none !important; cursor: pointer !important; padding: 0 !important; display:flex !important; align-items:center !important; justify-content:center !important; width: 48px !important; height: 48px !important; }
     .cta-btn { 
       display:flex !important; align-items:center !important; justify-content:center !important;
@@ -949,29 +896,36 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   banner.className = 'countdown-banner'
   banner.innerHTML = `
     <div class="countdown-content">
-      <div class="countdown-header">
-        <img class="logo logo-24" alt="Woolsocks" src="${WS_LOGO.yellow}">
+      <div class="countdown-row">
         <div class="countdown-text">
-          <div class="countdown-title">${translate('ocPanel.countdownTitle', { seconds: countdownSeconds })}</div>
-          <div class="countdown-deal">${formatRate(dealInfo)} cashback on ${escapeHtml(domain)}</div>
+          <div class="countdown-title" id="ws-countdown-title">Cashback actief in ${countdownSeconds}</div>
+          
+        </div>
+        <div class="countdown-actions">
+          <button class="countdown-cancel-btn" id="ws-countdown-cancel">${translate('ocPanel.countdownCancel')}</button>
         </div>
       </div>
-      <div class="countdown-actions">
-        <button class="countdown-cancel-btn" id="ws-countdown-cancel">${translate('ocPanel.countdownCancel')}</button>
-        <div class="countdown-number" id="ws-countdown-number">${countdownSeconds}</div>
-      </div>
+      <div class="countdown-deal">${formatRate(dealInfo)} cashback on ${escapeHtml(domain)}</div>
     </div>
   `
   
+  // Ensure dynamic width so long texts are not truncated
+  try {
+    if (hostEl) hostEl.style.width = 'auto'
+    // Clear any saved fixed width so future mounts stay dynamic
+    try { chrome.storage.session.remove('__wsOcPanelWidth') } catch {}
+  } catch {}
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
   
+  // Animate progress bar exactly over the countdown duration
+  const titleEl = banner.querySelector('#ws-countdown-title') as HTMLElement | null
+  
+
   // Start countdown
   countdownTimer = window.setInterval(() => {
     countdownSeconds--
-    const numberEl = document.getElementById('ws-countdown-number')
-    if (numberEl) {
-      numberEl.textContent = countdownSeconds.toString()
-    }
+    if (titleEl) { titleEl.textContent = `Cashback actief in ${countdownSeconds}` }
+    
     
     if (countdownSeconds <= 0) {
       clearCountdown()
@@ -1010,24 +964,36 @@ function clearCountdown() {
 function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal | null) {
   const r = ensureMount(); clearTimers()
   
+  // Clear any saved width to allow dynamic sizing
+  if (hostEl) hostEl.style.width = 'auto'
+  try { chrome.storage.session.remove('__wsOcPanelWidth') } catch {}
+  
   const banner = document.createElement('div')
   banner.className = 'manual-activation-banner'
+  // Apply blue bordered card styling per spec
+  try {
+    (banner as HTMLElement).style.borderRadius = '16px'
+    ;(banner as HTMLElement).style.border = '2px solid #0084FF'
+    ;(banner as HTMLElement).style.background = '#FFFFFF'
+    ;(banner as HTMLElement).style.boxShadow = '0 0 24px 0 rgba(0, 0, 0, 0.20)'
+    ;(banner as HTMLElement).style.display = 'grid'
+    ;(banner as HTMLElement).style.gridTemplateColumns = '1fr auto auto'
+    ;(banner as HTMLElement).style.alignItems = 'center'
+    ;(banner as HTMLElement).style.gap = '12px'
+    ;(banner as HTMLElement).style.padding = '12px 16px'
+  } catch {}
   const rate = bestDeal ? formatRate(bestDeal) : '0%'
   
   banner.innerHTML = `
-    <div class="manual-activation-content">
-      <div class="manual-activation-header">
-        <img class="logo logo-24" alt="Woolsocks" src="${WS_LOGO.yellow}">
-        <div class="manual-activation-text">
-          <div class="manual-activation-title">${translate('ocPanel.activateNow')}</div>
-          <div class="manual-activation-deal">${rate} cashback on ${escapeHtml(host)}</div>
-        </div>
-      </div>
-      <div class="manual-activation-actions">
-        <button class="manual-activate-btn" id="ws-manual-activate">${translate('ocPanel.activateNow')}</button>
-        <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
+    <div class="manual-activation-left" style="display:flex;align-items:center;gap:12px;min-width:0;">
+      <img class="logo" alt="Woolsocks" src="${WS_LOGO.yellow}" style="width:40px;height:40px;flex-shrink:0;"/>
+      <div class="manual-activation-text" style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+        <div class="manual-activation-title single-line" style="white-space:nowrap;font-size:18px;font-weight:700;color:#0F0B1C;">${translate('ocPanel.activateTitle', { rate: rate })}</div>
+        <div class="manual-activation-sub single-line" style="white-space:nowrap;font-size:14px;color:#6B7280;">${translate('ocPanel.activateDescription', { host: escapeHtml(host) })}</div>
       </div>
     </div>
+    <button class="manual-activate-btn" id="ws-manual-activate" style="height:40px;padding:0 16px;border:none;border-radius:8px;background:#211940;color:#FFFFFF;font-weight:700;cursor:pointer;">${translate('ocPanel.activateCta')}</button>
+    <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
   `
   
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
@@ -1089,6 +1055,22 @@ chrome.runtime.onMessage.addListener((msg: any) => {
 })
 
 // On visibility/show, request activation state from background and re-emit if active
+// Also check for activation state on page load as a fallback
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const domain = getDomain()
+    const key = '__wsOcActivePillByDomain'
+    const result = await chrome.storage.session.get(key)
+    const activePills = result[key] as Record<string, boolean> | undefined
+    if (activePills && activePills[domain]) {
+      // Show activation pill if we missed the message
+      console.log(`[WS OC Debug] Fallback: showing activation pill for ${domain}`)
+      showAuthenticatedActivePill()
+    }
+  } catch (error) {
+    console.warn('[WS OC Debug] Fallback check failed:', error)
+  }
+})
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return
   try {

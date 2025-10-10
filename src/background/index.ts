@@ -5,6 +5,8 @@ import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
 import { track } from './analytics'
 import { setupOnlineCashbackFlow, getDomainActivationState, removeTabFromOtherDomains } from './online-cashback'
+import { fetchWalletDataCached, fetchTransactionsCached, fetchUserProfileCached } from '../shared/cached-api'
+import { getStats, cleanupExpired, restoreFromPersistent, CACHE_NAMESPACES } from '../shared/cache'
 
 // --- First-party header injection for woolsocks.eu -------------------------
 const WS_ORIGIN = 'https://woolsocks.eu'
@@ -124,6 +126,16 @@ chrome.runtime.onStartup?.addListener(async () => {
   // Ensure online cashback flow is active when service worker wakes up
   try { setupOnlineCashbackFlow(setIcon) } catch {}
 })
+
+// Ensure the online cashback flow is registered even if neither onInstalled nor onStartup fire
+// (e.g., during dev reloads or SW restarts). Guard to avoid double registration.
+let __wsOcFlowRegistered = false
+function ensureOcFlowRegistered() {
+  if (__wsOcFlowRegistered) return
+  try { setupOnlineCashbackFlow(setIcon); __wsOcFlowRegistered = true } catch {}
+}
+// Call immediately at top-level so webNavigation listeners are attached as soon as the SW starts
+ensureOcFlowRegistered()
 
 // Domains where the extension should never trigger
 const EXCLUDED_DOMAINS = [
@@ -468,6 +480,116 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ partners: deals, lastUpdated: new Date() })
     })()
     return true
+  } else if (message?.type === 'REFRESH_USER_DATA') {
+    ;(async () => {
+      try {
+        // Refresh user data in background
+        await Promise.all([
+          fetchWalletDataCached(),
+          fetchTransactionsCached(),
+          fetchUserProfileCached(),
+        ])
+        sendResponse({ ok: true })
+      } catch (error) {
+        console.warn('[Background] Error refreshing user data:', error)
+        sendResponse({ ok: false, error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'CACHE_STATS') {
+    ;(async () => {
+      try {
+        const stats = await getStats()
+        sendResponse(stats)
+      } catch (error) {
+        sendResponse({ error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'CACHE_INVALIDATE') {
+    ;(async () => {
+      try {
+        const { namespace, key } = message
+        if (namespace && key) {
+          // Invalidate specific cache entry
+          const { invalidate } = await import('../shared/cache')
+          await invalidate(namespace, key)
+        } else if (namespace) {
+          // Invalidate entire namespace
+          const { invalidateNamespace } = await import('../shared/cache')
+          await invalidateNamespace(namespace)
+        } else {
+          // Clear all caches
+          const { clearAll } = await import('../shared/cache')
+          await clearAll()
+        }
+        sendResponse({ ok: true })
+      } catch (error: any) {
+        sendResponse({ ok: false, error: error?.message || 'Unknown error' })
+      }
+    })()
+    return true
+  } else if (message?.type === 'GET_USER_ID') {
+    ;(async () => {
+      try {
+        const userId = await hasActiveSession()
+        sendResponse({ userId: userId ? 'authenticated' : null })
+      } catch {
+        sendResponse({ userId: null })
+      }
+    })()
+    return true
+  }
+})
+
+// --- Cache Management and Background Refresh --------------------------------
+
+// Set up cache cleanup alarm
+chrome.alarms.create('cache-cleanup', {
+  delayInMinutes: 24 * 60, // 24 hours
+  periodInMinutes: 24 * 60 // Every 24 hours
+})
+
+// Set up cache preload alarm
+chrome.alarms.create('cache-preload', {
+  delayInMinutes: 30, // 30 minutes
+  periodInMinutes: 30 // Every 30 minutes
+})
+
+// Handle cache-related alarms
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  try {
+    if (alarm.name === 'cache-cleanup') {
+      const removed = await cleanupExpired()
+      console.log(`[Cache] Cleanup removed ${removed} expired entries`)
+    } else if (alarm.name === 'cache-preload') {
+      // Pre-warm cache for popular merchants
+      const popularMerchants = ['bol.com', 'zalando.nl', 'coolblue.nl', 'wehkamp.nl', 'mediamarkt.nl', 'ikea.nl', 'hema.nl']
+      for (const merchant of popularMerchants) {
+        try {
+          await getPartnerByHostname(merchant)
+        } catch (error) {
+          console.warn(`[Cache] Failed to preload ${merchant}:`, error)
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[Cache] Alarm handler error:', error)
+  }
+})
+
+// Initialize cache on startup
+chrome.runtime.onStartup?.addListener(async () => {
+  try {
+    // Restore cache from persistent storage
+    await restoreFromPersistent([
+      CACHE_NAMESPACES.PARTNER_INFO,
+      CACHE_NAMESPACES.MERCHANT_SEARCH,
+      CACHE_NAMESPACES.PARTNER_CONFIG,
+    ])
+    console.log('[Cache] Restored from persistent storage on startup')
+  } catch (error) {
+    console.warn('[Cache] Error restoring from persistent storage:', error)
   }
 })
 

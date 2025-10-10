@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { translate, initLanguage, translateTransactionStatus } from '../shared/i18n'
 import { createRoot } from 'react-dom/client'
+import OnboardingComponent from '../shared/OnboardingComponent'
+import { hasCompletedOnboarding } from '../shared/onboarding'
 
 type WsProfile = any
 type WsTransaction = any
@@ -114,9 +116,15 @@ function Options() {
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [walletData, setWalletData] = useState<any>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
 
   useEffect(() => {
     try { initLanguage() } catch {}
+    
+    // Check if onboarding should be shown
+    const completed = hasCompletedOnboarding()
+    setShowOnboarding(!completed)
+    
     checkSession().then((has) => {
       setSession(has)
       if (has) {
@@ -164,6 +172,25 @@ function Options() {
   const sockValueRaw: number | undefined = walletData?.data?.balance?.totalAmount
 
   const sockValue = typeof sockValueRaw === 'number' ? sockValueRaw : 0
+
+  // Show onboarding if not completed
+  if (showOnboarding) {
+    return (
+      <div style={{ 
+        width: '100%', 
+        maxWidth: 600, 
+        margin: '0 auto', 
+        padding: 24, 
+        background: '#fff', 
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' 
+      }}>
+        <OnboardingComponent 
+          variant="options" 
+          onComplete={() => setShowOnboarding(false)} 
+        />
+      </div>
+    )
+  }
 
   return (
     <div style={{ width: 320, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>

@@ -36,18 +36,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     icon: '🎁'
   },
   {
-    id: 'settings',
-    title: translate('onboarding.settingsTitle'),
-    content: translate('onboarding.settingsContent'),
-    icon: '⚙️'
-  },
-  {
-    id: 'privacy',
-    title: translate('onboarding.privacyTitle'),
-    content: translate('onboarding.privacyContent'),
-    icon: '🔒'
-  },
-  {
     id: 'cashback-activation',
     title: translate('onboarding.cashbackActivationTitle'),
     content: translate('onboarding.cashbackActivationContent'),

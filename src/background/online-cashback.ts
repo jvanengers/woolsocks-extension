@@ -2,7 +2,7 @@
 // Hooks webNavigation to detect merchant visits, select best online cashback deal,
 // request a tracked redirect URL, and open the popup once activated.
 
-import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode, fetchRecentClicksForSite } from './api'
+import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode, fetchRecentClicksForSite, hasActiveSession } from './api'
 import { track, initAnalytics } from './analytics'
 import { getPlatform, allowsAutoRedirect, requiresUserGesture } from '../shared/platform'
 import type { Deal, PartnerLite } from '../shared/types'
@@ -27,6 +27,7 @@ type RedirectState = {
   restoredOnce?: boolean
   affiliateHost?: string
   createdAt?: number
+  startedAt?: number
 }
 
 const tabRedirectState = new Map<number, RedirectState>()
@@ -217,6 +218,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (!host || isExcluded(host)) return
       const clean = cleanHost(host)
 
+      console.log(`[WS OC Debug] Navigation detected: ${clean}`)
       if (OC_DEBUG) console.log('[WS OC] nav', { tabId, host: clean })
 
       // Debounce duplicate onCommitted events for the same (tab, host)
@@ -342,10 +344,39 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         // Expose merchant webUrl to content deck via page context cache
         try { (globalThis as any).__wsLastMerchantWebUrl = (pending as any).merchantWebUrl || null } catch {}
         // Persist active pill for this domain in session storage so content can auto-show if message races
-        try { await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }) } catch {}
+        let messageSent = false
+        try { 
+          await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId })
+          messageSent = true
+          console.log(`[WS OC Debug] Successfully sent oc_activated message for ${clean}`)
+        } catch (error) {
+          console.warn(`[WS OC Debug] Failed to send oc_activated message for ${clean}:`, error)
+        }
         try { track('oc_state_reemit', { domain: clean, reason: 'post_landing' }) } catch {}
-        // As a safety, re-send activation after a short delay in case content script loads late
-        try { setTimeout(() => { try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId }); try { track('oc_state_reemit', { domain: clean, reason: 'delayed' }) } catch {} } catch {} }, 1200) } catch {}
+        
+        // As a safety, re-send activation after delays in case content script loads late
+        if (!messageSent) {
+          // Immediate retry
+          setTimeout(async () => {
+            try { 
+              await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId })
+              console.log(`[WS OC Debug] Successfully sent delayed oc_activated message for ${clean}`)
+            } catch (error) {
+              console.warn(`[WS OC Debug] Failed delayed oc_activated message for ${clean}:`, error)
+            }
+          }, 500)
+        }
+        
+        // Additional retry after longer delay
+        setTimeout(async () => {
+          try { 
+            await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: allDeals, dealId: pending.deal.id, providerMerchantId: pending.deal.providerMerchantId })
+            console.log(`[WS OC Debug] Successfully sent final retry oc_activated message for ${clean}`)
+            try { track('oc_state_reemit', { domain: clean, reason: 'final_retry' }) } catch {}
+          } catch (error) {
+            console.warn(`[WS OC Debug] Failed final retry oc_activated message for ${clean}:`, error)
+          }
+        }, 2000)
         try {
           const key = '__wsOcActivePillByDomain'
           const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
@@ -486,28 +517,47 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         const showReminders = user?.settings?.showCashbackReminders !== false
         const autoActivate = user?.settings?.autoActivateOnlineCashback !== false
         
+        console.log(`[WS OC Debug] User settings for ${clean}: showReminders=${showReminders}, autoActivate=${autoActivate}`)
+        console.log(`[WS OC Debug] Raw user settings:`, user?.settings)
+        
         // If reminders are disabled, don't show any UI
         if (!showReminders) { 
+          console.log(`[WS OC Debug] Blocking scan for ${clean}: reminders disabled`)
           track('oc_blocked', { domain: clean, reason: 'reminders_disabled' })
           return 
         }
         
         // If auto-activation is disabled, show manual activation UI instead
         if (!autoActivate) {
+          console.log(`[WS OC Debug] Manual activation enabled for ${clean}`)
+          // If not logged in, show unauthenticated state instead of manual activate
+          try {
+            const active = await hasActiveSession()
+            if (!active) {
+              try {
+                chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible })
+              } catch {}
+              return
+            }
+          } catch {}
           // Show manual activation UI (will be handled by content script)
-          try { 
-            chrome.tabs.sendMessage(tabId, { 
-              __wsOcUi: true, 
-              kind: 'oc_deals_found', 
-              host: clean, 
+          try {
+            chrome.tabs.sendMessage(tabId, {
+              __wsOcUi: true,
+              kind: 'oc_deals_found',
+              host: clean,
               deals: eligible,
               platform: getPlatform(),
-              isManualMode: true
-            }) 
-          } catch {}
+              isManualMode: true,
+            })
+          } catch (e) {
+            console.error(`[WS OC Debug] Error sending manual activation message for ${clean}:`, e)
+          }
           return
         }
-      } catch {}
+      } catch (error) {
+        console.error(`[WS OC Debug] Error reading user settings for ${clean}:`, error)
+      }
 
       const best = pickBestCashback(eligible)
       if (!best || !best.id) { track('oc_blocked', { domain: clean, reason: 'no_link' }); if (OC_DEBUG) console.log('[WS OC] best deal missing id', best); return }
@@ -540,12 +590,15 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const supportsAuto = allowsAutoRedirect()
       const requiresGesture = requiresUserGesture()
       
+      console.log(`[WS OC Debug] Activation decision for ${clean}: platform=${platform}, supportsAuto=${supportsAuto}, requiresGesture=${requiresGesture}`)
+      
       // Stash redirect info for later use
       best.affiliateUrl = redir.url
       best.clickId = redir.clickId
       ;(best as any).providerMerchantId = (best as any).providerMerchantId || eligible[0]?.providerMerchantId
       
       if (supportsAuto && !requiresGesture) {
+        console.log(`[WS OC Debug] Initiating auto-activation countdown for ${clean}`)
         // Chrome/Firefox: Show countdown banner for auto-activation
         track('oc_countdown_shown', { domain: clean, deal_id: best.id, platform })
         try { 
@@ -556,10 +609,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             dealInfo: best, 
             countdown: 3 
           }) 
-        } catch {}
+        } catch (e) {
+          console.error(`[WS OC Debug] Error sending countdown message for ${clean}:`, e)
+        }
         
         // Store redirect state for when countdown completes
-        const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url }
+        const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url, startedAt: Date.now() }
         ;(enrich as any).deals = eligible
         tabRedirectState.set(tabId, enrich)
         
@@ -573,6 +628,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         } catch {}
         
       } else {
+        console.log(`[WS OC Debug] Initiating manual activation for ${clean} (Safari or manual mode)`)
         // Safari or manual mode: Show manual activation button
         track('oc_manual_activation_shown', { domain: clean, deal_id: best.id, platform })
         try { 
@@ -584,7 +640,9 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             platform: platform,
             isManualMode: true
           }) 
-        } catch {}
+        } catch (e) {
+          console.error(`[WS OC Debug] Error sending manual activation message (else branch) for ${clean}:`, e)
+        }
       }
     }, { url: [{ schemes: ['http', 'https'] }] })
 
@@ -601,7 +659,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
         if (current && current[clean]) {
           // Content script might have loaded after the first message; nudge UI to render the pill
-          try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null }) } catch {}
+          try { 
+            await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null })
+            console.log(`[WS OC Debug] Safety net: successfully sent oc_activated message for ${clean}`)
+          } catch (error) {
+            console.warn(`[WS OC Debug] Safety net: failed to send oc_activated message for ${clean}:`, error)
+          }
         }
       } catch {}
     }, { url: [{ schemes: ['http', 'https'] }] })
@@ -618,6 +681,8 @@ chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
     handleCountdownCancel(message.domain, sender.tab?.id)
   } else if (message.type === 'OC_MANUAL_ACTIVATE') {
     handleManualActivation(message.domain, message.dealInfo, sender.tab?.id)
+  } else if (message.type === 'OC_MANUAL_ACTIVATE_DEAL') {
+    handleManualActivationDeal(message.domain, message.dealInfo)
   }
 })
 
@@ -629,6 +694,15 @@ async function handleCountdownComplete(domain: string, dealInfo: any, tabId?: nu
     console.warn('[WS OC] countdown completed but no pending redirect found')
     return
   }
+  // Enforce a minimum of 3 seconds from countdown start to navigation
+  try {
+    const startedAt = Number(pending.startedAt || 0)
+    const elapsed = Date.now() - startedAt
+    const MIN_MS = 3000
+    if (!Number.isNaN(elapsed) && elapsed < MIN_MS) {
+      await new Promise(resolve => setTimeout(resolve, MIN_MS - elapsed))
+    }
+  } catch {}
   
   try {
     track('oc_countdown_completed', { domain, deal_id: dealInfo.id, platform: getPlatform() })
@@ -782,6 +856,87 @@ async function handleManualActivation(domain: string, dealInfo: any, tabId?: num
     }
   } catch (error) {
     console.error('[WS OC] error handling manual activation:', error)
+  }
+}
+
+// Handle manual activation from popup deal clicks
+async function handleManualActivationDeal(domain: string, dealInfo: any) {
+  if (!dealInfo || !dealInfo.id) {
+    console.warn('[WS OC] manual activation deal: no deal info provided')
+    return
+  }
+  
+  try {
+    track('oc_manual_activation_clicked', { domain, deal_id: dealInfo.id, platform: getPlatform(), source: 'popup' })
+    
+    // Get partner info
+    const partner = await getPartnerByHostname(domain)
+    if (!partner) {
+      console.warn('[WS OC] manual activation deal: no partner found for domain', domain)
+      return
+    }
+    
+    // Request redirect URL for the specific deal
+    let redir: { url: string; clickId?: string } | null = null
+    try {
+      redir = await requestRedirectUrl(dealInfo.id)
+    } catch (e) {
+      console.error('[WS OC] manual activation deal: failed to get redirect URL', e)
+      return
+    }
+    
+    if (!redir || !redir.url) {
+      console.warn('[WS OC] manual activation deal: no redirect URL returned')
+      return
+    }
+    
+    // Track redirect
+    try { 
+      const h = new URL(redir.url).hostname
+      track('oc_redirect_issued', { domain, deal_id: dealInfo.id, link_host: h, click_id: redir.clickId, reason: 'popup_deal_click' }) 
+    } catch { 
+      track('oc_redirect_issued', { domain, deal_id: dealInfo.id, click_id: redir.clickId, reason: 'popup_deal_click' }) 
+    }
+    
+    // Create new tab with affiliate URL
+    try {
+      const created = await chrome.tabs.create({ url: redir.url, active: true })
+      if (created?.id) {
+        // Store redirect state for landing detection
+        const enrich: RedirectState = {
+          expectedFinalHost: domain,
+          partnerName: partner.name,
+          deal: { ...dealInfo, affiliateUrl: redir.url, clickId: redir.clickId },
+          originalUrl: `https://${domain}`,
+          affiliateHost: cleanHost(new URL(redir.url).hostname),
+          createdAt: Date.now()
+        }
+        ;(enrich as any).deals = [dealInfo]
+        tabRedirectState.set(created.id, enrich)
+        
+        // Set domain-scoped pending fallback
+        try {
+          let affiliateHost = ''
+          try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
+          const until = Date.now() + 150000
+          pendingByDomain.set(domain, { 
+            affiliateHost, 
+            clickId: redir.clickId, 
+            partnerName: partner.name, 
+            deal: enrich.deal, 
+            originalUrl: `https://${domain}`, 
+            until 
+          })
+        } catch {}
+        
+        track('oc_redirect_navigated', { domain, deal_id: dealInfo.id, click_id: redir.clickId, reason: 'popup_deal_click' })
+        if (OC_DEBUG) console.log('[WS OC] popup deal activation redirect completed', { url: redir.url, tabId: created.id })
+      }
+    } catch (e) {
+      console.error('[WS OC] manual activation deal: failed to create tab', e)
+    }
+  } catch (error) {
+    console.error('[WS OC] error handling manual activation deal:', error)
   }
 }
 

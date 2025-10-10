@@ -90,28 +90,34 @@ export interface Translations {
     statusRejected: string
   }
   // Onboarding copy
-  onboarding?: {
-    welcomeTitle: string
-    welcomeContent: string
-    cashbackTitle: string
-    cashbackContent: string
-    activationTitle: string
-    activationContent: string
-    vouchersTitle: string
-    vouchersContent: string
-    settingsTitle: string
-    settingsContent: string
-    privacyTitle: string
-    privacyContent: string
-    cashbackActivationTitle: string
-    cashbackActivationContent: string
-    automaticWithCountdown: string
-    automaticWithCountdownDescription: string
-    askMeEachTime: string
-    askMeEachTimeDescription: string
-    dontRemindMe: string
-    dontRemindMeDescription: string
-  }
+    onboarding?: {
+      welcomeTitle: string
+      welcomeContent: string
+      cashbackTitle: string
+      cashbackContent: string
+      activationTitle: string
+      activationContent: string
+      vouchersTitle: string
+      vouchersContent: string
+      settingsTitle?: string
+      settingsContent?: string
+      privacyTitle?: string
+      privacyContent?: string
+      cashbackActivationTitle: string
+      cashbackActivationContent: string
+      automaticWithCountdown: string
+      automaticWithCountdownDescription: string
+      askMeEachTime: string
+      askMeEachTimeDescription: string
+      dontRemindMe: string
+      dontRemindMeDescription: string
+      recommended: string
+      skip: string
+      next: string
+      finish: string
+      saving: string
+      savePreference?: string
+    }
   // OC panel (content script) strings
   ocPanel?: {
     dealsFoundAt: string // Deals found at {host}
@@ -126,6 +132,10 @@ export interface Translations {
     countdownTitle: string // Auto-activating cashback in {seconds}...
     countdownCancel: string // Cancel
     activateNow: string // Activate cashback now
+    // Manual activation banner (new keys)
+    activateTitle?: string // e.g., Get 2.5% back now
+    activateDescription?: string // e.g., Cashback on hema.nl
+    activateCta?: string // e.g., Activate
   }
 }
 
@@ -221,12 +231,18 @@ const translations: Record<Language, Translations> = {
       privacyContent: "We only check the website you're on for deals. No browsing history or personal data is collected.",
       cashbackActivationTitle: 'Cashback Activation',
       cashbackActivationContent: 'How would you like to activate cashback when you visit partner stores?',
-      automaticWithCountdown: 'Automatic with countdown',
+      automaticWithCountdown: 'Automatic',
       automaticWithCountdownDescription: 'Auto-redirect with 3-second countdown and cancel option',
       askMeEachTime: 'Ask me each time',
       askMeEachTimeDescription: 'Show activation button, I\'ll click when I want cashback',
       dontRemindMe: 'Don\'t remind me',
-      dontRemindMeDescription: 'No cashback detection or reminders'
+      dontRemindMeDescription: 'No cashback detection or reminders',
+      recommended: 'Easiest!',
+      skip: 'Skip',
+      next: 'Next',
+      finish: 'Finish',
+      saving: 'Saving...',
+      savePreference: 'Save my preference'
     },
     ocPanel: {
       dealsFoundAt: 'Deals found at {host}',
@@ -240,7 +256,10 @@ const translations: Record<Language, Translations> = {
       earnRateCashback: 'Earn {rate}% cashback',
       countdownTitle: 'Auto-activating cashback in {seconds}...',
       countdownCancel: 'Cancel',
-      activateNow: 'Activate cashback now'
+      activateNow: 'Activate cashback now',
+      activateTitle: 'Get {rate} back now',
+      activateDescription: 'Cashback on {host}',
+      activateCta: 'Activate'
     },
   },
   
@@ -335,12 +354,18 @@ const translations: Record<Language, Translations> = {
       privacyContent: 'We controleren alleen de website waarop je je bevindt op deals. Geen browsegeschiedenis of persoonlijke gegevens worden verzameld.',
       cashbackActivationTitle: 'Cashback-activatie',
       cashbackActivationContent: 'Hoe wil je cashback activeren wanneer je partnersites bezoekt?',
-      automaticWithCountdown: 'Automatisch met aftelling',
+      automaticWithCountdown: 'Automatisch',
       automaticWithCountdownDescription: 'Auto-omleiding met 3-seconden aftelling en annuleeroptie',
       askMeEachTime: 'Vraag me elke keer',
       askMeEachTimeDescription: 'Toon activatieknop, ik klik wanneer ik cashback wil',
       dontRemindMe: 'Herinner me niet',
-      dontRemindMeDescription: 'Geen cashback-detectie of herinneringen'
+      dontRemindMeDescription: 'Geen cashback-detectie of herinneringen',
+      recommended: 'Makkelijkst!',
+      skip: 'Overslaan',
+      next: 'Volgende',
+      finish: 'Voltooien',
+      saving: 'Opslaan...',
+      savePreference: 'Bewaar mijn voorkeur'
     },
     ocPanel: {
       dealsFoundAt: 'Deals gevonden op {host}',
@@ -354,7 +379,10 @@ const translations: Record<Language, Translations> = {
       earnRateCashback: 'Verdien {rate}% cashback',
       countdownTitle: 'Cashback wordt automatisch geactiveerd over {seconds}...',
       countdownCancel: 'Annuleren',
-      activateNow: 'Activeer cashback nu'
+      activateNow: 'Activeer cashback nu',
+      activateTitle: 'Krijg nu {rate} terug',
+      activateDescription: 'Cashback op {host}',
+      activateCta: 'Activeer'
     },
   },
   
@@ -394,6 +422,17 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Zeige Gutscheinangebot für {name} mit {rate}% Cashback',
       scriptInjected: 'Universelles Checkout-Skript injiziert für Tab {tabId} auf {hostname}',
     },
+    popup: {
+      checkingSession: 'Sitzung wird überprüft…',
+      login: 'Anmelden',
+      dealsFor: 'Angebote für {domain}',
+      onlineCashback: 'Online-Cashback',
+      autoActivation: 'Automatische Aktivierung',
+      trackingActive: 'Cashback-Tracking aktiv!',
+      vouchers: 'Gutscheine',
+      payWithVouchers: 'Mit Gutscheinen bezahlen',
+      noDealsForSite: 'Keine Angebote für diese Seite verfügbar',
+    },
     options: {
       title: 'Einstellungen',
       sectionTitle: 'Einstellungen',
@@ -422,6 +461,43 @@ const translations: Record<Language, Translations> = {
       statusPending: 'Ausstehend',
       statusCancelled: 'Storniert',
       statusRejected: 'Abgelehnt',
+    },
+    onboarding: {
+      welcomeTitle: 'Willkommen bei Woolsocks!',
+      welcomeContent: 'Verpassen Sie nie wieder Cashback. Diese Erweiterung hilft Ihnen, Geld bei Ihren Online-Einkäufen zurückzuerhalten.',
+      cashbackTitle: 'Cashback-Erkennung',
+      cashbackContent: 'Wenn Sie Partnerseiten wie Amazon oder Zalando besuchen, wird unser Symbol gelb, um anzuzeigen, dass Cashback verfügbar ist.',
+      activationTitle: 'Cashback aktivieren',
+      activationContent: 'Klicken Sie auf das Erweiterungssymbol oder das Popup, um Cashback zu aktivieren. Das Symbol wird grün, wenn es aktiv ist.',
+      vouchersTitle: 'Geschenkkarten-Ersparnisse',
+      vouchersContent: 'An der Kasse schlagen wir Geschenkkarten vor, die Ihnen sofortiges Cashback auf Ihren Einkauf geben.',
+      cashbackActivationTitle: 'Cashback-Aktivierung',
+      cashbackActivationContent: 'Wie möchten Sie Cashback aktivieren, wenn Sie Partner-Shops besuchen?',
+      automaticWithCountdown: 'Automatisch',
+      automaticWithCountdownDescription: 'Auto-Weiterleitung mit 3-Sekunden-Countdown und Abbrechen-Option',
+      askMeEachTime: 'Mich jedes Mal fragen',
+      askMeEachTimeDescription: 'Aktivierungsschaltfläche anzeigen, ich klicke, wenn ich Cashback möchte',
+      dontRemindMe: 'Mich nicht erinnern',
+      dontRemindMeDescription: 'Keine Cashback-Erkennung oder Erinnerungen',
+      recommended: 'Einfachste!',
+      skip: 'Überspringen',
+      next: 'Weiter',
+      finish: 'Beenden',
+      saving: 'Speichern...'
+    },
+    ocPanel: {
+      dealsFoundAt: 'Angebote gefunden auf {host}',
+      settingUpFor: 'Cashback-Tracking einrichten für {host}',
+      noDealsFound: 'Keine Angebote gefunden',
+      viewConditions: 'Bedingungen anzeigen',
+      signupLogin: 'Registrieren / Anmelden',
+      cashbackActive: 'Cashback aktiv!',
+      shopAndPayNormally: 'Einkaufen und bezahlen wie gewohnt',
+      acceptCookiesDisableAdblock: 'Alle Cookies akzeptieren und Adblocker deaktivieren',
+      earnRateCashback: 'Verdienen Sie {rate}% Cashback',
+      countdownTitle: 'Cashback wird automatisch aktiviert in {seconds}...',
+      countdownCancel: 'Abbrechen',
+      activateNow: 'Cashback jetzt aktivieren'
     },
   },
   
@@ -461,6 +537,17 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Affichage de l\'offre de bon pour {name} avec {rate}% de cashback',
       scriptInjected: 'Script de paiement universel injecté pour l\'onglet {tabId} sur {hostname}',
     },
+    popup: {
+      checkingSession: 'Vérification de la session…',
+      login: 'Se connecter',
+      dealsFor: 'Offres pour {domain}',
+      onlineCashback: 'Gagner du cashback en ligne chez {domain}',
+      autoActivation: 'Activation automatique',
+      trackingActive: 'Cashback actif',
+      vouchers: 'Bons',
+      payWithVouchers: 'Payer avec des bons chez {domain}',
+      noDealsForSite: 'Aucune offre disponible pour ce site',
+    },
     options: {
       title: 'Paramètres',
       sectionTitle: 'Paramètres',
@@ -489,6 +576,43 @@ const translations: Record<Language, Translations> = {
       statusPending: 'En attente',
       statusCancelled: 'Annulé',
       statusRejected: 'Rejeté',
+    },
+    onboarding: {
+      welcomeTitle: 'Bienvenue chez Woolsocks !',
+      welcomeContent: 'Ne ratez plus jamais de cashback. Cette extension vous aide à récupérer de l\'argent sur vos achats en ligne.',
+      cashbackTitle: 'Détection de cashback',
+      cashbackContent: 'Lorsque vous visitez des sites partenaires comme Amazon ou Zalando, notre icône devient jaune pour indiquer que le cashback est disponible.',
+      activationTitle: 'Activer le cashback',
+      activationContent: 'Cliquez sur l\'icône de l\'extension ou la popup pour activer le cashback. L\'icône devient verte quand elle est active.',
+      vouchersTitle: 'Économies avec les cartes cadeaux',
+      vouchersContent: 'À la caisse, nous suggérons des cartes cadeaux qui vous donnent un cashback instantané sur votre achat.',
+      cashbackActivationTitle: 'Activation du cashback',
+      cashbackActivationContent: 'Comment souhaitez-vous activer le cashback lorsque vous visitez des magasins partenaires ?',
+      automaticWithCountdown: 'Automatique',
+      automaticWithCountdownDescription: 'Redirection automatique avec compte à rebours de 3 secondes et option d\'annulation',
+      askMeEachTime: 'Me demander à chaque fois',
+      askMeEachTimeDescription: 'Afficher le bouton d\'activation, je clique quand je veux du cashback',
+      dontRemindMe: 'Ne pas me rappeler',
+      dontRemindMeDescription: 'Aucune détection ou rappel de cashback',
+      recommended: 'Plus facile !',
+      skip: 'Passer',
+      next: 'Suivant',
+      finish: 'Terminer',
+      saving: 'Enregistrement...'
+    },
+    ocPanel: {
+      dealsFoundAt: 'Offres trouvées sur {host}',
+      settingUpFor: 'Configuration du suivi cashback pour {host}',
+      noDealsFound: 'Aucune offre trouvée',
+      viewConditions: 'Voir les conditions',
+      signupLogin: 'S\'inscrire / Se connecter',
+      cashbackActive: 'Cashback actif !',
+      shopAndPayNormally: 'Achetez et payez normalement',
+      acceptCookiesDisableAdblock: 'Accepter tous les cookies et désactiver les bloqueurs de publicité',
+      earnRateCashback: 'Gagnez {rate}% de cashback',
+      countdownTitle: 'Activation automatique du cashback dans {seconds}...',
+      countdownCancel: 'Annuler',
+      activateNow: 'Activer le cashback maintenant'
     },
   },
   
@@ -528,6 +652,17 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Visualizzazione offerta voucher per {name} con {rate}% di cashback',
       scriptInjected: 'Script di checkout universale iniettato per la scheda {tabId} su {hostname}',
     },
+    popup: {
+      checkingSession: 'Controllo sessione…',
+      login: 'Accedi',
+      dealsFor: 'Offerte per {domain}',
+      onlineCashback: 'Guadagna cashback online su {domain}',
+      autoActivation: 'Attivazione automatica',
+      trackingActive: 'Cashback attivo',
+      vouchers: 'Voucher',
+      payWithVouchers: 'Paga con voucher su {domain}',
+      noDealsForSite: 'Nessuna offerta disponibile per questo sito',
+    },
     options: {
       title: 'Impostazioni',
       sectionTitle: 'Impostazioni',
@@ -556,6 +691,43 @@ const translations: Record<Language, Translations> = {
       statusPending: 'In sospeso',
       statusCancelled: 'Annullato',
       statusRejected: 'Rifiutato',
+    },
+    onboarding: {
+      welcomeTitle: 'Benvenuto in Woolsocks!',
+      welcomeContent: 'Non perdere mai più il cashback. Questa estensione ti aiuta a recuperare denaro sui tuoi acquisti online.',
+      cashbackTitle: 'Rilevamento cashback',
+      cashbackContent: 'Quando visiti siti partner come Amazon o Zalando, la nostra icona diventa gialla per indicare che il cashback è disponibile.',
+      activationTitle: 'Attiva cashback',
+      activationContent: 'Clicca sull\'icona dell\'estensione o sul popup per attivare il cashback. L\'icona diventa verde quando è attiva.',
+      vouchersTitle: 'Risparmi con carte regalo',
+      vouchersContent: 'Al checkout, suggeriamo carte regalo che ti danno cashback istantaneo sul tuo acquisto.',
+      cashbackActivationTitle: 'Attivazione cashback',
+      cashbackActivationContent: 'Come vorresti attivare il cashback quando visiti negozi partner?',
+      automaticWithCountdown: 'Automatico',
+      automaticWithCountdownDescription: 'Reindirizzamento automatico con countdown di 3 secondi e opzione di annullamento',
+      askMeEachTime: 'Chiedimi ogni volta',
+      askMeEachTimeDescription: 'Mostra il pulsante di attivazione, clicco quando voglio cashback',
+      dontRemindMe: 'Non ricordarmelo',
+      dontRemindMeDescription: 'Nessun rilevamento o promemoria cashback',
+      recommended: 'Più facile!',
+      skip: 'Salta',
+      next: 'Avanti',
+      finish: 'Termina',
+      saving: 'Salvataggio...'
+    },
+    ocPanel: {
+      dealsFoundAt: 'Offerte trovate su {host}',
+      settingUpFor: 'Configurazione del monitoraggio cashback per {host}',
+      noDealsFound: 'Nessuna offerta trovata',
+      viewConditions: 'Visualizza condizioni',
+      signupLogin: 'Registrati / Accedi',
+      cashbackActive: 'Cashback attivo!',
+      shopAndPayNormally: 'Acquista e paga normalmente',
+      acceptCookiesDisableAdblock: 'Accetta tutti i cookie e disabilita i blocchi pubblicitari',
+      earnRateCashback: 'Guadagna {rate}% di cashback',
+      countdownTitle: 'Attivazione automatica cashback tra {seconds}...',
+      countdownCancel: 'Annulla',
+      activateNow: 'Attiva cashback ora'
     },
   },
   
@@ -595,6 +767,17 @@ const translations: Record<Language, Translations> = {
       showingOffer: 'Mostrando oferta de cupón para {name} con {rate}% de cashback',
       scriptInjected: 'Script de checkout universal inyectado para la pestaña {tabId} en {hostname}',
     },
+    popup: {
+      checkingSession: 'Verificando sesión…',
+      login: 'Iniciar sesión',
+      dealsFor: 'Ofertas para {domain}',
+      onlineCashback: 'Gana cashback online en {domain}',
+      autoActivation: 'Activación automática',
+      trackingActive: 'Cashback activo',
+      vouchers: 'Cupones',
+      payWithVouchers: 'Pagar con cupones en {domain}',
+      noDealsForSite: 'No hay ofertas disponibles para este sitio',
+    },
     options: {
       title: 'Configuración',
       sectionTitle: 'Configuración',
@@ -623,6 +806,43 @@ const translations: Record<Language, Translations> = {
       statusPending: 'Pendiente',
       statusCancelled: 'Cancelado',
       statusRejected: 'Rechazado',
+    },
+    onboarding: {
+      welcomeTitle: '¡Bienvenido a Woolsocks!',
+      welcomeContent: 'Nunca más pierdas cashback. Esta extensión te ayuda a recuperar dinero en tus compras online.',
+      cashbackTitle: 'Detección de cashback',
+      cashbackContent: 'Cuando visites sitios socios como Amazon o Zalando, nuestro icono se volverá amarillo para mostrar que hay cashback disponible.',
+      activationTitle: 'Activar cashback',
+      activationContent: 'Haz clic en el icono de la extensión o en el popup para activar el cashback. El icono se vuelve verde cuando está activo.',
+      vouchersTitle: 'Ahorros con tarjetas regalo',
+      vouchersContent: 'En el checkout, sugerimos tarjetas regalo que te dan cashback instantáneo en tu compra.',
+      cashbackActivationTitle: 'Activación de cashback',
+      cashbackActivationContent: '¿Cómo te gustaría activar el cashback cuando visites tiendas socias?',
+      automaticWithCountdown: 'Automático',
+      automaticWithCountdownDescription: 'Redirección automática con cuenta regresiva de 3 segundos y opción de cancelar',
+      askMeEachTime: 'Preguntarme cada vez',
+      askMeEachTimeDescription: 'Mostrar botón de activación, hago clic cuando quiero cashback',
+      dontRemindMe: 'No recordarme',
+      dontRemindMeDescription: 'Sin detección o recordatorios de cashback',
+      recommended: '¡Más fácil!',
+      skip: 'Omitir',
+      next: 'Siguiente',
+      finish: 'Finalizar',
+      saving: 'Guardando...'
+    },
+    ocPanel: {
+      dealsFoundAt: 'Ofertas encontradas en {host}',
+      settingUpFor: 'Configurando seguimiento de cashback para {host}',
+      noDealsFound: 'No se encontraron ofertas',
+      viewConditions: 'Ver condiciones',
+      signupLogin: 'Registrarse / Iniciar sesión',
+      cashbackActive: '¡Cashback activo!',
+      shopAndPayNormally: 'Compra y paga normalmente',
+      acceptCookiesDisableAdblock: 'Aceptar todas las cookies y desactivar bloqueadores de anuncios',
+      earnRateCashback: 'Gana {rate}% de cashback',
+      countdownTitle: 'Activación automática de cashback en {seconds}...',
+      countdownCancel: 'Cancelar',
+      activateNow: 'Activar cashback ahora'
     },
   },
 }
@@ -741,10 +961,17 @@ export async function initLanguage(): Promise<void> {
       const result = await chrome.storage.local.get('language')
       if (result.language && result.language in translations) {
         currentLanguage = result.language as Language
+        return
       }
     } catch (error) {
       console.warn('[i18n] Failed to load language preference:', error)
     }
   }
+  // Fallback: use browser UI language if not logged in / no stored preference
+  try {
+    const navLang = (navigator.language || (navigator as any).userLanguage || 'en') as string
+    const lang = normalizeLanguage(navLang)
+    currentLanguage = lang
+  } catch {}
 }
 

@@ -387,6 +387,22 @@ Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous us
 - Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
 
 ---
+## Small bugs/fixes (ongoing)
+
+Status: Backlog (triage weekly)
+
+- Onboarding: Step indicator not visible in popup (investigate stacking/margin overlap; ensure z-index/margins; add tests)
+- Onboarding: Progress ring approach caused render abort on some pages (keep text-only until robust)
+- Countdown UI: Ensure consistent spacing and cancel alignment across sites
+- Popup/options: Ensure language fallback uses browser locale when not logged in (done; monitor)
+- Asset usage: Use correct illustration `Chillin girl.png` in activation card (done)
+
+Success criteria
+- All onboarding screens render consistently in popup dimensions
+- No regressions in countdown visibility/cancel interaction
+- Assets and locale fallback behave as expected across browsers
+
+---
 ### 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
 
 Status: Completed — 2025-10-09

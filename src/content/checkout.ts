@@ -312,6 +312,31 @@ function requestMerchantSupportCheck() {
   } catch {}
 }
 
+// Gate: suppress voucher prompts entirely when global reminders are off
+async function areVoucherRemindersEnabled(): Promise<boolean> {
+  try {
+    const result = await chrome.storage.local.get('user')
+    const user = result.user || { settings: {} }
+    return user?.settings?.showCashbackReminders !== false
+  } catch {
+    return true
+  }
+}
+
+// Early gate at startup: if disabled, do not continue with voucher checks/rendering
+;(async function __wsGateVoucherInit() {
+  try {
+    const enabled = await areVoucherRemindersEnabled()
+    if (!enabled) {
+      // Prevent further voucher-related processing in this script without affecting checkout detectors for totals
+      try { console.debug('[Woolsocks] voucher reminders disabled by user setting') } catch {}
+      // Short-circuit merchant support check caller by marking as already checked
+      __wsSupportChecked = true
+      return
+    }
+  } catch {}
+})()
+
 // Track temporary dismissals for voucher prompt per hostname (shared via localStorage)
 function isVoucherDismissed(hostname: string): boolean {
   try {

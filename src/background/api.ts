@@ -7,6 +7,7 @@
 
 import type { PartnerLite, Category, Deal } from '../shared/types'
 import { track } from './analytics'
+import { cachedFetch, CACHE_NAMESPACES } from '../shared/cache'
 
 const DIAG = false
 
@@ -506,14 +507,20 @@ function classify(dealType: string | undefined): 'VOUCHERS' | 'ONLINE_CASHBACK' 
 }
 
 export async function searchMerchantByName(name: string, country: string = 'NL', expectedHostDomain?: string): Promise<PartnerLite | null> {
-  // Normalize tricky merchant names before candidate generation
-  let adjusted = name
-  if (/^prenatal$/i.test(adjusted)) adjusted = 'prénatal'
-  if (/^cadeaubon$/i.test(adjusted)) adjusted = 'keuze cadeaukaart'
+  const cacheKey = `${name}_${country}_${expectedHostDomain || ''}`
+  
+  return cachedFetch(
+    CACHE_NAMESPACES.MERCHANT_SEARCH,
+    cacheKey,
+    async () => {
+      // Normalize tricky merchant names before candidate generation
+      let adjusted = name
+      if (/^prenatal$/i.test(adjusted)) adjusted = 'prénatal'
+      if (/^cadeaubon$/i.test(adjusted)) adjusted = 'keuze cadeaukaart'
 
-  const candidates = buildNameCandidates(adjusted)
-  console.log(`[WS API] searchMerchantByName called with name: "${name}" (adjusted: "${adjusted}"), country: "${country}"`)
-  console.log(`[WS API] Generated candidates:`, candidates)
+      const candidates = buildNameCandidates(adjusted)
+      console.log(`[WS API] searchMerchantByName called with name: "${name}" (adjusted: "${adjusted}"), country: "${country}"`)
+      console.log(`[WS API] Generated candidates:`, candidates)
   
   for (const candidate of candidates) {
     const params = new URLSearchParams({ name: candidate, country })
@@ -691,66 +698,58 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
       description: apiMerchant.description?.find((d: any) => d.lang.toUpperCase() === country)?.text || apiMerchant.description?.[0]?.text,
       categories: categories.length ? categories : undefined,
     }
-    return partner
-  }
-  console.warn('[WS API] merchants search failed (no results for candidates)', candidates)
-  return null
+      return partner
+    }
+    console.warn('[WS API] merchants search failed (no results for candidates)', candidates)
+    return null
+    },
+    {
+      ttl: 30 * 60 * 1000, // 30 minutes
+      maxMemoryEntries: 100,
+    }
+  )
 }
 
 export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
-  // Short-lived cache (per service worker lifetime) to avoid spamming API on the same host
-  // TTL chosen modest to keep data fresh while preventing bursts during navigation events
-  const CACHE_TTL_MS = 5 * 60 * 1000
   const key = (hostname || '').replace(/^www\./i, '').toLowerCase()
-  ;(globalThis as any).__wsPartnerCache = (globalThis as any).__wsPartnerCache || new Map<string, { at: number; val: PartnerLite | null }>()
-  ;(globalThis as any).__wsPartnerInflight = (globalThis as any).__wsPartnerInflight || new Map<string, Promise<PartnerLite | null>>()
-  const cache: Map<string, { at: number; val: PartnerLite | null }> = (globalThis as any).__wsPartnerCache
-  const inflight: Map<string, Promise<PartnerLite | null>> = (globalThis as any).__wsPartnerInflight
-
-  // Serve fresh cache hit
-  const existing = cache.get(key)
-  if (existing && Date.now() - existing.at < CACHE_TTL_MS) {
-    return existing.val
-  }
-
-  // Coalesce concurrent lookups for the same host
-  const pending = inflight.get(key)
-  if (pending) return pending
-
-  const run = (async (): Promise<PartnerLite | null> => {
-  try {
-    hostname.replace(/^www\./, '').toLowerCase()
-    // No hard overrides here any more; dynamic search is used for all, with name normalization handled in searchMerchantByName
-  } catch {}
-
-  const candidates = buildNameCandidates(hostname)
-  console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates)
   
-  for (const c of candidates) {
-    try {
-      let res = await searchMerchantByName(c, 'NL', hostname)
-      // Fallback: if nothing for exact host, try removing country suffixes like '/nl' and hyphens
-      if (!res && /^(.*)\.(nl|de|be|fr|it|es)$/i.test(c)) {
-        const bare = c.replace(/\.(nl|de|be|fr|it|es)$/i, '')
-        res = await searchMerchantByName(bare, 'NL', hostname)
+  return cachedFetch(
+    CACHE_NAMESPACES.PARTNER_INFO,
+    key,
+    async () => {
+      try {
+        hostname.replace(/^www\./, '').toLowerCase()
+        // No hard overrides here any more; dynamic search is used for all, with name normalization handled in searchMerchantByName
+      } catch {}
+
+      const candidates = buildNameCandidates(hostname)
+      console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates)
+      
+      for (const c of candidates) {
+        try {
+          let res = await searchMerchantByName(c, 'NL', hostname)
+          // Fallback: if nothing for exact host, try removing country suffixes like '/nl' and hyphens
+          if (!res && /^(.*)\.(nl|de|be|fr|it|es)$/i.test(c)) {
+            const bare = c.replace(/\.(nl|de|be|fr|it|es)$/i, '')
+            res = await searchMerchantByName(bare, 'NL', hostname)
+          }
+          if (res) {
+            console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
+            return res
+          }
+        } catch (error) {
+          console.warn(`[WS API] Error searching for candidate ${c}:`, error)
+        }
       }
-      if (res) {
-        console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
-        cache.set(key, { at: Date.now(), val: res })
-        return res
-      }
-    } catch (error) {
-      console.warn(`[WS API] Error searching for candidate ${c}:`, error)
+      
+      console.warn(`[WS API] No merchant found for hostname: ${hostname} with candidates:`, candidates)
+      return null
+    },
+    {
+      ttl: 60 * 60 * 1000, // 60 minutes
+      maxMemoryEntries: 50,
     }
-  }
-  
-  console.warn(`[WS API] No merchant found for hostname: ${hostname} with candidates:`, candidates)
-  cache.set(key, { at: Date.now(), val: null })
-  return null
-  })()
-
-  inflight.set(key, run)
-  try { return await run } finally { inflight.delete(key) }
+  )
 }
 
 export async function getAllPartners(): Promise<{ partners: PartnerLite[]; lastUpdated: Date }>{

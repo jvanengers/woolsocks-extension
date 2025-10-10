@@ -48,7 +48,6 @@ async function fetchWalletData(): Promise<any> {
     return null
   }
 }
-
 async function fetchTransactions(): Promise<WsTransaction[]> {
   try {
     const anonId = await getAnonId()
@@ -147,6 +146,9 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   async function loadWalletData() {
     const w = await fetchWalletData()
     setWalletData(w)
+    if (onBalance && w?.data?.balance?.totalAmount) {
+      onBalance(w.data.balance.totalAmount)
+    }
   }
 
   async function loadTransactions() {
@@ -270,8 +272,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           )}
 
-          {/* Cashback reminders toggle - only show in options page */}
-          {variant !== 'popup' && (
+          {/* Cashback reminders toggle - shown in both options and popup */}
+          {(
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{translate('options.showCashbackReminders')}</div>
@@ -281,7 +283,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                 </label>
               </div>
               <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.4 }}>
-                {translate('options.showCashbackRemindersDescription')}
+                {translate('options.showCashbackRemindersDescription')} — vouchers are also suppressed when off.
               </div>
             </div>
           )}
@@ -471,6 +473,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             </div>
           </div>
 
+          {/* Cache Management removed for this branch */}
+
           {/* Woolsocks logo at bottom for popup variant */}
           {variant === 'popup' && (
             <div style={{ textAlign: 'center', marginTop: 15 }}>
@@ -487,4 +491,4 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   )
 }
 
-
+// Cache stats UI removed for this branch

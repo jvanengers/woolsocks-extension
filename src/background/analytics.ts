@@ -36,6 +36,13 @@ const OC_EVENT_DESCRIPTIONS: Record<string, string> = {
   consent_shown: 'Showed onboarding consent step for auto-activation',
   consent_accepted: 'User accepted auto-activation during onboarding',
   consent_declined: 'User declined auto-activation during onboarding',
+  // Cache performance events
+  cache_hit: 'Cache hit - data served from cache',
+  cache_miss: 'Cache miss - data fetched from API',
+  cache_refresh_duration: 'Time taken to refresh cached data',
+  popup_load_time: 'Time taken to load popup with cache status',
+  cache_cleanup: 'Cache cleanup removed expired entries',
+  cache_preload: 'Cache preload warmed popular merchants',
 }
 
 async function getClientId(): Promise<string> {
@@ -130,6 +137,79 @@ export async function flush(): Promise<void> {
     await persistQueue()
     flushing = false
   }
+}
+
+// Cache Analytics Helper Functions
+
+/**
+ * Track cache hit event
+ */
+export function trackCacheHit(namespace: string, key: string, age?: number): void {
+  track('cache_hit', {
+    namespace,
+    key: key.substring(0, 50), // Truncate long keys
+    age_ms: age,
+    cache_type: 'memory_or_persistent'
+  })
+}
+
+/**
+ * Track cache miss event
+ */
+export function trackCacheMiss(namespace: string, key: string, reason?: string): void {
+  track('cache_miss', {
+    namespace,
+    key: key.substring(0, 50), // Truncate long keys
+    reason: reason || 'not_found',
+    cache_type: 'memory_or_persistent'
+  })
+}
+
+/**
+ * Track cache refresh duration
+ */
+export function trackCacheRefresh(namespace: string, endpoint: string, duration: number, success: boolean): void {
+  track('cache_refresh_duration', {
+    namespace,
+    endpoint: endpoint.substring(0, 100), // Truncate long endpoints
+    duration_ms: duration,
+    success
+  })
+}
+
+/**
+ * Track popup load time with cache status
+ */
+export function trackPopupLoadTime(loadTime: number, cacheStatus: 'fresh' | 'stale' | 'miss', dataTypes: string[]): void {
+  track('popup_load_time', {
+    load_time_ms: loadTime,
+    cache_status: cacheStatus,
+    data_types: dataTypes.join(','),
+    cached_data_count: dataTypes.filter(t => t !== 'miss').length
+  })
+}
+
+/**
+ * Track cache cleanup event
+ */
+export function trackCacheCleanup(removedCount: number, totalSize: number): void {
+  track('cache_cleanup', {
+    removed_entries: removedCount,
+    total_size_bytes: totalSize,
+    cleanup_type: 'expired_entries'
+  })
+}
+
+/**
+ * Track cache preload event
+ */
+export function trackCachePreload(merchants: string[], successCount: number, failureCount: number): void {
+  track('cache_preload', {
+    merchants_count: merchants.length,
+    success_count: successCount,
+    failure_count: failureCount,
+    merchants: merchants.join(',')
+  })
 }
 
 
