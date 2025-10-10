@@ -61,6 +61,28 @@ npm run build
 ```
 Load the `dist/` folder in `chrome://extensions` (Developer mode → Load unpacked).
 
+### Translation Management
+The extension supports multiple languages through Lokalise integration. Use these commands to sync translations:
+
+```bash
+# Push local translations to Lokalise
+npm run sync-push
+
+# Pull latest translations from Lokalise
+npm run sync-pull
+```
+
+**Translation Workflow:**
+- **Push (`sync-push`)**: Uploads new/updated keys from your local `i18n.ts` to Lokalise
+  - ✅ **Preserves translator edits** - Existing translations modified by translators are NOT overwritten
+  - ✅ **Adds new keys** - New translation keys from your code are added to Lokalise
+  - ✅ **Updates unmodified keys** - Only updates keys that haven't been changed by translators
+- **Pull (`sync-pull`)**: Downloads the latest translations from Lokalise and updates your local `i18n.ts` file
+  - ✅ **Includes translator edits** - Your local file gets updated with translator improvements
+  - ✅ **Maintains code structure** - Preserves the TypeScript format and structure
+
+**Note:** The sync commands require a valid Lokalise API token and project ID configured in the scripts.
+
 ### Session
 - Open `https://woolsocks.eu/nl/profile` and sign in once; the extension will detect the session and use your cookies
 

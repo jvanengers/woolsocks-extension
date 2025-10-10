@@ -164,7 +164,7 @@ async function uploadToLokalise(lang, filePath) {
       data: base64Content,
       filename: `${lang}.json`,
       lang_iso: lang,
-      replace_modified: true,
+      replace_modified: false, // Preserve translator edits
       convert_placeholders: true
     };
     
