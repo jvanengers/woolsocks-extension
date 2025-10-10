@@ -253,7 +253,7 @@ Goal: Store user email locally after login to enable direct verification email t
   - Provide clear feedback: "Verification email sent to {email}" with resend cooldown.
 - Security & privacy
   - Encrypt stored email using extension storage encryption or browser keyring.
-  - Add opt-out toggle for email storage in settings.
+  - Add "forget me" button for email storage in settings.
   - Audit log email access and verification attempts.
 - Fallback
   - If email storage fails or is disabled, fall back to current `woolsocks.eu` redirect flow.
@@ -262,8 +262,31 @@ Goal: Store user email locally after login to enable direct verification email t
 - Success criteria
   - Users can recover sessions without leaving current tab; reduced `woolsocks.eu` redirects; >90% verification email delivery rate.
 
-
 ---
+
+## 13) Anonymous API calls to reduce tab flashing
+
+Goal: Use anonymous/unauthenticated API calls wherever possible to fetch deal and voucher details, further reducing the need for authenticated relay tabs and minimizing background tab flashing.
+
+- Anonymous endpoints
+  - Identify which deal/voucher APIs can work without authentication (public deals, partner info, basic eligibility).
+  - Create anonymous API client that bypasses cookie-based authentication entirely.
+  - Use anonymous calls for initial deal detection, partner lookup, and basic voucher information.
+- Authentication fallback
+  - Only use authenticated calls when absolutely necessary (user-specific deals, personalized rates, account-specific vouchers).
+  - Implement graceful degradation: show anonymous deals first, then enhance with authenticated data when available.
+- Implementation
+  - Add anonymous API client alongside existing authenticated client.
+  - Route calls based on data requirements: anonymous for public data, authenticated for user-specific data.
+  - Cache anonymous responses with appropriate TTL to reduce API load.
+- Benefits
+  - Eliminates most background tab opens for deal detection and basic voucher info.
+  - Faster initial load times for popup and content scripts.
+  - Reduced user-visible tab flashing during normal browsing.
+- Analytics
+  - Track `api_call_anonymous`, `api_call_authenticated`, `api_call_fallback` with endpoint and success/failure.
+- Success criteria
+  - >80% of deal/voucher API calls use anonymous endpoints; <5% of user sessions trigger authenticated relay tabs; faster popup load times.
 
 ## Completed items
 
