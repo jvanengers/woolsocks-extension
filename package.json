@@ -8,10 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "extract-translations": "node scripts/extract-translations-for-sync.js",
-    "update-translations": "node scripts/update-i18n-from-lokalise.js",
-    "manual-upload": "node scripts/manual-upload-to-lokalise.js",
-    "test-sync": "npm run extract-translations && npm run update-translations"
+    "sync-push": "node scripts/push-to-lokalise.js",
+    "sync-pull": "node scripts/pull-from-lokalise.js"
   },
   "dependencies": {
     "react": "^19.1.1",
@@ -24,6 +22,7 @@
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
+    "adm-zip": "^0.5.16",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.36.0",
     "eslint-plugin-react-hooks": "^5.2.0",

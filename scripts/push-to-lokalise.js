@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Extract translations from i18n.ts for Lokalise sync
- * This script is used in GitHub Actions to prepare translations for pushing to Lokalise
+ * Push translations to Lokalise
+ * Extracts translations from i18n.ts and uploads them to Lokalise via API
  */
 
 import fs from 'fs';
@@ -12,12 +12,17 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Read the i18n.ts file
-const i18nPath = path.join(__dirname, '..', 'src', 'shared', 'i18n.ts');
-const i18nContent = fs.readFileSync(i18nPath, 'utf8');
+// Lokalise configuration
+const API_TOKEN = '20bd46d4f8b65481b7e320ca8d661aef7ee8c714';
+const PROJECT_ID = '6845218768e96a14d01c05.51631454';
+const API_BASE_URL = 'https://api.lokalise.com/api2';
 
 // Supported languages
 const languages = ['en', 'nl', 'de', 'fr', 'it', 'es'];
+
+// Read the i18n.ts file
+const i18nPath = path.join(__dirname, '..', 'src', 'shared', 'i18n.ts');
+const i18nContent = fs.readFileSync(i18nPath, 'utf8');
 
 // Create translations directory
 const outputDir = path.join(__dirname, '..', 'translations');
@@ -145,28 +150,108 @@ function parseTsObject(tsContent, lang) {
   }
 }
 
-// Extract and save translations for each language
-console.log('Extracting translations for Lokalise sync...');
+// Function to upload file to Lokalise
+async function uploadToLokalise(lang, filePath) {
+  try {
+    console.log(`📤 Uploading ${lang} translations...`);
+    
+    // Read and base64 encode the file
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    const base64Content = Buffer.from(fileContent).toString('base64');
+    
+    // Create the payload
+    const payload = {
+      data: base64Content,
+      filename: `${lang}.json`,
+      lang_iso: lang,
+      replace_modified: true,
+      convert_placeholders: true
+    };
+    
+    // Make the API call
+    const response = await fetch(`${API_BASE_URL}/projects/${PROJECT_ID}/files/upload`, {
+      method: 'POST',
+      headers: {
+        'X-Api-Token': API_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    const responseData = await response.json();
+    
+    if (response.ok) {
+      console.log(`✅ Successfully uploaded ${lang} translations`);
+      console.log(`   Process ID: ${responseData.process?.process_id}`);
+      return true;
+    } else {
+      console.error(`❌ Failed to upload ${lang} translations`);
+      console.error(`   Status: ${response.status}`);
+      console.error(`   Response:`, responseData);
+      return false;
+    }
+  } catch (error) {
+    console.error(`❌ Error uploading ${lang} translations:`, error.message);
+    return false;
+  }
+}
 
-languages.forEach(lang => {
-  console.log(`Processing ${lang}...`);
+// Main execution
+console.log('🚀 Starting push to Lokalise...');
+console.log(`📁 Project ID: ${PROJECT_ID}`);
+console.log(`🔑 API Token: ${API_TOKEN.substring(0, 10)}...`);
+console.log('');
+
+let successCount = 0;
+let totalCount = 0;
+
+// Extract and upload translations for each language
+for (const lang of languages) {
+  console.log(`\n📝 Processing ${lang}...`);
   
+  // Extract language block
   const langBlock = extractLanguageBlock(lang);
   if (!langBlock) {
-    console.warn(`No translations found for language: ${lang}`);
-    return;
+    console.warn(`⚠️  No translations found for language: ${lang}`);
+    continue;
   }
   
+  // Parse to JSON
   const jsonData = parseTsObject(langBlock, lang);
   if (!jsonData) {
-    console.warn(`Failed to convert ${lang} translations to JSON`);
-    return;
+    console.warn(`⚠️  Failed to convert ${lang} translations to JSON`);
+    continue;
   }
   
-  // Save to file
+  // Save to temporary file
   const outputPath = path.join(outputDir, `${lang}.json`);
   fs.writeFileSync(outputPath, JSON.stringify(jsonData, null, 2), 'utf8');
-  console.log(`✓ Saved ${lang} translations to ${outputPath}`);
-});
+  console.log(`💾 Saved ${lang} translations to ${outputPath}`);
+  
+  // Upload to Lokalise
+  totalCount++;
+  const success = await uploadToLokalise(lang, outputPath);
+  if (success) {
+    successCount++;
+  }
+}
 
-console.log('✓ Translation extraction complete for Lokalise sync');
+// Clean up temporary files
+console.log('\n🧹 Cleaning up temporary files...');
+for (const lang of languages) {
+  const filePath = path.join(outputDir, `${lang}.json`);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+// Summary
+console.log('\n📊 Summary:');
+console.log(`✅ Successfully uploaded: ${successCount}/${totalCount} languages`);
+if (successCount === totalCount) {
+  console.log('🎉 All translations pushed to Lokalise successfully!');
+  process.exit(0);
+} else {
+  console.log('⚠️  Some uploads failed. Check the logs above.');
+  process.exit(1);
+}
