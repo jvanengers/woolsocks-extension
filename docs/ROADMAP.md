@@ -49,33 +49,6 @@ Goal: Deliver BI export and reporting for voucher funnel metrics using a data wa
 
 ---
 
-## 3) Anonymous (not logged in) behaviors
-
-Status: Completed — 2025-01-27
-
-Goal: Ensure utility without a session.
-
-- Popup
-  - When not logged in, tapping the icon should still show eligible deals for the current site.
-- Reminders
-  - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
-- Success criteria
-  - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
-
-### Implementation Details
-
-Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous user behaviors for popup and reminders)
-
-- Removed session guard from popup deal loading to allow anonymous users to view deals
-- Added analytics tracking for anonymous user interactions (`anonymous_deals_viewed`, `anonymous_login_clicked`)
-- Added `ANALYTICS_TRACK` message handler in background script
-- Reduced popup vertical padding by 50% for improved UX
-- Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
-- Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
-- Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
-
----
-
 ## 4) Anonymous online cashback clickouts and claim-after-login
 
 Status: Blocked, Waiting for backend changes
@@ -216,35 +189,6 @@ User can disable auto activation. All activity should be transparent.
 
 ---
 
-## 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
-
-Status: Completed — 2025-10-09
-
-Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows (e.g., relay, cookie-first proxying, activation confirmation) and determine if we can eliminate or hide them while preserving all functionality and policy compliance.
-
-- Background
-  - The extension may open a `woolsocks.eu` tab to relay authenticated API requests or confirm activation when background contexts lack cookie access.
-  - Users can observe brief tab flashes, which is undesirable UX.
-- Investigation
-  - Map every code path that opens a `woolsocks.eu` tab: purpose, triggering event, required cookies/headers, lifetime, and close conditions.
-  - Measure frequency, duration, and user-visible impact across key sites and flows.
-  - Review browser policies for hidden/offscreen contexts per platform.
-- Alternatives to evaluate
-  - Background fetch with credentials via site-proxy where allowed; re-check MV3 constraints.
-  - Offscreen documents (Chrome MV3) for fetch/UI-less work; lifecycle and permission review.
-  - Extension `cookies` permission with first-party partitioned cookies where applicable.
-  - Content-script relay on an existing `woolsocks.eu` tab (only when user has it open), avoiding programmatic opens.
-  - Using `declarativeNetRequest` or `webRequest` alternatives for redirect confirmation without a visible tab (policy constraints permitting).
-  - For Safari: evaluate app group messaging and XPC to avoid tab opens; for Firefox: equivalent background capabilities.
-- Risks & constraints
-  - Some flows may require a foreground browsing context for cookie inclusion or redirect completion, depending on browser.
-  - Offscreen or hidden contexts differ by browser and review policies.
-- Success criteria
-  - No user-visible `woolsocks.eu` tab opens/closes during standard flows on supported browsers, or tab flashes reduced by >95% with no loss of functionality.
-  - All changes remain compliant with Chrome Web Store, App Store (Safari), and AMO policies.
-
----
-
 ## 10) Competitor suggestions when no cashback is available
 
 Status: Ready for refinement
@@ -274,10 +218,10 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
 
 ## 11) Enforce country-scoped deals (vouchers and online cashback)
 
-Problem: Deals from outside the user’s country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
+Problem: Deals from outside the user's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
 
 - Goal
-  - Restrict eligibility and presentation of deals to the user’s effective country/locale for both vouchers and online cashback.
+  - Restrict eligibility and presentation of deals to the user's effective country/locale for both vouchers and online cashback.
 - Country source of truth
   - Derive from: signed-in profile country; else explicit setting in extension; else browser locale fallback.
   - Persist in storage; allow override via Settings.
@@ -286,19 +230,107 @@ Problem: Deals from outside the user’s country are considered and shown today,
   - For online cashback: include only `CASHBACK` with `usageType ONLINE` and matching `country` and domain/locale mapping.
   - Maintain a domain→country/locale map (per partner) to avoid cross-locale hostnames (e.g., `.com` vs `.nl`).
 - UX
-  - If a site is detected but only cross-country deals exist, show a neutral message: “No deals available for your country.” Optionally offer a country switch entry point.
+  - If a site is detected but only cross-country deals exist, show a neutral message: "No deals available for your country." Optionally offer a country switch entry point.
   - Respect real-time blacklist to suppress prompts on sensitive sites.
 - Analytics
   - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `user_country`, `flow` (voucher/oc).
 - Success criteria
   - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
 
+---
+
+## 12) Local email storage for session recovery and verification
+
+Goal: Store user email locally after login to enable direct verification email triggers from the extension, eliminating the need for redirects to `woolsocks.eu` for session recovery.
+
+- Email storage
+  - Store email address in extension storage (encrypted) after successful login detection.
+  - Include timestamp and session metadata for validation.
+  - Clear on explicit logout or after extended inactivity.
+- Verification flow
+  - When session is lost, show "Resend verification" option in popup/settings.
+  - Call verification API directly from extension background script with stored email.
+  - Provide clear feedback: "Verification email sent to {email}" with resend cooldown.
+- Security & privacy
+  - Encrypt stored email using extension storage encryption or browser keyring.
+  - Add opt-out toggle for email storage in settings.
+  - Audit log email access and verification attempts.
+- Fallback
+  - If email storage fails or is disabled, fall back to current `woolsocks.eu` redirect flow.
+- Analytics
+  - Track `session_recovery_email_stored`, `verification_email_triggered`, `verification_email_success|fail`.
+- Success criteria
+  - Users can recover sessions without leaving current tab; reduced `woolsocks.eu` redirects; >90% verification email delivery rate.
+
 
 ---
 
 ## Completed items
 
-### Offscreen relay (eliminate visible woolsocks.eu tab flashes)
+### 2) Voucher analytics (events only)
+
+Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
+
+- Implemented events (GA4 Measurement Protocol)
+  - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
+  - Key parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
+- Key events designated: `voucher_click`, `voucher_used`
+- BI export and dashboards remain pending (tracked in active item 2)
+### 3) Anonymous (not logged in) behaviors
+
+Status: Completed — 2025-01-27
+
+Goal: Ensure utility without a session.
+
+- Popup
+  - When not logged in, tapping the icon should still show eligible deals for the current site.
+- Reminders
+  - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
+- Success criteria
+  - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
+
+#### Implementation Details
+
+Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous user behaviors for popup and reminders)
+
+- Removed session guard from popup deal loading to allow anonymous users to view deals
+- Added analytics tracking for anonymous user interactions (`anonymous_deals_viewed`, `anonymous_login_clicked`)
+- Added `ANALYTICS_TRACK` message handler in background script
+- Reduced popup vertical padding by 50% for improved UX
+- Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
+- Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
+- Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
+
+---
+### 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
+
+Status: Completed — 2025-10-09
+
+Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows (e.g., relay, cookie-first proxying, activation confirmation) and determine if we can eliminate or hide them while preserving all functionality and policy compliance.
+
+- Background
+  - The extension may open a `woolsocks.eu` tab to relay authenticated API requests or confirm activation when background contexts lack cookie access.
+  - Users can observe brief tab flashes, which is undesirable UX.
+- Investigation
+  - Map every code path that opens a `woolsocks.eu` tab: purpose, triggering event, required cookies/headers, lifetime, and close conditions.
+  - Measure frequency, duration, and user-visible impact across key sites and flows.
+  - Review browser policies for hidden/offscreen contexts per platform.
+- Alternatives to evaluate
+  - Background fetch with credentials via site-proxy where allowed; re-check MV3 constraints.
+  - Offscreen documents (Chrome MV3) for fetch/UI-less work; lifecycle and permission review.
+  - Extension `cookies` permission with first-party partitioned cookies where applicable.
+  - Content-script relay on an existing `woolsocks.eu` tab (only when user has it open), avoiding programmatic opens.
+  - Using `declarativeNetRequest` or `webRequest` alternatives for redirect confirmation without a visible tab (policy constraints permitting).
+  - For Safari: evaluate app group messaging and XPC to avoid tab opens; for Firefox: equivalent background capabilities.
+- Risks & constraints
+  - Some flows may require a foreground browsing context for cookie inclusion or redirect completion, depending on browser.
+  - Offscreen or hidden contexts differ by browser and review policies.
+- Success criteria
+  - No user-visible `woolsocks.eu` tab opens/closes during standard flows on supported browsers, or tab flashes reduced by >95% with no loss of functionality.
+  - All changes remain compliant with Chrome Web Store, App Store (Safari), and AMO policies.
+
+SOLUTION NOTES: 
+#### Offscreen relay (eliminate visible woolsocks.eu tab flashes)
 
 Completed: 2025-10-09 — commit `7b6800a` (feat(relay): add Chrome offscreen relay with hidden iframe, prefer offscreen over tab relay; manifest updates; content relay postMessage; refs roadmap #9)
 
@@ -308,12 +340,4 @@ Completed: 2025-10-09 — commit `7b6800a` (feat(relay): add Chrome offscreen re
 - Updated permissions documentation and QA testing guide
 - Success criteria met: no user-visible `woolsocks.eu` tab opens/closes on Chrome; >95% reduction in tab flashes
 
-### Voucher analytics (events only)
-
-Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
-
-- Implemented events (GA4 Measurement Protocol)
-  - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
-  - Key parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
-- Key events designated: `voucher_click`, `voucher_used`
-- BI export and dashboards remain pending (tracked in active item 2)
+---
