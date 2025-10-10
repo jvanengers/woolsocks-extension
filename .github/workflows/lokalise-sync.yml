@@ -81,20 +81,36 @@ jobs:
                 }' > "$temp_json"
               
               echo "JSON payload created, size: $(wc -c < "$temp_json") bytes"
+              echo "Validating JSON payload..."
+              if jq empty "$temp_json" 2>/dev/null; then
+                echo "✅ JSON payload is valid"
+              else
+                echo "❌ JSON payload is invalid"
+                echo "Payload content:"
+                cat "$temp_json"
+                exit 1
+              fi
               echo "First 200 chars of payload:"
               head -c 200 "$temp_json"
               echo ""
               
               # Upload file to Lokalise using correct API v2 format
               echo "Making API call to Lokalise..."
+              
+              # Make the API call and capture both response and exit code
+              set +e  # Don't exit on error
               response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
                 "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/upload" \
                 -H "X-Api-Token: $API_TOKEN" \
                 -H "Content-Type: application/json" \
                 -d @"$temp_json" 2>&1)
+              curl_exit_code=$?
+              set -e  # Re-enable exit on error
+              
+              echo "Curl exit code: $curl_exit_code"
+              echo "Raw response: $response"
               
               # Check if curl command itself failed
-              curl_exit_code=$?
               if [ $curl_exit_code -ne 0 ]; then
                 echo "❌ Curl command failed with exit code: $curl_exit_code"
                 echo "Response: $response"
