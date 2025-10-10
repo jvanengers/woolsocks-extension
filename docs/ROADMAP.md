@@ -288,7 +288,35 @@ Goal: Use anonymous/unauthenticated API calls wherever possible to fetch deal an
 - Success criteria
   - >80% of deal/voucher API calls use anonymous endpoints; <5% of user sessions trigger authenticated relay tabs; faster popup load times.
 
-## Completed items
+---
+
+## 14) Comprehensive caching for performance optimization
+
+Goal: Implement intelligent caching for cashback balance, transactions, deal information, and other frequently accessed data to reduce API calls and improve perceived loading speed.
+
+- Cache targets
+  - Cashback balance and recent transactions (user-specific, TTL: 5-15 minutes).
+  - Deal information per merchant/domain (public data, TTL: 30-60 minutes).
+  - Partner configuration and eligibility rules (rarely changing, TTL: 24 hours).
+  - User preferences and settings (local storage, persistent).
+- Cache strategy
+  - Multi-tier caching: memory cache (fastest), extension storage (persistent), background refresh.
+  - Cache invalidation: time-based TTL, event-based (user actions, session changes), manual refresh.
+  - Cache warming: preload popular merchants and user's frequent sites.
+- Implementation
+  - Add cache layer to API client with configurable TTL per endpoint.
+  - Implement cache-first strategy with background refresh for stale data.
+  - Add cache status indicators in UI (fresh/stale/loading states).
+- Performance benefits
+  - Instant popup loading for cached data (balance, recent deals).
+  - Reduced API load and faster merchant detection.
+  - Offline-capable for basic functionality (show cached deals, last known balance).
+- Cache management
+  - Add cache size limits and LRU eviction for memory cache.
+  - Provide cache clear option in settings for troubleshooting.
+  - Analytics for cache hit rates and performance metrics.
+- Success criteria
+  - >90% cache hit rate for balance/transactions; <200ms popup load time; 50% reduction in API calls during normal usage.
 
 ### 2) Voucher analytics (events only)
 
