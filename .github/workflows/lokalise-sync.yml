@@ -54,21 +54,30 @@ jobs:
             if [ -f "$file_path" ]; then
               echo "Uploading $lang translations..."
               
-              # Base64 encode the file content
-              file_content=$(base64 -w 0 "$file_path")
+              # Base64 encode the file content (Linux compatible)
+              file_content=$(base64 "$file_path" | tr -d '\n')
+              
+              # Create temporary JSON file for the payload
+              temp_json=$(mktemp)
+              cat > "$temp_json" << EOF
+{
+  "data": "$file_content",
+  "filename": "$lang.json",
+  "lang_iso": "$lang",
+  "replace_modified": true,
+  "convert_placeholders": true
+}
+EOF
               
               # Upload file to Lokalise using correct API v2 format
               response=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST \
                 "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/upload" \
                 -H "X-Api-Token: $API_TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "{
-                  \"data\": \"$file_content\",
-                  \"filename\": \"$lang.json\",
-                  \"lang_iso\": \"$lang\",
-                  \"replace_modified\": true,
-                  \"convert_placeholders\": true
-                }")
+                -d @"$temp_json")
+              
+              # Clean up temporary file
+              rm "$temp_json"
               
               # Extract HTTP status code
               http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
@@ -82,6 +91,7 @@ jobs:
               else
                 echo "❌ Failed to upload $lang translations (HTTP $http_code)"
                 echo "Response: $response_body"
+                # Don't exit on failure, continue with other files
               fi
             else
               echo "File $file_path not found, skipping $lang"
@@ -124,19 +134,28 @@ jobs:
           # Download all translations as a bundle
           echo "Downloading translations from Lokalise..."
           
+          # Create temporary JSON file for export request
+          temp_export_json=$(mktemp)
+          cat > "$temp_export_json" << EOF
+{
+  "format": "json",
+  "original_filenames": true,
+  "directory_prefix": "",
+  "all_platforms": false,
+  "filter_langs": ["en", "nl", "de", "fr", "it", "es"],
+  "export_empty_as": "skip"
+}
+EOF
+          
           # Trigger export
           export_response=$(curl -s -X POST \
             "https://api.lokalise.com/api2/projects/$PROJECT_ID/files/export" \
             -H "X-Api-Token: $API_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{
-              "format": "json",
-              "original_filenames": true,
-              "directory_prefix": "",
-              "all_platforms": false,
-              "filter_langs": ["en", "nl", "de", "fr", "it", "es"],
-              "export_empty_as": "skip"
-            }')
+            -d @"$temp_export_json")
+          
+          # Clean up temporary file
+          rm "$temp_export_json"
           
           echo "Export response: $export_response"
           
@@ -152,8 +171,13 @@ jobs:
             rm translations_bundle.zip
             
             echo "Translations downloaded successfully"
+            
+            # List downloaded files
+            echo "Downloaded files:"
+            ls -la translations/
           else
             echo "Failed to get bundle URL from export response"
+            echo "Full response: $export_response"
             exit 1
           fi
       
