@@ -6,6 +6,39 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
 1. Open `https://woolsocks.eu/nl/profile` and sign in (cookies must exist)
 2. Open the extension Options page and verify it says "Hi {firstname}" and shows a sock value
 
+## Session Recovery (roadmap #12)
+1. **Email storage verification**:
+   - Login to woolsocks.eu and open extension popup
+   - Verify email is automatically stored (check `chrome.storage.local` for `__wsUserEmail`)
+   - Verify analytics event: `session_recovery_email_stored`
+2. **Verification flow testing**:
+   - Clear woolsocks.eu cookies (simulate session loss)
+   - Open extension popup and click "Login"
+   - Verify verification screen appears with masked email (e.g., "jv***@apcreation.nl")
+   - Verify verification email is sent automatically
+   - Verify analytics events: `verification_screen_shown`, `verification_email_triggered`
+3. **Resend functionality**:
+   - Click "Resend link" button
+   - Verify 60-second cooldown is enforced
+   - Verify cooldown countdown displays correctly
+   - Verify analytics event: `verification_resend_clicked`
+4. **Balance timestamp display**:
+   - After session loss, verify cached balance shows "Last updated: X minutes ago"
+   - Verify timestamp updates when fresh data is loaded
+   - Test in both popup and options page
+5. **Fallback behavior**:
+   - Clear stored email via settings "Forget Me" button
+   - Click "Login" → verify redirects to woolsocks.eu
+   - Verify analytics event: `session_recovery_email_cleared`
+6. **Settings integration**:
+   - In options page, verify "Stored Email" section appears when email is stored
+   - Verify "Clear Email" button with confirmation dialog
+   - Verify email masking in settings display
+7. **Session restoration**:
+   - Complete verification flow by clicking email link
+   - Verify session is restored and popup shows authenticated state
+   - Verify balance updates to current value
+
 ## Cache Performance (roadmap #14)
 1. **Cache functionality**:
    - Login to woolsocks.eu and open extension popup

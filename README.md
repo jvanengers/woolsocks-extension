@@ -23,6 +23,7 @@ More capabilities (full merchant browse/search, popup lists, non-NL locales) wil
   - If a recent click (≤10 min) matches the site/merchant, we mark active immediately, set cooldown, and skip redirect.
   - Otherwise we request a tracked redirect URL for the best deal and redirect once; on landing we mark active.
   - We maintain a short TTL domain‑pending state to recognize landings that open in a new tab.
+- **Session recovery flow**: When you lose your session but have previously logged in, the extension stores your email locally and can send verification emails directly without redirecting to woolsocks.eu. This provides seamless session recovery while keeping you in the extension.
 - The background service worker fetches via the site-proxy at `https://woolsocks.eu/api/wsProxy/...` with credentials and relay fallback.
 - For voucher links we rely on `providerReferenceId` from the deals response to build the canonical product URL (fallbacks: `productId`, `id`, or UUID in `links.webLink`).
 
@@ -40,6 +41,10 @@ src/
     relay.ts       # content script on woolsocks.eu used for cookie-first relay
   options/
     main.tsx       # simplified settings page (session-aware)
+  shared/
+    email-storage.ts # email storage utilities for session recovery
+    time-utils.ts    # time formatting utilities
+    VerificationEmailScreen.tsx # verification email UI component
 ```
 
 Key points:
@@ -121,9 +126,27 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 ## Settings
 - Popup/Options → "Auto-activate online cashback" toggle (default ON). When OFF, the flow does not auto-redirect; manual re-activate remains available.
 
+## Session Recovery
+The extension automatically stores your email locally after successful login to enable seamless session recovery:
+
+- **Automatic email storage**: When you log in successfully, your email is stored securely in the browser's local storage
+- **Verification flow**: If you lose your session, clicking "Login" shows a verification screen instead of redirecting to woolsocks.eu
+- **Direct email sending**: The extension sends verification emails directly via the API without leaving the extension
+- **Smart fallback**: If no email is stored, it falls back to the original woolsocks.eu redirect flow
+- **Balance caching**: Your cashback balance remains visible with a "last updated" timestamp even after session loss
+- **Privacy controls**: You can clear your stored email anytime via the "Forget Me" button in settings
+
+### Session Recovery Flow
+1. User clicks "Login" → Extension checks for stored email
+2. If email exists → Shows verification screen with masked email
+3. Verification email sent automatically → User checks email and clicks link
+4. Session restored → User continues seamlessly in extension
+5. If no email stored → Falls back to woolsocks.eu redirect
+
 ## Analytics (GA4)
 - Events sent via Measurement Protocol: `oc_partner_detected`, `oc_eligible`, `oc_blocked`, `oc_redirect_requested`, `oc_redirect_issued`, `oc_redirect_navigated`, `oc_activated`, `oc_manual_reactivate`, `oc_conditions_loaded`.
-- Key parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `click_id`, `ext_version`.
+- **Session recovery events**: `session_recovery_email_stored`, `session_recovery_email_cleared`, `verification_email_triggered`, `verification_email_success`, `verification_email_fail`, `verification_screen_shown`, `verification_resend_clicked`.
+- Key parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `click_id`, `ext_version`, `email_domain`.
 - Recommended GA setup: create event-scoped custom dimensions for the parameters above (currency is standard). Mark `oc_activated` as a Key event.
 
 ## Notes for contributors
