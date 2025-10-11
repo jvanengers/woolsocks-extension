@@ -253,7 +253,7 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'ticketmaster.es': 'ES',
         
         // Additional merchants from new lists
-        'steam.com': 'NL', // Steam Wallet
+        'store.steampowered.com': 'NL', // Steam Store
         'treatwell.com': 'NL',
         'treatwell.de': 'DE',
         'treatwell.fr': 'FR',

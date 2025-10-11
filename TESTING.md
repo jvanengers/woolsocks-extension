@@ -115,7 +115,7 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Test Primera: `primera.nl` → NL, `primera.be` → BE
    - Test Ticketmaster: `ticketmaster.nl` → NL, `ticketmaster.de` → DE, `ticketmaster.fr` → FR, `ticketmaster.be` → BE
 7. **Additional merchants from new lists**:
-   - Test gaming platforms: `steam.com` → NL, `playstation.de` → DE, `nintendo.fr` → FR, `playstation.be` → BE
+   - Test gaming platforms: `store.steampowered.com` → NL, `playstation.de` → DE, `nintendo.fr` → FR, `playstation.be` → BE
    - Test beauty/wellness: `treatwell.com` → NL, `treatwell.de` → DE, `pinkgellac.nl` → NL, `pinkgellac.be` → BE
    - Test food delivery: `lieferando.de` → DE, `deliveroo.nl` → NL, `deliveroo.fr` → FR, `deliveroo.be` → BE
    - Test fashion/retail: `hunkemoller.nl` → NL, `hunkemoller.de` → DE, `myjewellery.be` → BE, `asos.nl` → NL
