@@ -571,15 +571,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     })()
     return true
   } else if (message?.type === 'CACHE_PRELOAD_REQUEST') {
-    // Handle cache preload request from popup
+    // Cache preload removed - causes unnecessary API calls
     ;(async () => {
-      try {
-        await preloadPopularMerchants()
-        sendResponse({ success: true })
-      } catch (error) {
-        console.warn('[Cache] Preload request failed:', error)
-        sendResponse({ success: false, error: (error as Error)?.message })
-      }
+      sendResponse({ success: true, message: 'Preload disabled to prevent unnecessary API calls' })
     })()
     return true
   }
@@ -610,21 +604,7 @@ async function triggerCleanupIfNeeded() {
   }
 }
 
-/**
- * Preload popular merchants cache
- */
-async function preloadPopularMerchants() {
-  const popularMerchants = ['bol.com', 'zalando.nl', 'coolblue.nl', 'wehkamp.nl', 'mediamarkt.nl', 'ikea.nl', 'hema.nl']
-  const { getPartnerByHostname } = await import('./api')
-  
-  for (const merchant of popularMerchants) {
-    try {
-      await getPartnerByHostname(merchant)
-    } catch (error) {
-      console.warn(`[Cache] Failed to preload ${merchant}:`, error)
-    }
-  }
-}
+// Popular merchants preloading removed - causes unnecessary API calls and tab flashing
 
 // Event-driven cleanup triggers
 chrome.tabs.onActivated.addListener(() => triggerCleanupIfNeeded())
@@ -641,22 +621,14 @@ chrome.runtime.onStartup?.addListener(async () => {
     ])
     console.log('[Cache] Restored from persistent storage on startup')
     
-    // Trigger cleanup and preload on startup
+    // Trigger cleanup on startup (preload removed)
     await triggerCleanupIfNeeded()
-    await preloadPopularMerchants()
   } catch (error) {
     console.warn('[Cache] Error during startup initialization:', error)
   }
 })
 
-// Also trigger preload on install
-chrome.runtime.onInstalled.addListener(async () => {
-  try {
-    await preloadPopularMerchants()
-  } catch (error) {
-    console.warn('[Cache] Error during install preload:', error)
-  }
-})
+// Preload on install removed - causes unnecessary API calls
 
 // Removed unused handleShowProfile function
 
