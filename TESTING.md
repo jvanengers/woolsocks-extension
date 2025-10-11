@@ -66,6 +66,36 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Open popup on partner site - should work without cache errors
    - Verify anonymous users don't trigger balance/transaction cache calls
 
+## Country-scoped deals (roadmap #11)
+1. **Voucher country matching**:
+   - Visit `https://www.ikea.nl/` and proceed to checkout
+   - Verify voucher panel shows Dutch IKEA vouchers (country=NL)
+   - Visit `https://www.ikea.de/` and proceed to checkout  
+   - Verify voucher panel shows German IKEA vouchers (country=DE)
+   - Verify vouchers have correct currency (EUR for both, but different rates)
+2. **Online cashback country matching**:
+   - As authenticated user, visit `https://www.zalando.nl/`
+   - Verify online cashback shows Dutch Zalando rates
+   - Visit `https://www.zalando.de/`
+   - Verify online cashback shows German Zalando rates
+   - Verify rates match domain country, not just user country
+3. **Multi-country merchant testing**:
+   - Test with merchants in different countries: amazon.com (US), amazon.nl (NL), amazon.de (DE)
+   - Verify each domain returns country-specific deals
+   - Check service worker console for API calls with correct `country` parameter
+4. **Cache isolation verification**:
+   - Visit `ikea.nl` → check cache stores with country key
+   - Visit `ikea.de` → verify separate cache entry created
+   - Visit `ikea.nl` again → verify cached NL data returned (not DE data)
+   - Open dev tools → Application → IndexedDB/Local Storage → verify cache keys include country codes
+5. **Fallback behavior**:
+   - Visit unknown/unsupported domain
+   - Verify falls back to `country=NL` default
+   - Verify no errors in console
+6. **Analytics verification**:
+   - Monitor for `deal_country_mismatch` events (should be minimal after fix)
+   - Verify voucher and cashback events include correct `country` parameter
+
 ## Anonymous user behaviors (roadmap #3)
 1. **Setup**: Ensure you're NOT logged in to woolsocks.eu (clear cookies or use incognito)
 2. **Popup functionality**:

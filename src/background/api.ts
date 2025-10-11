@@ -8,6 +8,7 @@
 import type { PartnerLite, Category, Deal } from '../shared/types'
 import { track } from './analytics'
 import { cachedFetch, CACHE_NAMESPACES } from '../shared/cache'
+import { getCountryForDomain } from './partners-config'
 
 const DIAG = false
 
@@ -776,7 +777,8 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
 }
 
 export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
-  const key = (hostname || '').replace(/^www\./i, '').toLowerCase()
+  const countryCode = await getCountryForDomain(hostname)
+  const key = `${(hostname || '').replace(/^www\./i, '').toLowerCase()}_${countryCode}`
   
   return cachedFetch(
     CACHE_NAMESPACES.PARTNER_INFO,
@@ -788,15 +790,15 @@ export async function getPartnerByHostname(hostname: string): Promise<PartnerLit
       } catch {}
 
       const candidates = buildNameCandidates(hostname)
-      console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates)
+      console.log(`[WS API] Searching for merchant: ${hostname}, candidates:`, candidates, `country: ${countryCode}`)
       
       for (const c of candidates) {
         try {
-          let res = await searchMerchantByName(c, 'NL', hostname)
+          let res = await searchMerchantByName(c, countryCode, hostname)
           // Fallback: if nothing for exact host, try removing country suffixes like '/nl' and hyphens
           if (!res && /^(.*)\.(nl|de|be|fr|it|es)$/i.test(c)) {
             const bare = c.replace(/\.(nl|de|be|fr|it|es)$/i, '')
-            res = await searchMerchantByName(bare, 'NL', hostname)
+            res = await searchMerchantByName(bare, countryCode, hostname)
           }
           if (res) {
             console.log(`[WS API] Found merchant: ${res.name} for candidate: ${c}`)
