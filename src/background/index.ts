@@ -1,5 +1,5 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId, checkAndStoreEmail } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
@@ -26,37 +26,7 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
           const active = await hasActiveSession()
           if (active) {
             chrome.runtime.sendMessage({ type: 'SESSION_UPDATED', active: true })
-            // Check and store email for session recovery
-            try {
-              await checkAndStoreEmail()
-            } catch (error) {
-              console.warn('[WS] Failed to check/store email on session active:', error)
-            }
           } else {
-            // Session lost - check if we should clear stored email
-            try {
-              const siteCookies = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
-              const apiCookies = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
-              const allCookies = [...siteCookies, ...apiCookies]
-              const hasSessionCookie = allCookies.some(c => c.name === 'ws-session' || /session/i.test(c.name))
-              
-              if (!hasSessionCookie) {
-                // No session cookies remaining - clear stored email
-                const { clearUserEmail, getEmailDomain, getUserEmail } = await import('../shared/email-storage')
-                const email = await getUserEmail()
-                if (email) {
-                  await clearUserEmail()
-                  try {
-                    track('session_recovery_email_cleared', { 
-                      reason: 'logout',
-                      email_domain: getEmailDomain(email)
-                    })
-                  } catch {}
-                }
-              }
-            } catch (error) {
-              console.warn('[WS] Failed to check/clear email on session loss:', error)
-            }
           }
         } catch {}
         try { refreshWsCookies() } catch {}
@@ -482,14 +452,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
     ;(async () => {
       const active = await hasActiveSession()
-      if (active) {
-        // Check and store email for session recovery when popup opens
-        try {
-          await checkAndStoreEmail()
-        } catch (error) {
-          console.warn('[WS] Failed to check/store email on session check:', error)
-        }
-      }
       sendResponse({ active })
     })()
     return true
@@ -616,62 +578,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ success: true })
       } catch (error) {
         console.warn('[Cache] Preload request failed:', error)
-        sendResponse({ success: false, error: (error as Error)?.message })
-      }
-    })()
-    return true
-  } else if (message?.type === 'SEND_VERIFICATION_EMAIL') {
-    // Handle verification email sending with cooldown
-    ;(async () => {
-      try {
-        // Check cooldown
-        const COOLDOWN_MS = 60 * 1000 // 60 seconds
-        const lastSendKey = '__wsVerificationEmailLastSent'
-        const result = await chrome.storage.session.get(lastSendKey)
-        const lastSent = result[lastSendKey] as number | undefined
-        
-        if (lastSent && Date.now() - lastSent < COOLDOWN_MS) {
-          const cooldownRemaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastSent)) / 1000)
-          try {
-            track('verification_resend_clicked', { cooldown_remaining: cooldownRemaining })
-          } catch {}
-          sendResponse({ 
-            success: false, 
-            error: `Please wait ${cooldownRemaining} seconds before resending`,
-            cooldownRemaining 
-          })
-          return
-        }
-        
-        // Get stored email
-        const { getUserEmail } = await import('../shared/email-storage')
-        const email = await getUserEmail()
-        
-        if (!email) {
-          sendResponse({ 
-            success: false, 
-            error: 'No email stored. Please log in via woolsocks.eu first.' 
-          })
-          return
-        }
-        
-        // Send verification email
-        const { sendVerificationEmail } = await import('./api')
-        const emailResult = await sendVerificationEmail(email)
-        
-        if (emailResult.success) {
-          // Store last send timestamp
-          await chrome.storage.session.set({ [lastSendKey]: Date.now() })
-          sendResponse({ success: true, email })
-        } else {
-          sendResponse({ 
-            success: false, 
-            error: emailResult.error || 'Failed to send verification email',
-            statusCode: emailResult.statusCode
-          })
-        }
-      } catch (error) {
-        console.error('[Background] SEND_VERIFICATION_EMAIL error:', error)
         sendResponse({ success: false, error: (error as Error)?.message })
       }
     })()

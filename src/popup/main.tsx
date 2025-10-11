@@ -5,8 +5,6 @@ import { translate, initLanguage } from '../shared/i18n'
 import { track } from '../background/analytics'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
-import VerificationEmailScreen from '../shared/VerificationEmailScreen'
-import { formatRelativeTime } from '../shared/time-utils'
 
 interface Deal {
   name: string
@@ -22,7 +20,6 @@ function App() {
   const [session, setSession] = useState<boolean | null>(null)
   const [view, setView] = useState<'home' | 'transactions' | 'consent'>('home')
   const [balance, setBalance] = useState<number>(0)
-  const [balanceTimestamp, setBalanceTimestamp] = useState<number | null>(null)
   const [onlineCashbackDeals, setOnlineCashbackDeals] = useState<Deal[]>([])
   const [vouchers, setVouchers] = useState<Deal[]>([])
   const [isTrackingActive, setIsTrackingActive] = useState<boolean>(false)
@@ -30,8 +27,6 @@ function App() {
   const [showReminders, setShowReminders] = useState<boolean>(true)
   const [currentDomain, setCurrentDomain] = useState<string>('')
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
-  const [showVerificationScreen, setShowVerificationScreen] = useState<boolean>(false)
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
 
   useEffect(() => {
     // Ensure language is initialized from storage so translate() uses the user's setting
@@ -142,56 +137,12 @@ function App() {
           }
         })
       } catch {}
-      
-      // Check if we have stored email for verification flow
-      try {
-        const { getUserEmail } = await import('../shared/email-storage')
-        const storedEmail = await getUserEmail()
-        
-        if (storedEmail) {
-          // Show verification screen instead of redirecting
-          setVerificationEmail(storedEmail)
-          setShowVerificationScreen(true)
-          
-          // Track verification screen shown
-          try {
-            chrome.runtime.sendMessage({
-              type: 'ANALYTICS_TRACK',
-              event: 'verification_screen_shown',
-              params: { context: 'popup' }
-            })
-          } catch {}
-          
-          // Automatically send verification email on first show
-          handleSendVerificationEmail()
-          return
-        }
-      } catch (error) {
-        console.warn('[Popup] Failed to check stored email:', error)
-      }
     }
-    
-    // Fallback to woolsocks.eu redirect
+
+    // Redirect to woolsocks.eu
     chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
   }
   
-  const handleSendVerificationEmail = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'SEND_VERIFICATION_EMAIL' })
-      
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to send verification email')
-      }
-    } catch (error) {
-      console.error('[Popup] Failed to send verification email:', error)
-      throw error
-    }
-  }
-  
-  const handleCloseVerificationScreen = () => {
-    setShowVerificationScreen(false)
-    setVerificationEmail(null)
-  }
 
   // Load balance for the home view (separate from SettingsPanel)
   useEffect(() => {
@@ -202,34 +153,6 @@ function App() {
           const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' })
           if (resp && resp.active) {
             setSession(true)
-          } else {
-            // Session is lost - try to load cached balance with timestamp
-            try {
-              const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
-              const anonId = wsAnonId as string | undefined
-              if (anonId) {
-                const { get, CACHE_NAMESPACES } = await import('../shared/cache')
-                // Try both user ID and anon ID as cache keys
-                for (const cacheKey of [`balance_${anonId}`, anonId]) {
-                  try {
-                    const cachedData = await get(CACHE_NAMESPACES.WALLET, cacheKey)
-                    if (cachedData && typeof cachedData === 'object') {
-                      const balanceValue = (cachedData as any)?.value || (cachedData as any)?.data?.balance?.totalAmount || 0
-                      const timestamp = (cachedData as any)?.timestamp
-                      if (typeof balanceValue === 'number' && balanceValue > 0) {
-                        setBalance(balanceValue)
-                        if (timestamp) {
-                          setBalanceTimestamp(timestamp)
-                        }
-                        break
-                      }
-                    }
-                  } catch {}
-                }
-              }
-            } catch (error) {
-              console.warn('[Popup] Failed to load cached balance:', error)
-            }
           }
         } catch {}
       })()
@@ -239,12 +162,11 @@ function App() {
       try {
         // Use cached balance data for instant loading
         const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
-        if (resp && typeof resp.balance === 'number') {
-          setBalance(resp.balance)
-          setBalanceTimestamp(Date.now()) // Current balance is fresh
-          const el = document.getElementById('__ws_balance')
-          if (el) el.textContent = `€${resp.balance.toFixed(2)}`
-        }
+             if (resp && typeof resp.balance === 'number') {
+               setBalance(resp.balance)
+               const el = document.getElementById('__ws_balance')
+               if (el) el.textContent = `€${resp.balance.toFixed(2)}`
+             }
         
         // Trigger background refresh for next time
         try {
@@ -393,27 +315,6 @@ function App() {
   const isTransactionsView = view === 'transactions'
   
   // Show verification email screen if triggered
-  if (showVerificationScreen && verificationEmail) {
-    return (
-      <div style={{ 
-        background: '#FFFFFF', 
-        borderRadius: 0, 
-        overflow: 'hidden', 
-        position: 'relative', 
-        width: 310, 
-        maxHeight: 600, 
-        display: 'flex', 
-        flexDirection: 'column',
-        border: '4px solid #FFFFFF'
-      }}>
-        <VerificationEmailScreen
-          email={verificationEmail}
-          onClose={handleCloseVerificationScreen}
-          onResend={handleSendVerificationEmail}
-        />
-      </div>
-    )
-  }
   
   return (
     <div style={{ 
@@ -514,17 +415,8 @@ function App() {
                   letterSpacing: '0.1px'
                 }}>
                   €{balance.toFixed(2)}
-                </span>
-              </div>
-              {balanceTimestamp && session !== true && (
-                <span style={{
-                  fontSize: 10,
-                  color: '#6B7280',
-                  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                }}>
-                  {formatRelativeTime(balanceTimestamp)}
-                </span>
-              )}
+         </span>
+       </div>
             </div>
           </>
         ) : (
