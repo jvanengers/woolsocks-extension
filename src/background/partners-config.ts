@@ -51,31 +51,198 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
     async () => {
       // Default country mappings for common domains
       const defaultMappings: Record<string, string> = {
+        // Amazon variants
         'amazon.com': 'US',
         'amazon.nl': 'NL',
         'amazon.de': 'DE',
         'amazon.fr': 'FR',
         'amazon.co.uk': 'GB',
+        'amazon.it': 'IT',
+        'amazon.es': 'ES',
+        'amazon.ca': 'CA',
+        'amazon.com.au': 'AU',
+        
+        // AliExpress variants
+        'aliexpress.com': 'US',
+        'aliexpress.us': 'US',
+        'aliexpress.ru': 'RU',
+        'aliexpress.de': 'DE',
+        'aliexpress.fr': 'FR',
+        'aliexpress.nl': 'NL',
+        'aliexpress.it': 'IT',
+        'aliexpress.es': 'ES',
+        'aliexpress.pl': 'PL',
+        'aliexpress.th': 'TH',
+        'aliexpress.tr': 'TR',
+        'aliexpress.vn': 'VI',
+        'aliexpress.id': 'ID',
+        'aliexpress.jp': 'JA',
+        'aliexpress.kr': 'KO',
+        'aliexpress.pt': 'PT',
+        'aliexpress.ar': 'AR',
+        'aliexpress.il': 'HE',
+        'aliexpress.my': 'MY',
+        
+        // Food delivery
+        'thuisbezorgd.nl': 'NL',
+        'thuisbezorgd.de': 'DE',
+        'thuisbezorgd.be': 'BE',
+        'takeaway.com': 'NL',
+        'just-eat.nl': 'NL',
+        'just-eat.de': 'DE',
+        'just-eat.fr': 'FR',
+        'just-eat.co.uk': 'GB',
+        
+        // Fashion & retail
         'bol.com': 'NL',
         'zalando.nl': 'NL',
         'zalando.de': 'DE',
         'zalando.fr': 'FR',
+        'zalando.it': 'IT',
+        'zalando.es': 'ES',
+        'zalando.co.uk': 'GB',
+        'aboutyou.de': 'DE',
+        'aboutyou.nl': 'NL',
+        'aboutyou.fr': 'FR',
+        'aboutyou.com': 'DE',
+        'shein.com': 'US',
+        'shein.nl': 'NL',
+        'shein.de': 'DE',
+        'shein.fr': 'FR',
+        'hm.com': 'US',
+        'hm.nl': 'NL',
+        'hm.de': 'DE',
+        'hm.fr': 'FR',
+        'hm.co.uk': 'GB',
+        'nike.com': 'US',
+        'nike.nl': 'NL',
+        'nike.de': 'DE',
+        'nike.fr': 'FR',
+        'nike.co.uk': 'GB',
+        'adidas.com': 'US',
+        'adidas.nl': 'NL',
+        'adidas.de': 'DE',
+        'adidas.fr': 'FR',
+        'adidas.co.uk': 'GB',
+        'asos.com': 'GB',
+        'asos.nl': 'NL',
+        'asos.de': 'DE',
+        'asos.fr': 'FR',
+        
+        // Electronics & tech
         'coolblue.nl': 'NL',
         'wehkamp.nl': 'NL',
         'mediamarkt.nl': 'NL',
         'mediamarkt.de': 'DE',
+        'mediamarkt.fr': 'FR',
+        'mediamarkt.be': 'BE',
+        'mediamarkt.it': 'IT',
+        'mediamarkt.es': 'ES',
+        'saturn.de': 'DE',
+        'saturn.at': 'AT',
+        'saturn.ch': 'CH',
+        
+        // Home & furniture
         'ikea.nl': 'NL',
         'ikea.de': 'DE',
+        'ikea.fr': 'FR',
+        'ikea.co.uk': 'GB',
+        'ikea.com': 'US',
+        'ikea.it': 'IT',
+        'ikea.es': 'ES',
+        'ikea.be': 'BE',
+        'ikea.at': 'AT',
+        'ikea.ch': 'CH',
+        
+        // Dutch retailers
         'action.nl': 'NL',
         'hema.nl': 'NL',
-        'nike.com': 'US',
-        'nike.nl': 'NL',
-        'adidas.com': 'US',
-        'adidas.nl': 'NL',
-        'asos.com': 'GB',
-        'aboutyou.de': 'DE',
-        'shein.com': 'US',
+        'hema.de': 'DE',
+        'hema.be': 'BE',
+        'hema.fr': 'FR',
         'intertoys.nl': 'NL',
+        'intertoys.de': 'DE',
+        'intertoys.be': 'BE',
+        'intertoys.fr': 'FR',
+        'prénatal.nl': 'NL',
+        'prénatal.de': 'DE',
+        'prénatal.fr': 'FR',
+        'prénatal.be': 'BE',
+        
+        // Pet & health
+        'zooplus.nl': 'NL',
+        'zooplus.de': 'DE',
+        'zooplus.fr': 'FR',
+        'zooplus.co.uk': 'GB',
+        'zooplus.it': 'IT',
+        'zooplus.es': 'ES',
+        'bodyandfit.nl': 'NL',
+        'bodyandfit.de': 'DE',
+        'bodyandfit.fr': 'FR',
+        'bodyandfit.co.uk': 'GB',
+        'medpets.nl': 'NL',
+        'medpets.de': 'DE',
+        'medpets.fr': 'FR',
+        'medpets.co.uk': 'GB',
+        
+        // Sports & lifestyle
+        'jd-sports.nl': 'NL',
+        'jd-sports.de': 'DE',
+        'jd-sports.fr': 'FR',
+        'jd-sports.co.uk': 'GB',
+        'vitesse.nl': 'NL',
+        'vitesse.de': 'DE',
+        'vitesse.fr': 'FR',
+        'scapino.nl': 'NL',
+        'scapino.de': 'DE',
+        'scapino.be': 'BE',
+        'we-fashion.nl': 'NL',
+        'we-fashion.de': 'DE',
+        'we-fashion.fr': 'FR',
+        'we-fashion.be': 'BE',
+        
+        // Travel & services
+        'trip.com': 'US',
+        'booking.com': 'NL',
+        'expedia.nl': 'NL',
+        'expedia.de': 'DE',
+        'expedia.fr': 'FR',
+        'expedia.co.uk': 'GB',
+        'staatsloterij.nl': 'NL',
+        'greetz.nl': 'NL',
+        'greetz.de': 'DE',
+        'greetz.fr': 'FR',
+        'greetz.co.uk': 'GB',
+        'lidl.nl': 'NL',
+        'lidl.de': 'DE',
+        'lidl.fr': 'FR',
+        'lidl.co.uk': 'GB',
+        'lidl.be': 'BE',
+        'lidl.it': 'IT',
+        'lidl.es': 'ES',
+        
+        // Gaming & tech
+        'ninja.nl': 'NL',
+        'ninja.de': 'DE',
+        'ninja.fr': 'FR',
+        'ninja.co.uk': 'GB',
+        'overstappen.nl': 'NL',
+        'de-notenshop.nl': 'NL',
+        'de-notenshop.de': 'DE',
+        'de-notenshop.fr': 'FR',
+        'brekz.nl': 'NL',
+        'brekz.de': 'DE',
+        'brekz.fr': 'FR',
+        'uitgekookt.nl': 'NL',
+        'uitgekookt.de': 'DE',
+        'uitgekookt.fr': 'FR',
+        'plein.nl': 'NL',
+        'plein.de': 'DE',
+        'plein.fr': 'FR',
+        'lounge-by-zalando.nl': 'NL',
+        'lounge-by-zalando.de': 'DE',
+        'lounge-by-zalando.fr': 'FR',
+        'lounge-by-zalando.co.uk': 'GB',
       }
       
       return defaultMappings
@@ -171,12 +338,16 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       domain = domainOrUrl.replace(/^www\./, '').toLowerCase()
     }
     
-    // 1. Check direct domain mapping first
-    if (mappings[domain]) {
-      return mappings[domain]
+    // 1. Check for subdomain-based country indicators (highest priority)
+    const subdomainMatch = domain.match(/^([a-z]{2})\.(.+)$/)
+    if (subdomainMatch) {
+      const countryCode = subdomainMatch[1].toUpperCase()
+      if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES', 'RU', 'PL', 'TH', 'TR', 'VI', 'ID', 'JA', 'KO', 'PT', 'AR', 'HE', 'MY'].includes(countryCode)) {
+        return countryCode
+      }
     }
     
-    // 2. Check for path-based country indicators
+    // 2. Check for path-based country indicators (high priority for multi-country domains)
     if (path) {
       // IKEA pattern: ikea.com/nl/nl/ or ikea.com/de/de/
       const ikeaMatch = path.match(/^\/([a-z]{2})\/[a-z]{2}/)
@@ -206,7 +377,12 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       }
     }
     
-    // 3. Check for query parameter country indicators
+    // 3. Check direct domain mapping (for single-country domains)
+    if (mappings[domain]) {
+      return mappings[domain]
+    }
+    
+    // 4. Check for query parameter country indicators
     if (searchParams) {
       const params = new URLSearchParams(searchParams)
       
@@ -222,6 +398,18 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
           'glo2bel': 'BE', // Belgium
           'glo2ita': 'IT', // Italy
           'glo2esp': 'ES', // Spain
+          'glo2rus': 'RU', // Russia
+          'glo2pol': 'PL', // Poland
+          'glo2tha': 'TH', // Thailand
+          'glo2tur': 'TR', // Turkey
+          'glo2vnm': 'VI', // Vietnam
+          'glo2idn': 'ID', // Indonesia
+          'glo2jpn': 'JA', // Japan
+          'glo2kor': 'KO', // South Korea
+          'glo2prt': 'PT', // Portugal
+          'glo2arg': 'AR', // Argentina
+          'glo2isr': 'HE', // Israel
+          'glo2mys': 'MY', // Malaysia
         }
         if (countryMap[gatewayAdapt]) {
           return countryMap[gatewayAdapt]
@@ -232,13 +420,13 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       const countryParam = params.get('country') || params.get('locale') || params.get('region')
       if (countryParam) {
         const countryCode = countryParam.toUpperCase()
-        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES', 'RU', 'PL', 'TH', 'TR', 'VI', 'ID', 'JA', 'KO', 'PT', 'AR', 'HE', 'MY'].includes(countryCode)) {
           return countryCode
         }
       }
     }
     
-    // 4. Fallback to TLD-based detection
+    // 5. Fallback to TLD-based detection
     const tldMatch = domain.match(/\.([a-z]{2})$/)
     if (tldMatch) {
       const tld = tldMatch[1].toUpperCase()
@@ -251,6 +439,18 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
         'BE': 'BE',
         'IT': 'IT',
         'ES': 'ES',
+        'RU': 'RU',
+        'PL': 'PL',
+        'TH': 'TH',
+        'TR': 'TR',
+        'VN': 'VI',
+        'ID': 'ID',
+        'JP': 'JA',
+        'KR': 'KO',
+        'PT': 'PT',
+        'AR': 'AR',
+        'IL': 'HE',
+        'MY': 'MY',
       }
       if (tldMap[tld]) {
         return tldMap[tld]
