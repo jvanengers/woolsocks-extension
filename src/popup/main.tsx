@@ -5,6 +5,8 @@ import { translate, initLanguage } from '../shared/i18n'
 import { track } from '../background/analytics'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
+import VerificationEmailScreen from '../shared/VerificationEmailScreen'
+import { formatRelativeTime } from '../shared/time-utils'
 
 interface Deal {
   name: string
@@ -20,6 +22,7 @@ function App() {
   const [session, setSession] = useState<boolean | null>(null)
   const [view, setView] = useState<'home' | 'transactions' | 'consent'>('home')
   const [balance, setBalance] = useState<number>(0)
+  const [balanceTimestamp, setBalanceTimestamp] = useState<number | null>(null)
   const [onlineCashbackDeals, setOnlineCashbackDeals] = useState<Deal[]>([])
   const [vouchers, setVouchers] = useState<Deal[]>([])
   const [isTrackingActive, setIsTrackingActive] = useState<boolean>(false)
@@ -27,6 +30,8 @@ function App() {
   const [showReminders, setShowReminders] = useState<boolean>(true)
   const [currentDomain, setCurrentDomain] = useState<string>('')
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
+  const [showVerificationScreen, setShowVerificationScreen] = useState<boolean>(false)
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
 
   useEffect(() => {
     // Ensure language is initialized from storage so translate() uses the user's setting
@@ -124,7 +129,7 @@ function App() {
     }
   }, [])
 
-  const openLogin = () => {
+  const openLogin = async () => {
     // Track anonymous user login clicks
     if (session !== true) {
       try {
@@ -137,8 +142,55 @@ function App() {
           }
         })
       } catch {}
+      
+      // Check if we have stored email for verification flow
+      try {
+        const { getUserEmail } = await import('../shared/email-storage')
+        const storedEmail = await getUserEmail()
+        
+        if (storedEmail) {
+          // Show verification screen instead of redirecting
+          setVerificationEmail(storedEmail)
+          setShowVerificationScreen(true)
+          
+          // Track verification screen shown
+          try {
+            chrome.runtime.sendMessage({
+              type: 'ANALYTICS_TRACK',
+              event: 'verification_screen_shown',
+              params: { context: 'popup' }
+            })
+          } catch {}
+          
+          // Automatically send verification email on first show
+          handleSendVerificationEmail()
+          return
+        }
+      } catch (error) {
+        console.warn('[Popup] Failed to check stored email:', error)
+      }
     }
+    
+    // Fallback to woolsocks.eu redirect
     chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
+  }
+  
+  const handleSendVerificationEmail = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'SEND_VERIFICATION_EMAIL' })
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send verification email')
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to send verification email:', error)
+      throw error
+    }
+  }
+  
+  const handleCloseVerificationScreen = () => {
+    setShowVerificationScreen(false)
+    setVerificationEmail(null)
   }
 
   // Load balance for the home view (separate from SettingsPanel)
@@ -146,7 +198,40 @@ function App() {
     if (session !== true) {
       // As a fallback, if background reports an active session, mark session true so UI shows authenticated state
       ;(async () => {
-        try { const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' }); if (resp && resp.active) setSession(true) } catch {}
+        try { 
+          const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' })
+          if (resp && resp.active) {
+            setSession(true)
+          } else {
+            // Session is lost - try to load cached balance with timestamp
+            try {
+              const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
+              const anonId = wsAnonId as string | undefined
+              if (anonId) {
+                const { get, CACHE_NAMESPACES } = await import('../shared/cache')
+                // Try both user ID and anon ID as cache keys
+                for (const cacheKey of [`balance_${anonId}`, anonId]) {
+                  try {
+                    const cachedData = await get(CACHE_NAMESPACES.WALLET, cacheKey)
+                    if (cachedData && typeof cachedData === 'object') {
+                      const balanceValue = (cachedData as any)?.value || (cachedData as any)?.data?.balance?.totalAmount || 0
+                      const timestamp = (cachedData as any)?.timestamp
+                      if (typeof balanceValue === 'number' && balanceValue > 0) {
+                        setBalance(balanceValue)
+                        if (timestamp) {
+                          setBalanceTimestamp(timestamp)
+                        }
+                        break
+                      }
+                    }
+                  } catch {}
+                }
+              }
+            } catch (error) {
+              console.warn('[Popup] Failed to load cached balance:', error)
+            }
+          }
+        } catch {}
       })()
       return
     }
@@ -156,6 +241,7 @@ function App() {
         const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
         if (resp && typeof resp.balance === 'number') {
           setBalance(resp.balance)
+          setBalanceTimestamp(Date.now()) // Current balance is fresh
           const el = document.getElementById('__ws_balance')
           if (el) el.textContent = `€${resp.balance.toFixed(2)}`
         }
@@ -305,6 +391,30 @@ function App() {
   const brandBg = isTrackingActive ? '#00C275' : '#FDC408'
   const isConsentView = view === 'consent'
   const isTransactionsView = view === 'transactions'
+  
+  // Show verification email screen if triggered
+  if (showVerificationScreen && verificationEmail) {
+    return (
+      <div style={{ 
+        background: '#FFFFFF', 
+        borderRadius: 0, 
+        overflow: 'hidden', 
+        position: 'relative', 
+        width: 310, 
+        maxHeight: 600, 
+        display: 'flex', 
+        flexDirection: 'column',
+        border: '4px solid #FFFFFF'
+      }}>
+        <VerificationEmailScreen
+          email={verificationEmail}
+          onClose={handleCloseVerificationScreen}
+          onResend={handleSendVerificationEmail}
+        />
+      </div>
+    )
+  }
+  
   return (
     <div style={{ 
       background: isConsentView ? '#FFFFFF' : isTransactionsView ? '#F5F5F6' : brandBg, 
@@ -383,26 +493,38 @@ function App() {
             {/* Right: balance display */}
             <div style={{ 
               display: 'flex', 
-              alignItems: 'center', 
-              gap: 4, 
+              flexDirection: 'column',
+              alignItems: 'flex-end', 
+              gap: 2, 
               padding: '6px 10px',
               background: 'rgba(0,0,0,0.05)',
               borderRadius: 8,
-              height: 32
+              minHeight: 32
             }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span style={{ 
-                fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                fontSize: 14, 
-                fontWeight: 500, 
-                color: '#100B1C',
-                lineHeight: 1.45,
-                letterSpacing: '0.1px'
-              }}>
-                €{balance.toFixed(2)}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ 
+                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontSize: 14, 
+                  fontWeight: 500, 
+                  color: '#100B1C',
+                  lineHeight: 1.45,
+                  letterSpacing: '0.1px'
+                }}>
+                  €{balance.toFixed(2)}
+                </span>
+              </div>
+              {balanceTimestamp && session !== true && (
+                <span style={{
+                  fontSize: 10,
+                  color: '#6B7280',
+                  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                }}>
+                  {formatRelativeTime(balanceTimestamp)}
+                </span>
+              )}
             </div>
           </>
         ) : (

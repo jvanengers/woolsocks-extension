@@ -74,6 +74,24 @@ async function getUserId(): Promise<string | null> {
     ) as string | null
     cachedUserId = id
     resolvingUserId = false
+    
+    // Auto-store email for session recovery when authenticated
+    if (id && json) {
+      try {
+        const email = json?.data?.email || json?.user?.email || json?.profile?.email || null
+        if (email && typeof email === 'string') {
+          const { storeUserEmail, getEmailDomain } = await import('../shared/email-storage')
+          await storeUserEmail(email)
+          // Track email storage for analytics
+          try {
+            track('session_recovery_email_stored', { email_domain: getEmailDomain(email) })
+          } catch {}
+        }
+      } catch (emailError) {
+        console.warn('[WS API] Failed to store user email:', emailError)
+      }
+    }
+    
     return id
   } catch {
     cachedUserId = null
@@ -1059,6 +1077,104 @@ export async function refreshUserData(): Promise<{ balance: number; transactions
   ])
 
   return { balance, transactions }
+}
+
+// --- Session Recovery and Verification Email ---
+
+/**
+ * Send verification email to user for session recovery
+ * Uses the identity-new API endpoint
+ */
+export async function sendVerificationEmail(email: string): Promise<{ success: boolean; error?: string; statusCode?: number }> {
+  try {
+    if (!email || typeof email !== 'string' || !email.includes('@')) {
+      return { success: false, error: 'Invalid email address', statusCode: 400 }
+    }
+
+    const endpoint = `/identity-new/api/v2/email/authenticate`
+    const { getEmailDomain } = await import('../shared/email-storage')
+    
+    // Track attempt
+    try {
+      track('verification_email_triggered', { 
+        email_domain: getEmailDomain(email),
+        context: 'extension'
+      })
+    } catch {}
+
+    const result = await fetchViaSiteProxy<any>(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    })
+
+    const { status, data } = result
+
+    if (status === 200 || status === 201 || status === 204) {
+      // Success
+      try {
+        track('verification_email_success', {
+          email_domain: getEmailDomain(email),
+          attempt: 1,
+        })
+      } catch {}
+      return { success: true, statusCode: status }
+    } else if (status === 429) {
+      // Rate limit
+      try {
+        track('verification_email_fail', {
+          email_domain: getEmailDomain(email),
+          error: 'rate_limit',
+          status_code: status,
+        })
+      } catch {}
+      return { success: false, error: 'Too many requests. Please wait before trying again.', statusCode: status }
+    } else if (status >= 400 && status < 500) {
+      // Client error
+      const errorMsg = data?.message || data?.error || 'Failed to send verification email'
+      try {
+        track('verification_email_fail', {
+          email_domain: getEmailDomain(email),
+          error: 'client_error',
+          status_code: status,
+        })
+      } catch {}
+      return { success: false, error: errorMsg, statusCode: status }
+    } else if (status >= 500) {
+      // Server error
+      try {
+        track('verification_email_fail', {
+          email_domain: getEmailDomain(email),
+          error: 'server_error',
+          status_code: status,
+        })
+      } catch {}
+      return { success: false, error: 'Server error. Please try again later.', statusCode: status }
+    } else {
+      // Unknown status
+      try {
+        track('verification_email_fail', {
+          email_domain: getEmailDomain(email),
+          error: 'unknown_status',
+          status_code: status,
+        })
+      } catch {}
+      return { success: false, error: 'Unexpected response from server', statusCode: status }
+    }
+  } catch (error) {
+    console.error('[WS API] sendVerificationEmail error:', error)
+    try {
+      const { getEmailDomain } = await import('../shared/email-storage')
+      track('verification_email_fail', {
+        email_domain: getEmailDomain(email),
+        error: 'exception',
+        status_code: 0,
+      })
+    } catch {}
+    return { success: false, error: 'Network error. Please check your connection.', statusCode: 0 }
+  }
 }
 
 
