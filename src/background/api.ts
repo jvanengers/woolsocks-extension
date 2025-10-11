@@ -39,6 +39,57 @@ export function resetCachedUserId() {
   cachedUserId = undefined
   resolvingUserId = false
 }
+
+// Dedicated function to check and store user email for session recovery
+// This runs independently of getUserId() caching to ensure email is always stored
+export async function checkAndStoreEmail(): Promise<void> {
+  try {
+    // Quick check: if email already stored, skip
+    const { __wsUserEmail } = await chrome.storage.local.get('__wsUserEmail')
+    if (__wsUserEmail) {
+      return // Email already stored
+    }
+
+    // Check if we have an active session first
+    const userId = await getUserId()
+    if (!userId) {
+      return // No active session
+    }
+
+    // Fetch user info to get email
+    const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
+    let anonId = wsAnonId as string | undefined
+    if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
+    const minHeaders: HeadersInit = { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId || '' }
+
+    let json: any = null
+    try {
+      const direct = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, { credentials: 'include', headers: minHeaders as any })
+      if (direct.ok) {
+        try { json = await direct.json() } catch {}
+      }
+    } catch {}
+
+    // Fallback to relay if direct call failed
+    if (!json) {
+      const rel = await relayFetchViaTabCustomHeaders<{ data?: { email?: string; user?: { email?: string }; profile?: { email?: string } } }>(`/user-info/api/v0`, minHeaders as Record<string, string>)
+      json = rel.data
+    }
+
+    // Extract email from response
+    const email = json?.data?.email || json?.user?.email || json?.profile?.email || null
+    if (email && typeof email === 'string') {
+      const { storeUserEmail, getEmailDomain } = await import('../shared/email-storage')
+      await storeUserEmail(email)
+      // Track email storage for analytics
+      try {
+        track('session_recovery_email_stored', { email_domain: getEmailDomain(email) })
+      } catch {}
+    }
+  } catch (error) {
+    console.warn('[WS API] checkAndStoreEmail error:', error)
+  }
+}
 async function getUserId(): Promise<string | null> {
   if (typeof cachedUserId !== 'undefined') return cachedUserId
   if (resolvingUserId) return null

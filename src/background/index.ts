@@ -1,5 +1,5 @@
 // Background service worker: URL detection, icon state, messaging
-import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId } from './api.ts'
+import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId, checkAndStoreEmail } from './api.ts'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
@@ -26,6 +26,12 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
           const active = await hasActiveSession()
           if (active) {
             chrome.runtime.sendMessage({ type: 'SESSION_UPDATED', active: true })
+            // Check and store email for session recovery
+            try {
+              await checkAndStoreEmail()
+            } catch (error) {
+              console.warn('[WS] Failed to check/store email on session active:', error)
+            }
           } else {
             // Session lost - check if we should clear stored email
             try {
@@ -476,6 +482,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
     ;(async () => {
       const active = await hasActiveSession()
+      if (active) {
+        // Check and store email for session recovery when popup opens
+        try {
+          await checkAndStoreEmail()
+        } catch (error) {
+          console.warn('[WS] Failed to check/store email on session check:', error)
+        }
+      }
       sendResponse({ active })
     })()
     return true
