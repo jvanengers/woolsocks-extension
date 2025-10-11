@@ -391,7 +391,7 @@ function ensureMount(): ShadowRoot {
       border-radius: 16px !important;
       box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
       padding: 16px !important;
-      min-width: 280px !important;
+      min-width: 360px !important;
       max-width: 400px !important;
     }
     .countdown-content { display:block !important; }
