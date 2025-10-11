@@ -256,12 +256,12 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
   return (
     <div style={{ 
-      width: variant === 'popup' ? '100%' : 320, 
+      width: variant === 'popup' ? '100%' : 360, 
       padding: variant === 'popup' ? 0 : 16, 
       borderRadius: variant === 'popup' ? 0 : 12, 
       background: variant === 'popup' ? '#F5F5F6' : '#fff', 
       fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-      minHeight: variant === 'popup' ? '100vh' : 'auto'
+      minHeight: variant === 'popup' ? 'auto' : 'auto'
     }}>
 
       {session === null && (
@@ -323,7 +323,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
             <>
               {/* Page title only - no back button or balance since they're in the main header */}
               <div style={{ 
-                padding: '16px 8px 16px 8px'
+                padding: '16px 8px 6px 8px'
               }}>
                 <h1 style={{ 
                   fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
@@ -361,22 +361,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               <div style={{ 
                 background: variant === 'popup' ? '#FFFFFF' : 'transparent',
                 borderRadius: variant === 'popup' ? '16px 16px 16px 16px' : 0,
-                padding: variant === 'popup' ? '16px 0' : '0'
+                padding: variant === 'popup' ? '24px 0' : '0'
               }}>
-                {/* Recent transactions label for popup */}
-                {variant === 'popup' && (
-                  <div style={{ 
-                    padding: '0 16px 16px 16px',
-                    fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
-                    fontSize: 14, 
-                    color: '#100B1C',
-                    opacity: 0.5,
-                    lineHeight: 1.45,
-                    letterSpacing: '0.1px'
-                  }}>
-                    {translate('options.recentTransactions')}
-                  </div>
-                )}
                 <div style={{ 
                   display: 'flex', 
                   flexDirection: 'column',
@@ -580,7 +566,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
           {/* Woolsocks logo at bottom for popup variant */}
           {variant === 'popup' && (
-            <div style={{ textAlign: 'center', marginTop: 15 }}>
+            <div style={{ textAlign: 'center', marginTop: 15, marginBottom: 15 }}>
               <img
                 src={chrome.runtime.getURL('public/icons/Woolsocks-logo-large.png')}
                 alt="Woolsocks"

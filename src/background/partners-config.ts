@@ -52,36 +52,18 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
       // Default country mappings for common domains
       const defaultMappings: Record<string, string> = {
         // Amazon variants
-        'amazon.com': 'US',
         'amazon.nl': 'NL',
         'amazon.de': 'DE',
         'amazon.fr': 'FR',
-        'amazon.co.uk': 'GB',
         'amazon.it': 'IT',
         'amazon.es': 'ES',
-        'amazon.ca': 'CA',
-        'amazon.com.au': 'AU',
         
         // AliExpress variants
-        'aliexpress.com': 'US',
-        'aliexpress.us': 'US',
-        'aliexpress.ru': 'RU',
         'aliexpress.de': 'DE',
         'aliexpress.fr': 'FR',
         'aliexpress.nl': 'NL',
         'aliexpress.it': 'IT',
         'aliexpress.es': 'ES',
-        'aliexpress.pl': 'PL',
-        'aliexpress.th': 'TH',
-        'aliexpress.tr': 'TR',
-        'aliexpress.vn': 'VI',
-        'aliexpress.id': 'ID',
-        'aliexpress.jp': 'JA',
-        'aliexpress.kr': 'KO',
-        'aliexpress.pt': 'PT',
-        'aliexpress.ar': 'AR',
-        'aliexpress.il': 'HE',
-        'aliexpress.my': 'MY',
         
         // Food delivery
         'thuisbezorgd.nl': 'NL',
@@ -91,7 +73,6 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'just-eat.nl': 'NL',
         'just-eat.de': 'DE',
         'just-eat.fr': 'FR',
-        'just-eat.co.uk': 'GB',
         
         // Fashion & retail
         'bol.com': 'NL',
@@ -100,31 +81,22 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'zalando.fr': 'FR',
         'zalando.it': 'IT',
         'zalando.es': 'ES',
-        'zalando.co.uk': 'GB',
         'aboutyou.de': 'DE',
         'aboutyou.nl': 'NL',
         'aboutyou.fr': 'FR',
         'aboutyou.com': 'DE',
-        'shein.com': 'US',
         'shein.nl': 'NL',
         'shein.de': 'DE',
         'shein.fr': 'FR',
-        'hm.com': 'US',
         'hm.nl': 'NL',
         'hm.de': 'DE',
         'hm.fr': 'FR',
-        'hm.co.uk': 'GB',
-        'nike.com': 'US',
         'nike.nl': 'NL',
         'nike.de': 'DE',
         'nike.fr': 'FR',
-        'nike.co.uk': 'GB',
-        'adidas.com': 'US',
         'adidas.nl': 'NL',
         'adidas.de': 'DE',
         'adidas.fr': 'FR',
-        'adidas.co.uk': 'GB',
-        'asos.com': 'GB',
         'asos.nl': 'NL',
         'asos.de': 'DE',
         'asos.fr': 'FR',
@@ -139,20 +111,14 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'mediamarkt.it': 'IT',
         'mediamarkt.es': 'ES',
         'saturn.de': 'DE',
-        'saturn.at': 'AT',
-        'saturn.ch': 'CH',
         
         // Home & furniture
         'ikea.nl': 'NL',
         'ikea.de': 'DE',
         'ikea.fr': 'FR',
-        'ikea.co.uk': 'GB',
-        'ikea.com': 'US',
         'ikea.it': 'IT',
         'ikea.es': 'ES',
         'ikea.be': 'BE',
-        'ikea.at': 'AT',
-        'ikea.ch': 'CH',
         
         // Dutch retailers
         'action.nl': 'NL',
@@ -173,23 +139,19 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'zooplus.nl': 'NL',
         'zooplus.de': 'DE',
         'zooplus.fr': 'FR',
-        'zooplus.co.uk': 'GB',
         'zooplus.it': 'IT',
         'zooplus.es': 'ES',
         'bodyandfit.nl': 'NL',
         'bodyandfit.de': 'DE',
         'bodyandfit.fr': 'FR',
-        'bodyandfit.co.uk': 'GB',
         'medpets.nl': 'NL',
         'medpets.de': 'DE',
         'medpets.fr': 'FR',
-        'medpets.co.uk': 'GB',
         
         // Sports & lifestyle
         'jd-sports.nl': 'NL',
         'jd-sports.de': 'DE',
         'jd-sports.fr': 'FR',
-        'jd-sports.co.uk': 'GB',
         'vitesse.nl': 'NL',
         'vitesse.de': 'DE',
         'vitesse.fr': 'FR',
@@ -202,21 +164,17 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'we-fashion.be': 'BE',
         
         // Travel & services
-        'trip.com': 'US',
         'booking.com': 'NL',
         'expedia.nl': 'NL',
         'expedia.de': 'DE',
         'expedia.fr': 'FR',
-        'expedia.co.uk': 'GB',
         'staatsloterij.nl': 'NL',
         'greetz.nl': 'NL',
         'greetz.de': 'DE',
         'greetz.fr': 'FR',
-        'greetz.co.uk': 'GB',
         'lidl.nl': 'NL',
         'lidl.de': 'DE',
         'lidl.fr': 'FR',
-        'lidl.co.uk': 'GB',
         'lidl.be': 'BE',
         'lidl.it': 'IT',
         'lidl.es': 'ES',
@@ -225,7 +183,6 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'ninja.nl': 'NL',
         'ninja.de': 'DE',
         'ninja.fr': 'FR',
-        'ninja.co.uk': 'GB',
         'overstappen.nl': 'NL',
         'de-notenshop.nl': 'NL',
         'de-notenshop.de': 'DE',
@@ -242,7 +199,66 @@ export async function getCountryMappings(): Promise<Record<string, string>> {
         'lounge-by-zalando.nl': 'NL',
         'lounge-by-zalando.de': 'DE',
         'lounge-by-zalando.fr': 'FR',
-        'lounge-by-zalando.co.uk': 'GB',
+        
+        // Additional merchants from chart
+        'carrefour.fr': 'FR',
+        'carrefour.be': 'BE',
+        'carrefour.it': 'IT',
+        'carrefour.es': 'ES',
+        'decathlon.fr': 'FR',
+        'decathlon.de': 'DE',
+        'decathlon.nl': 'NL',
+        'decathlon.be': 'BE',
+        'decathlon.it': 'IT',
+        'decathlon.es': 'ES',
+        'debijenkorf.nl': 'NL',
+        'debijenkorf.be': 'BE',
+        'douglas.nl': 'NL',
+        'douglas.de': 'DE',
+        'douglas.fr': 'FR',
+        'douglas.be': 'BE',
+        'douglas.it': 'IT',
+        'douglas.es': 'ES',
+        'primark.com': 'IE',
+        'primark.de': 'DE',
+        'primark.fr': 'FR',
+        'primark.nl': 'NL',
+        'primark.be': 'BE',
+        'primark.it': 'IT',
+        'primark.es': 'ES',
+        'rituals.com': 'NL',
+        'rituals.nl': 'NL',
+        'rituals.de': 'DE',
+        'rituals.fr': 'FR',
+        'rituals.be': 'BE',
+        'rituals.it': 'IT',
+        'rituals.es': 'ES',
+        'auchan.fr': 'FR',
+        'auchan.it': 'IT',
+        'auchan.es': 'ES',
+        'airbnb.nl': 'NL',
+        'airbnb.de': 'DE',
+        'airbnb.fr': 'FR',
+        'airbnb.be': 'BE',
+        'airbnb.it': 'IT',
+        'airbnb.es': 'ES',
+        'gall.nl': 'NL',
+        'gall.be': 'BE',
+        'gamma.nl': 'NL',
+        'gamma.be': 'BE',
+        'gamma.fr': 'FR',
+        'hollandandbarrett.nl': 'NL',
+        'hollandandbarrett.de': 'DE',
+        'hollandandbarrett.fr': 'FR',
+        'hollandandbarrett.be': 'BE',
+        'primera.nl': 'NL',
+        'primera.be': 'BE',
+        'ticketmaster.nl': 'NL',
+        'ticketmaster.de': 'DE',
+        'ticketmaster.fr': 'FR',
+        'ticketmaster.be': 'BE',
+        'ticketmaster.it': 'IT',
+        'ticketmaster.es': 'ES',
       }
       
       return defaultMappings
@@ -353,7 +369,7 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       const ikeaMatch = path.match(/^\/([a-z]{2})\/[a-z]{2}/)
       if (ikeaMatch) {
         const countryCode = ikeaMatch[1].toUpperCase()
-        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+        if (['NL', 'DE', 'FR', 'BE', 'IT', 'ES'].includes(countryCode)) {
           return countryCode
         }
       }
@@ -362,7 +378,7 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       const nikeMatch = path.match(/^\/([a-z]{2})\/[a-z]{2}/)
       if (nikeMatch) {
         const countryCode = nikeMatch[1].toUpperCase()
-        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+        if (['NL', 'DE', 'FR', 'BE', 'IT', 'ES'].includes(countryCode)) {
           return countryCode
         }
       }
@@ -371,7 +387,7 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
       const genericMatch = path.match(/^\/([a-z]{2})(?:\/|$)/)
       if (genericMatch) {
         const countryCode = genericMatch[1].toUpperCase()
-        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+        if (['NL', 'DE', 'FR', 'BE', 'IT', 'ES'].includes(countryCode)) {
           return countryCode
         }
       }
@@ -393,23 +409,9 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
           'glo2nld': 'NL', // Netherlands
           'glo2deu': 'DE', // Germany
           'glo2fra': 'FR', // France
-          'glo2gbr': 'GB', // Great Britain
-          'glo2usa': 'US', // USA
           'glo2bel': 'BE', // Belgium
           'glo2ita': 'IT', // Italy
           'glo2esp': 'ES', // Spain
-          'glo2rus': 'RU', // Russia
-          'glo2pol': 'PL', // Poland
-          'glo2tha': 'TH', // Thailand
-          'glo2tur': 'TR', // Turkey
-          'glo2vnm': 'VI', // Vietnam
-          'glo2idn': 'ID', // Indonesia
-          'glo2jpn': 'JA', // Japan
-          'glo2kor': 'KO', // South Korea
-          'glo2prt': 'PT', // Portugal
-          'glo2arg': 'AR', // Argentina
-          'glo2isr': 'HE', // Israel
-          'glo2mys': 'MY', // Malaysia
         }
         if (countryMap[gatewayAdapt]) {
           return countryMap[gatewayAdapt]
@@ -434,23 +436,9 @@ export async function getCountryForDomain(domainOrUrl: string): Promise<string> 
         'NL': 'NL',
         'DE': 'DE', 
         'FR': 'FR',
-        'UK': 'GB',
-        'US': 'US',
         'BE': 'BE',
         'IT': 'IT',
         'ES': 'ES',
-        'RU': 'RU',
-        'PL': 'PL',
-        'TH': 'TH',
-        'TR': 'TR',
-        'VN': 'VI',
-        'ID': 'ID',
-        'JP': 'JA',
-        'KR': 'KO',
-        'PT': 'PT',
-        'AR': 'AR',
-        'IL': 'HE',
-        'MY': 'MY',
       }
       if (tldMap[tld]) {
         return tldMap[tld]

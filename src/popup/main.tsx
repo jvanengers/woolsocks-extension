@@ -279,7 +279,7 @@ function App() {
 
   if (session === null) {
     return (
-      <div style={{ background: '#FDC408', padding: 16, borderRadius: 0, overflow: 'hidden', position: 'relative', width: 320 }}>
+      <div style={{ background: '#FDC408', padding: 16, borderRadius: 0, overflow: 'hidden', position: 'relative', width: 360 }}>
         <div style={{ fontSize: 13, color: '#111827', opacity: 0.7 }}>{translate('popup.checkingSession')}</div>
       </div>
     )
@@ -293,7 +293,7 @@ function App() {
         borderRadius: 0, 
         overflow: 'hidden', 
         position: 'relative', 
-        width: 320, 
+        width: 360, 
         maxHeight: 600, 
         display: 'flex', 
         flexDirection: 'column',
@@ -322,15 +322,15 @@ function App() {
       borderRadius: 0, 
       overflow: 'hidden', 
       position: 'relative', 
-      width: 310, 
-      maxHeight: 600, 
+      width: 360, 
+      maxHeight: view === 'transactions' ? 'auto' : 600, 
       display: 'flex', 
       flexDirection: 'column',
       border: isConsentView ? '4px solid #FFFFFF' : isTransactionsView ? '4px solid #F5F5F6' : `4px solid ${brandBg}`
     }}>
       {/* Header */}
       <div style={{ 
-        padding: view === 'transactions' ? '16px 8px 0 8px' : '8px 8px 0 8px',
+        padding: '8px 8px 0 8px',
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center'

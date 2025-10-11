@@ -100,7 +100,21 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Test pet & health: `zooplus.nl` → NL, `zooplus.de` → DE, `bodyandfit.nl` → NL
    - Test sports: `nike.com` → US, `adidas.de` → DE, `jd-sports.nl` → NL
    - Test services: `lidl.nl` → NL, `lidl.de` → DE, `greetz.nl` → NL, `staatsloterij.nl` → NL
-6. **Cache isolation verification**:
+6. **Additional merchants from chart**:
+   - Test Carrefour: `carrefour.fr` → FR, `carrefour.be` → BE, `carrefour.it` → IT, `carrefour.es` → ES
+   - Test Decathlon: `decathlon.nl` → NL, `decathlon.de` → DE, `decathlon.fr` → FR, `decathlon.be` → BE
+   - Test De Bijenkorf: `debijenkorf.nl` → NL, `debijenkorf.be` → BE
+   - Test Douglas: `douglas.nl` → NL, `douglas.de` → DE, `douglas.fr` → FR, `douglas.be` → BE
+   - Test Primark: `primark.com` → IE, `primark.de` → DE, `primark.fr` → FR, `primark.nl` → NL
+   - Test Rituals: `rituals.com` → NL, `rituals.de` → DE, `rituals.fr` → FR, `rituals.be` → BE
+   - Test Auchan: `auchan.fr` → FR, `auchan.it` → IT, `auchan.es` → ES
+   - Test Airbnb: `airbnb.nl` → NL, `airbnb.de` → DE, `airbnb.fr` → FR, `airbnb.be` → BE
+   - Test Gall & Gall: `gall.nl` → NL, `gall.be` → BE
+   - Test Gamma: `gamma.nl` → NL, `gamma.be` → BE, `gamma.fr` → FR
+   - Test Holland & Barrett: `hollandandbarrett.nl` → NL, `hollandandbarrett.de` → DE, `hollandandbarrett.fr` → FR
+   - Test Primera: `primera.nl` → NL, `primera.be` → BE
+   - Test Ticketmaster: `ticketmaster.nl` → NL, `ticketmaster.de` → DE, `ticketmaster.fr` → FR, `ticketmaster.be` → BE
+7. **Cache isolation verification**:
    - Visit `ikea.nl` → check cache stores with country key
    - Visit `ikea.de` → verify separate cache entry created
    - Visit `ikea.nl` again → verify cached NL data returned (not DE data)

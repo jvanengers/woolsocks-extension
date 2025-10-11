@@ -266,7 +266,7 @@ const translations: Record<Language, Translations> = {
         instantDelivery: 'Instant delivery',
         useOnlineAtCheckout: 'Use online at checkout'
       },
-      viewDetails: 'View voucher details'
+      viewDetails: 'Next'
     }
   },
   nl: {
@@ -333,7 +333,7 @@ const translations: Record<Language, Translations> = {
       vouchersContent: 'Bij het afrekenen stellen we cadeaubonnen voor die je direct cashback geven op je aankoop.',
       vouchersTitle: 'Besparen met cadeaubonnen',
       welcomeContent: 'Mis nooit meer cashback. Deze extensie helpt je geld terug te verdienen op je online aankopen.',
-      welcomeTitle: 'Welkom bij Woolsocks!'
+      welcomeTitle: 'Welkom bij Woolsocks (TEST4)!'
     },
     options: {
       affiliateDisclosure: 'Wij verdienen commissie wanneer je via onze links winkelt',
@@ -391,7 +391,7 @@ const translations: Record<Language, Translations> = {
         instantDelivery: 'Direct geleverd',
         useOnlineAtCheckout: 'Online gebruiken bij het afrekenen'
       },
-      viewDetails: 'Bekijk voucher details'
+      viewDetails: 'Ga door'
     }
   },
   de: {
