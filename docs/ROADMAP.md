@@ -139,7 +139,7 @@ Status: Ready for refinement
 
 Goal: Define platform-specific rules for auto-activating cashback via redirects, with explicit consent where allowed and compliant fallbacks where not.
 
-### Chrome Web Store (Google) — upfront consent + countdown notification with opt out
+### COMPLETED: Chrome Web Store (Google) — upfront consent + countdown notification with opt out
 We should adapt the automatic redirection pattern so it follows these guidelines:
 	1.	During onboarding, ask explicitly:
 “Do you want Woolsocks to auto-activate cashback (redirect via affiliate link) when you visit partner stores?”
@@ -158,7 +158,7 @@ Don’t override someone’s affiliate tags or tracking codes already present (u
 	5.	Always let user opt out or revoke
 User can disable auto activation. All activity should be transparent.
 
-### Safari (macOS & iOS) — automatic redirects not allowed
+### TO DO: Safari (macOS & iOS) — automatic redirects not allowed
 
 - Policy
   - Apple reviewers reject automatic redirects that are not triggered by explicit user action at that moment.
@@ -172,7 +172,7 @@ User can disable auto activation. All activity should be transparent.
 - Success criteria
   - All activations require a user gesture; passes App Store/Safari Extension review.
 
-### Android / Play Store — allowed for native apps (not Chrome extensions)
+### TO DO: Android / Play Store — allowed for native apps (not Chrome extensions)
 
 - Policy
   - Native apps may perform auto-activation if clearly explained during onboarding and togglable later.
@@ -345,10 +345,11 @@ Completed: 2025-10-10 — commit `[TBD]` (feat: remove unused webRequest permiss
   - Preload runs on service worker startup and install
   - Popup can trigger preload via `CACHE_PRELOAD_REQUEST` message
   - Popular merchants are preloaded for improved performance
-- **Replaced alarm-based deals scraper cleanup** with event-driven approach:
-  - Scraper cache cleanup integrated with main cache cleanup triggers
-  - Uses separate throttling with 24-hour intervals
-  - Maintains same cleanup functionality without alarms
+- **Removed HTML scraper entirely** (deals-scraper.ts):
+  - Eliminated 1,330+ lines of unused HTML scraping code
+  - Merchant discovery now uses only fast API endpoints
+  - Fixed function name conflicts and performance issues
+  - No more tab flashing or continuous tab creation/removal
 - **Analytics system unchanged**: Already used `setInterval` instead of alarms
 - **Removed alarms permission** from manifest and updated documentation
 - **All functionality preserved**: Cache cleanup, preload, and analytics work identically to before

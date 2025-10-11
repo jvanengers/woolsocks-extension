@@ -52,6 +52,8 @@ Key points:
 - **Authenticated API calls** (user actions) use credentials with relay fallback
 - We set required headers: `x-application-name: WOOLSOCKS_WEB`, stable `x-user-id`
 - Relay tabs only used for user-specific actions (activation, balance, clicks) to minimize tab flashing
+- **Merchant discovery** uses fast API endpoints (`/merchants-overview/api/v0.0.1/merchants` and `/merchants-overview/api/v0.0.1/v2/deals`) without authentication
+- **No HTML scraping** - removed legacy scraper that was causing performance issues and tab flashing
 
 ## Development
 
