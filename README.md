@@ -110,12 +110,41 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
 
 ### Permission justifications
-- We must detect merchant domains (tabs/webNavigation) and redirect once to a tracked affiliate URL to enable cashback.
-- We call Woolsocks APIs via the site proxy; `cookies` are required so the browser includes first‑party cookies for authenticated requests.
-- `storage` supports reliable operation (cooldowns, session activation state, analytics retries).
-- `scripting` is limited to minimal UI components, never injecting into sensitive origins.
-- `notifications` provide clear user feedback on activation.
- - `offscreen` is necessary to eliminate brief visible `woolsocks.eu` tab opens/closes on Chrome when relaying credentialed site‑proxy requests. The offscreen document hosts a hidden iframe under `woolsocks.eu` origin so first‑party cookies are included, while keeping the experience invisible and policy‑compliant. On browsers without `offscreen`, we do not programmatically open tabs; we reuse an existing `woolsocks.eu` tab if present.
+
+#### Core Functionality Permissions
+- **`tabs`** — We must detect merchant domains (tabs/webNavigation) and update the URL on affiliate redirect to enable cashback tracking.
+- **`webNavigation`** — Detect top-level navigations to trigger cashback flow and re-emit activation when users return from affiliate redirects.
+- **`cookies`** — Observe Woolsocks session changes to ensure site-proxy API calls succeed with proper authentication.
+- **`storage`** — Store user settings, per-domain cooldowns, activation registry, analytics queue, and cached data for reliable operation.
+- **`scripting`** — Inject minimal UI components (voucher panels, activation pills) only on detected merchant sites; never injects into sensitive origins.
+- **`notifications`** — Provide clear user feedback when cashback activates successfully.
+- **`offscreen`** — Host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening visible tabs (prevents user-visible tab flashes; used only on Chrome where supported).
+
+#### Host Permission Justifications
+
+**`https://woolsocks.eu/*` and `https://api.woolsocks.eu/*`**
+- **Authentication**: Required to access user's Woolsocks account and session cookies for authenticated API calls
+- **API Communication**: Make requests to Woolsocks APIs for deal information, cashback activation, and user data
+- **Relay Fallback**: When offscreen context fails, reuse existing Woolsocks tabs for API calls
+- **Session Management**: Monitor session state changes and handle login/logout events
+- **Verification Emails**: Send verification emails directly via API for session recovery
+
+**`https?://*/*` (All HTTP/HTTPS sites)**
+- **Universal Merchant Detection**: The extension works with ANY merchant that Woolsocks supports, not just a predefined list
+- **Checkout Detection**: Analyze page content to detect checkout/cart pages across all e-commerce sites
+- **Deal Eligibility**: Query Woolsocks API to check if any visited merchant has available deals
+- **Content Analysis**: Parse page content to extract order totals and merchant information
+- **Affiliate Redirects**: Redirect users through tracked affiliate links to enable cashback
+- **UI Injection**: Display voucher panels and activation notifications only on detected merchant sites
+- **No Data Collection**: We do not collect, store, or transmit any personal data from visited sites
+
+**Security and Privacy Safeguards**
+- **Minimal Data Access**: Only reads public page content (order totals, merchant names) necessary for deal detection
+- **No Sensitive Data**: Never accesses passwords, payment information, or personal details
+- **Local Processing**: All content analysis happens locally in the browser
+- **Transparent Operation**: Users can see exactly what the extension does through visible UI elements
+- **User Control**: All automatic behaviors can be disabled via settings
+- **Affiliate Disclosure**: Clear disclosure that the extension uses affiliate links for monetization
 
 ## UI notes
 - Active state uses brand green background/border `#00C275`.

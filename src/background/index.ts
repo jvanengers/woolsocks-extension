@@ -604,9 +604,7 @@ async function triggerCleanupIfNeeded() {
     const { cleanupIfNeeded } = await import('../shared/cache')
     await cleanupIfNeeded()
     
-    // Cleanup scraper cache
-    const { cleanupScraperCacheIfNeeded } = await import('./deals-scraper')
-    await cleanupScraperCacheIfNeeded()
+    // Scraper cache cleanup removed - using API-based merchant discovery only
   } catch (error) {
     console.warn('[Cache] Event-driven cleanup failed:', error)
   }
