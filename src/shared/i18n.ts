@@ -919,6 +919,16 @@ export function translate(key: string, variables?: Record<string, string | numbe
     })
   }
   
+  // Handle printf-style placeholders like %1$s, %2$s, etc.
+  if (variables && value.includes('%')) {
+    const varValues = Object.values(variables)
+    let placeholderIndex = 1
+    varValues.forEach(varValue => {
+      value = value.replace(new RegExp(`%${placeholderIndex}\\$s`, 'g'), String(varValue))
+      placeholderIndex++
+    })
+  }
+  
   return value
 }
 
