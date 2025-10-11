@@ -44,50 +44,84 @@ export function resetCachedUserId() {
 // This runs independently of getUserId() caching to ensure email is always stored
 export async function checkAndStoreEmail(): Promise<void> {
   try {
+    console.log('[WS API] checkAndStoreEmail: Starting email storage check')
+    
     // Quick check: if email already stored, skip
     const { __wsUserEmail } = await chrome.storage.local.get('__wsUserEmail')
     if (__wsUserEmail) {
+      console.log('[WS API] checkAndStoreEmail: Email already stored, skipping')
       return // Email already stored
     }
 
-    // Check if we have an active session first
-    const userId = await getUserId()
-    if (!userId) {
-      return // No active session
-    }
+    console.log('[WS API] checkAndStoreEmail: No email stored, checking for active session')
 
-    // Fetch user info to get email
+    // Check if we have an active session by making a fresh API call (don't use getUserId() cache)
     const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
     let anonId = wsAnonId as string | undefined
     if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
     const minHeaders: HeadersInit = { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId || '' }
 
+    console.log('[WS API] checkAndStoreEmail: Making user-info API call')
+
     let json: any = null
     try {
       const direct = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, { credentials: 'include', headers: minHeaders as any })
+      console.log('[WS API] checkAndStoreEmail: Direct API response status:', direct.status)
       if (direct.ok) {
-        try { json = await direct.json() } catch {}
+        try { 
+          json = await direct.json()
+          console.log('[WS API] checkAndStoreEmail: Direct API response data:', json)
+        } catch (e) {
+          console.log('[WS API] checkAndStoreEmail: Failed to parse direct API response:', e)
+        }
       }
-    } catch {}
+    } catch (e) {
+      console.log('[WS API] checkAndStoreEmail: Direct API call failed:', e)
+    }
 
     // Fallback to relay if direct call failed
     if (!json) {
-      const rel = await relayFetchViaTabCustomHeaders<{ data?: { email?: string; user?: { email?: string }; profile?: { email?: string } } }>(`/user-info/api/v0`, minHeaders as Record<string, string>)
-      json = rel.data
+      console.log('[WS API] checkAndStoreEmail: Trying relay fallback')
+      try {
+        const rel = await relayFetchViaTabCustomHeaders<{ data?: { email?: string; user?: { email?: string }; profile?: { email?: string } } }>(`/user-info/api/v0`, minHeaders as Record<string, string>)
+        json = rel.data
+        console.log('[WS API] checkAndStoreEmail: Relay response data:', json)
+      } catch (e) {
+        console.log('[WS API] checkAndStoreEmail: Relay call failed:', e)
+      }
     }
+
+    // Check if we have a valid user session
+    const userId = json?.data?.userId || json?.data?.id || json?.user?.id || json?.id || null
+    if (!userId) {
+      console.log('[WS API] checkAndStoreEmail: No active session found')
+      return // No active session
+    }
+
+    console.log('[WS API] checkAndStoreEmail: Active session found, extracting email')
 
     // Extract email from response
     const email = json?.data?.email || json?.user?.email || json?.profile?.email || null
+    console.log('[WS API] checkAndStoreEmail: Extracted email:', email ? '***@' + email.split('@')[1] : 'null')
+    
     if (email && typeof email === 'string') {
+      console.log('[WS API] checkAndStoreEmail: Storing email')
       const { storeUserEmail, getEmailDomain } = await import('../shared/email-storage')
       await storeUserEmail(email)
+      console.log('[WS API] checkAndStoreEmail: Email stored successfully')
+      
       // Track email storage for analytics
       try {
         track('session_recovery_email_stored', { email_domain: getEmailDomain(email) })
-      } catch {}
+        console.log('[WS API] checkAndStoreEmail: Analytics tracked')
+      } catch (e) {
+        console.log('[WS API] checkAndStoreEmail: Analytics tracking failed:', e)
+      }
+    } else {
+      console.log('[WS API] checkAndStoreEmail: No email found in response')
     }
   } catch (error) {
-    console.warn('[WS API] checkAndStoreEmail error:', error)
+    console.error('[WS API] checkAndStoreEmail error:', error)
   }
 }
 async function getUserId(): Promise<string | null> {
