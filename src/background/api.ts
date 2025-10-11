@@ -776,8 +776,9 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
   )
 }
 
-export async function getPartnerByHostname(hostname: string): Promise<PartnerLite | null> {
-  const countryCode = await getCountryForDomain(hostname)
+export async function getPartnerByHostname(hostname: string, fullUrl?: string): Promise<PartnerLite | null> {
+  // Use full URL for country detection if available, otherwise fall back to hostname
+  const countryCode = await getCountryForDomain(fullUrl || hostname)
   const key = `${(hostname || '').replace(/^www\./i, '').toLowerCase()}_${countryCode}`
   
   return cachedFetch(

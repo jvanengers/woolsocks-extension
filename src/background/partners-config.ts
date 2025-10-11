@@ -140,13 +140,125 @@ export async function isDomainBlacklistedForVouchers(domain: string): Promise<bo
 }
 
 /**
- * Get country for a domain
+ * Get country for a domain or URL
+ * Handles various localization patterns:
+ * - Simple domains: ikea.nl, amazon.de
+ * - Path-based: ikea.com/nl/nl/, nike.com/nl/en/
+ * - Query parameters: aliexpress.com/?gatewayAdapt=glo2nld
  */
-export async function getCountryForDomain(domain: string): Promise<string> {
+export async function getCountryForDomain(domainOrUrl: string): Promise<string> {
   try {
     const mappings = await getCountryMappings()
-    const cleanDomain = domain.replace(/^www\./, '').toLowerCase()
-    return mappings[cleanDomain] || 'NL' // Default to NL
+    
+    // Handle full URLs vs just domains
+    let domain: string
+    let path: string = ''
+    let searchParams: string = ''
+    
+    if (domainOrUrl.includes('/') || domainOrUrl.includes('?')) {
+      // It's a full URL, parse it
+      try {
+        const url = new URL(domainOrUrl.startsWith('http') ? domainOrUrl : `https://${domainOrUrl}`)
+        domain = url.hostname.replace(/^www\./, '').toLowerCase()
+        path = url.pathname
+        searchParams = url.search
+      } catch {
+        // Fallback: treat as domain
+        domain = domainOrUrl.replace(/^www\./, '').toLowerCase()
+      }
+    } else {
+      // Just a domain
+      domain = domainOrUrl.replace(/^www\./, '').toLowerCase()
+    }
+    
+    // 1. Check direct domain mapping first
+    if (mappings[domain]) {
+      return mappings[domain]
+    }
+    
+    // 2. Check for path-based country indicators
+    if (path) {
+      // IKEA pattern: ikea.com/nl/nl/ or ikea.com/de/de/
+      const ikeaMatch = path.match(/^\/([a-z]{2})\/[a-z]{2}/)
+      if (ikeaMatch) {
+        const countryCode = ikeaMatch[1].toUpperCase()
+        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+          return countryCode
+        }
+      }
+      
+      // Nike pattern: nike.com/nl/en/ or nike.com/de/en/
+      const nikeMatch = path.match(/^\/([a-z]{2})\/[a-z]{2}/)
+      if (nikeMatch) {
+        const countryCode = nikeMatch[1].toUpperCase()
+        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+          return countryCode
+        }
+      }
+      
+      // Generic pattern: /nl/, /de/, /fr/, etc.
+      const genericMatch = path.match(/^\/([a-z]{2})(?:\/|$)/)
+      if (genericMatch) {
+        const countryCode = genericMatch[1].toUpperCase()
+        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+          return countryCode
+        }
+      }
+    }
+    
+    // 3. Check for query parameter country indicators
+    if (searchParams) {
+      const params = new URLSearchParams(searchParams)
+      
+      // AliExpress pattern: ?gatewayAdapt=glo2nld (nld = Netherlands)
+      const gatewayAdapt = params.get('gatewayAdapt')
+      if (gatewayAdapt) {
+        const countryMap: Record<string, string> = {
+          'glo2nld': 'NL', // Netherlands
+          'glo2deu': 'DE', // Germany
+          'glo2fra': 'FR', // France
+          'glo2gbr': 'GB', // Great Britain
+          'glo2usa': 'US', // USA
+          'glo2bel': 'BE', // Belgium
+          'glo2ita': 'IT', // Italy
+          'glo2esp': 'ES', // Spain
+        }
+        if (countryMap[gatewayAdapt]) {
+          return countryMap[gatewayAdapt]
+        }
+      }
+      
+      // Generic country parameter
+      const countryParam = params.get('country') || params.get('locale') || params.get('region')
+      if (countryParam) {
+        const countryCode = countryParam.toUpperCase()
+        if (['NL', 'DE', 'FR', 'GB', 'US', 'BE', 'IT', 'ES'].includes(countryCode)) {
+          return countryCode
+        }
+      }
+    }
+    
+    // 4. Fallback to TLD-based detection
+    const tldMatch = domain.match(/\.([a-z]{2})$/)
+    if (tldMatch) {
+      const tld = tldMatch[1].toUpperCase()
+      const tldMap: Record<string, string> = {
+        'NL': 'NL',
+        'DE': 'DE', 
+        'FR': 'FR',
+        'UK': 'GB',
+        'US': 'US',
+        'BE': 'BE',
+        'IT': 'IT',
+        'ES': 'ES',
+      }
+      if (tldMap[tld]) {
+        return tldMap[tld]
+      }
+    }
+    
+    // 5. Default fallback
+    return 'NL'
   } catch {
     return 'NL'
   }

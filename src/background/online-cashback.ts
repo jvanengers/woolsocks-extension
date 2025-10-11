@@ -409,7 +409,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (hasAffiliateMarkers(url)) {
         if (OC_DEBUG) console.log('[WS OC] affiliate markers detected on landing', { url })
         try {
-          const partner: PartnerLite | null = await getPartnerByHostname(clean)
+          const partner: PartnerLite | null = await getPartnerByHostname(clean, url)
           if (partner) {
             const userCountry = await getUserCountryCode()
             const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
@@ -461,7 +461,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (state.active) { setIcon('active', tabId) }
       } catch {}
 
-      const partner: PartnerLite | null = await getPartnerByHostname(clean)
+      const partner: PartnerLite | null = await getPartnerByHostname(clean, url)
       if (!partner) { if (OC_DEBUG) console.log('[WS OC] no partner for', clean); return }
       track('oc_partner_detected', { domain: clean, partner_name: partner.name })
       if (OC_DEBUG) console.log('[WS OC] partner', { name: partner.name })
