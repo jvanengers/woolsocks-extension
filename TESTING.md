@@ -83,16 +83,22 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Test with merchants in different countries: amazon.com (US), amazon.nl (NL), amazon.de (DE)
    - Verify each domain returns country-specific deals
    - Check service worker console for API calls with correct `country` parameter
-4. **Cache isolation verification**:
+4. **Complex URL pattern testing**:
+   - Test path-based localization: `ikea.com/nl/nl/` → NL, `ikea.com/de/de/` → DE
+   - Test Nike pattern: `nike.com/nl/en/` → NL, `nike.com/de/en/` → DE
+   - Test AliExpress gateway: `aliexpress.com/?gatewayAdapt=glo2nld` → NL
+   - Test generic parameters: `example.com/?country=DE` → DE, `example.com/?locale=FR` → FR
+   - Verify mixed patterns: `ikea.com/nl/nl/products?category=kitchen` → NL
+5. **Cache isolation verification**:
    - Visit `ikea.nl` → check cache stores with country key
    - Visit `ikea.de` → verify separate cache entry created
    - Visit `ikea.nl` again → verify cached NL data returned (not DE data)
    - Open dev tools → Application → IndexedDB/Local Storage → verify cache keys include country codes
-5. **Fallback behavior**:
+6. **Fallback behavior**:
    - Visit unknown/unsupported domain
    - Verify falls back to `country=NL` default
    - Verify no errors in console
-6. **Analytics verification**:
+7. **Analytics verification**:
    - Monitor for `deal_country_mismatch` events (should be minimal after fix)
    - Verify voucher and cashback events include correct `country` parameter
 
