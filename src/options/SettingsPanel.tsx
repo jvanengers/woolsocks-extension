@@ -189,6 +189,10 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         if (onBalance) {
           onBalance(resp.balance)
         }
+        // Set timestamp for cached balance
+        if (resp.timestamp) {
+          setBalanceTimestamp(resp.timestamp)
+        }
       }
       
       // Trigger background refresh for next time
@@ -203,6 +207,8 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       if (onBalance && w?.data?.balance?.totalAmount) {
         onBalance(w.data.balance.totalAmount)
       }
+      // Set current timestamp for fresh data
+      setBalanceTimestamp(Date.now())
     }
   }
 
@@ -322,6 +328,31 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
       {session === true && (
         <div style={{ marginTop: variant === 'popup' ? 8 : 24 }}>
+          {/* Stored Email Section - only show in options page */}
+          {storedEmail && variant !== 'popup' && (
+            <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Stored Email</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>
+                {maskEmail(storedEmail)} - Used for session recovery
+              </div>
+              <button
+                onClick={() => setShowClearEmailConfirm(true)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: '500',
+                  color: '#dc2626',
+                  background: 'transparent',
+                  border: '1px solid #dc2626',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear Email
+              </button>
+            </div>
+          )}
+
           {/* QA toggle - only show in options page */}
           {isQaUser && variant !== 'popup' && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12, marginBottom: 16 }}>
@@ -378,6 +409,11 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               <div style={{ fontSize: 16, fontWeight: 600 }}>{translate('options.greeting', { name: firstName || 'there' })}</div>
               <div style={{ marginTop: 8, fontSize: 14, color: '#444' }}>{translate('options.cashbackSock')}</div>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#000000' }}>€{sockValue.toFixed(2)}</div>
+              {balanceTimestamp && (
+                <div style={{ fontSize: 10, color: '#6B7280', marginTop: 4 }}>
+                  Last updated: {formatRelativeTime(balanceTimestamp)}
+                </div>
+              )}
             </>
           )}
 
@@ -623,6 +659,70 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Clear Email Confirmation Dialog */}
+      {showClearEmailConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#fff',
+            padding: '24px',
+            borderRadius: '8px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)'
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
+              Clear Stored Email
+            </h3>
+            <p style={{ margin: '0 0 24px 0', fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>
+              Are you sure you want to clear your stored email? This will disable the verification flow and you'll need to log in via woolsocks.eu again.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowClearEmailConfirm(false)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#6b7280',
+                  background: 'transparent',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearEmail}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#fff',
+                  background: '#dc2626',
+                  border: '1px solid #dc2626',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear Email
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
