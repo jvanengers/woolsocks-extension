@@ -87,18 +87,29 @@ Current scope: NL users, voucher checkout detection, anonymous user behaviors, a
    - Test path-based localization: `ikea.com/nl/nl/` → NL, `ikea.com/de/de/` → DE
    - Test Nike pattern: `nike.com/nl/en/` → NL, `nike.com/de/en/` → DE
    - Test AliExpress gateway: `aliexpress.com/?gatewayAdapt=glo2nld` → NL
+   - Test AliExpress subdomains: `nl.aliexpress.com` → NL, `de.aliexpress.com` → DE, `ru.aliexpress.com` → RU
+   - Test extended AliExpress gateways: `aliexpress.com/?gatewayAdapt=glo2rus` → RU, `aliexpress.com/?gatewayAdapt=glo2pol` → PL
    - Test generic parameters: `example.com/?country=DE` → DE, `example.com/?locale=FR` → FR
    - Verify mixed patterns: `ikea.com/nl/nl/products?category=kitchen` → NL
-5. **Cache isolation verification**:
+5. **Top merchant testing**:
+   - Test Amazon variants: `amazon.com` → US, `amazon.nl` → NL, `amazon.de` → DE, `amazon.fr` → FR
+   - Test food delivery: `thuisbezorgd.nl` → NL, `thuisbezorgd.de` → DE, `takeaway.com` → NL
+   - Test fashion retailers: `zalando.nl` → NL, `zalando.de` → DE, `aboutyou.de` → DE, `shein.com` → US
+   - Test electronics: `mediamarkt.nl` → NL, `mediamarkt.de` → DE, `saturn.de` → DE
+   - Test Dutch retailers: `bol.com` → NL, `hema.nl` → NL, `action.nl` → NL, `intertoys.nl` → NL
+   - Test pet & health: `zooplus.nl` → NL, `zooplus.de` → DE, `bodyandfit.nl` → NL
+   - Test sports: `nike.com` → US, `adidas.de` → DE, `jd-sports.nl` → NL
+   - Test services: `lidl.nl` → NL, `lidl.de` → DE, `greetz.nl` → NL, `staatsloterij.nl` → NL
+6. **Cache isolation verification**:
    - Visit `ikea.nl` → check cache stores with country key
    - Visit `ikea.de` → verify separate cache entry created
    - Visit `ikea.nl` again → verify cached NL data returned (not DE data)
    - Open dev tools → Application → IndexedDB/Local Storage → verify cache keys include country codes
-6. **Fallback behavior**:
+7. **Fallback behavior**:
    - Visit unknown/unsupported domain
    - Verify falls back to `country=NL` default
    - Verify no errors in console
-7. **Analytics verification**:
+8. **Analytics verification**:
    - Monitor for `deal_country_mismatch` events (should be minimal after fix)
    - Verify voucher and cashback events include correct `country` parameter
 
