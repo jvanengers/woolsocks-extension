@@ -1,6 +1,11 @@
 // Online Cashback UI panel (content script)
 // Renders a top-right panel that reflects cashback status per MCP annotations
 
+// Export onExecute function for CRXJS loader
+export function onExecute() {
+  // Content script initialization
+}
+
 type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
 import { translate, initLanguage } from '../shared/i18n'
 
@@ -951,7 +956,6 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   
   // Animate progress bar exactly over the countdown duration
   const titleEl = banner.querySelector('#ws-countdown-title') as HTMLElement | null
-  
 
   // Start countdown
   countdownTimer = window.setInterval(() => {
