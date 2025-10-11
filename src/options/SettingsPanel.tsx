@@ -498,6 +498,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                     {translate('options.viewAllTransactions')}
                   </button>
                 </div>
+
               </div>
             </div>
           </div>
@@ -589,6 +590,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
           )}
         </div>
       )}
+
 
     </div>
   )

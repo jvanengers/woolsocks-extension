@@ -123,6 +123,29 @@ async function getActivePill(domain: string): Promise<boolean> {
   } catch { return false }
 }
 
+async function setPillDismissed(domain: string, dismissed: boolean) {
+  try {
+    const key = '__wsOcPillDismissedByDomain'
+    const current = (await chrome.storage.session.get(key))[key] as Record<string, number> | undefined
+    const map = current || {}
+    if (dismissed) {
+      map[domain] = Date.now() + (10 * 60 * 1000) // Match activation TTL
+    } else {
+      delete map[domain]
+    }
+    await chrome.storage.session.set({ [key]: map })
+  } catch {}
+}
+
+async function isPillDismissed(domain: string): Promise<boolean> {
+  try {
+    const key = '__wsOcPillDismissedByDomain'
+    const current = (await chrome.storage.session.get(key))[key] as Record<string, number> | undefined
+    if (!current || !current[domain]) return false
+    return Date.now() < current[domain]
+  } catch { return false }
+}
+
 function ensureMount(): ShadowRoot {
   // Reuse existing host if present; otherwise remove stale duplicates
   if (root && hostEl && document.documentElement.contains(hostEl) && hostEl.shadowRoot && (hostEl.shadowRoot as ShadowRoot).getElementById('ws-oc-container')) return root
@@ -837,7 +860,11 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
     } catch {}
   })()
   pill.querySelector('#ws-dismiss')?.addEventListener('click', async () => {
-    try { await setActivePill(getDomain(), false) } catch {}
+    const domain = getDomain()
+    try { 
+      await setActivePill(domain, false)
+      await setPillDismissed(domain, true)
+    } catch {}
     hideAll()
   })
   pill.querySelector('#ws-expand')?.addEventListener('click', () => {
@@ -871,7 +898,11 @@ function showAuthenticatedActivePill() {
     } catch {}
   })()
   pill.querySelector('#ws-dismiss')?.addEventListener('click', async () => {
-    try { await setActivePill(getDomain(), false) } catch {}
+    const domain = getDomain()
+    try { 
+      await setActivePill(domain, false)
+      await setPillDismissed(domain, true)
+    } catch {}
     hideAll()
   })
 }
@@ -1012,13 +1043,17 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
   
   // Dismiss button handler
   banner.querySelector('#ws-dismiss')?.addEventListener('click', async () => {
-    try { await setActivePill(getDomain(), false) } catch {}
+    const domain = getDomain()
+    try { 
+      await setActivePill(domain, false)
+      await setPillDismissed(domain, true)
+    } catch {}
     hideAll()
   })
 }
 
 // Message handling from background
-chrome.runtime.onMessage.addListener((msg: any) => {
+chrome.runtime.onMessage.addListener(async (msg: any) => {
   if (!msg || !msg.__wsOcUi) return
   const domain = getDomain()
   const ev = msg as UiEvent
@@ -1040,7 +1075,8 @@ chrome.runtime.onMessage.addListener((msg: any) => {
   } else if (ev.kind === 'oc_blocked') {
     if (ev.reason === 'no_deals') showNoDeals(); else hideAll()
   } else if (ev.kind === 'oc_activated') {
-    // Simplified authenticated UI: show "cashback active minimized" pill only
+    // Clear any previous dismissal and show fresh activation
+    await setPillDismissed(domain, false) // Clear any previous dismissal
     ;(async () => { try { await setActivePill(domain, true) } catch {} })()
     showAuthenticatedActivePill()
   } else if (ev.kind === 'oc_login_required') {
@@ -1060,6 +1096,8 @@ chrome.runtime.onMessage.addListener((msg: any) => {
 document.addEventListener('DOMContentLoaded', async () => {
   try {
     const domain = getDomain()
+    if (await isPillDismissed(domain)) return // Add this check
+    
     const key = '__wsOcActivePillByDomain'
     const result = await chrome.storage.session.get(key)
     const activePills = result[key] as Record<string, boolean> | undefined
@@ -1072,10 +1110,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('[WS OC Debug] Fallback check failed:', error)
   }
 })
-document.addEventListener('visibilitychange', () => {
+document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState !== 'visible') return
   try {
-    chrome.runtime.sendMessage({ type: 'REQUEST_ACTIVATION_STATE', domain: getDomain() }, (resp) => {
+    const domain = getDomain()
+    if (await isPillDismissed(domain)) return // Add this check
+    
+    chrome.runtime.sendMessage({ type: 'REQUEST_ACTIVATION_STATE', domain }, (resp) => {
       if (resp && resp.active) {
         showAuthenticatedActivePill()
         try { (window as any).__wsLastActivation = { at: resp.at, clickId: resp.clickId } } catch {}

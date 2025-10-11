@@ -43,6 +43,7 @@ window.addEventListener('message', (event) => {
       }
     })()
   }
+  
 })
 
 // Inject a script into the page context to hook fetch/XMLHttpRequest
@@ -87,6 +88,8 @@ function injectPageHook() {
         const b2 = extractBearer(auth);
         if (b2) sendToken(b2);
       } catch(_){}
+      
+      
       return _fetch.call(this, input, init);
     };
 

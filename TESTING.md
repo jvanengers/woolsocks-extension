@@ -449,6 +449,114 @@ Open the service worker console (chrome://extensions → Inspect service worker)
    - Verify smooth animations and transitions
    - Verify no layout shifts or visual glitches
 
+## Persistent Pill Dismissal Testing
+
+### Prerequisites
+1. **Authenticated user**: Ensure you're logged in to woolsocks.eu
+2. **Service worker console**: Open `chrome://extensions` → Inspect service worker for debugging
+3. **Partner site**: Use a supported merchant like `https://www.zalando.nl/` or `https://www.hema.nl/`
+
+### 1. Basic Dismissal Persistence
+1. **Activate cashback**:
+   - Navigate to a supported partner homepage
+   - Activate cashback (either via auto-activation or manual activation)
+   - Verify "Cashback active" pill appears with green checkmark
+
+2. **Dismiss the pill**:
+   - Click the close (X) button on the "Cashback active" pill
+   - Verify pill disappears immediately
+
+3. **Navigate within domain**:
+   - Navigate to different pages on the same domain (e.g., from homepage to product pages, cart, etc.)
+   - Verify the "Cashback active" pill does NOT reappear on any page
+   - Verify this persists across multiple page navigations
+
+4. **Storage verification**:
+   - Open browser dev tools → Application → Storage → Session Storage
+   - Look for key `__wsOcPillDismissedByDomain`
+   - Verify it contains the domain with a timestamp ~10 minutes in the future
+
+### 2. Cross-Domain Behavior
+1. **Different domain**:
+   - Navigate to a different supported partner site
+   - Verify "Cashback active" pill appears normally (dismissal is domain-specific)
+   - Dismiss the pill on this new domain
+   - Verify dismissal only affects this domain
+
+2. **Return to original domain**:
+   - Navigate back to the first domain where you dismissed the pill
+   - Verify pill remains dismissed (doesn't reappear)
+
+### 3. Fresh Activation Behavior
+1. **Wait for expiration OR clear storage**:
+   - Either wait 10+ minutes for dismissal to expire
+   - OR clear session storage: `chrome.storage.session.clear()`
+
+2. **Activate cashback again**:
+   - Navigate to the same domain
+   - Activate cashback again (fresh activation)
+   - Verify "Cashback active" pill appears normally
+   - Verify any previous dismissal is cleared
+
+### 4. Multiple Dismissal Types
+1. **Test different pill types**:
+   - Dismiss "Cashback active" pill (authenticated state)
+   - Dismiss minimized pill with "Login" button (unauthenticated state)
+   - Dismiss manual activation banner
+   - Verify all dismissals persist across page navigation
+
+### 5. Edge Cases
+1. **Page reload**:
+   - Dismiss pill, then reload the page (F5)
+   - Verify pill doesn't reappear after reload
+
+2. **Browser tab switching**:
+   - Dismiss pill, switch to another tab, then return
+   - Verify pill doesn't reappear when tab becomes visible again
+
+3. **Multiple tabs same domain**:
+   - Open multiple tabs of the same domain
+   - Dismiss pill in one tab
+   - Verify other tabs are not affected (dismissal is per-tab/page)
+
+4. **Session storage persistence**:
+   - Dismiss pill, close browser completely, reopen
+   - Navigate to same domain
+   - Verify pill reappears (session storage is cleared on browser close)
+
+### 6. Storage Structure Verification
+1. **Check storage format**:
+   - Open dev tools → Application → Storage → Session Storage
+   - Verify `__wsOcPillDismissedByDomain` structure:
+     ```json
+     {
+       "zalando.nl": 1703123456789,
+       "hema.nl": 1703123456790
+     }
+     ```
+   - Verify timestamps are ~10 minutes in the future
+
+2. **TTL expiration**:
+   - Manually set a past timestamp in storage
+   - Navigate to the domain
+   - Verify pill appears normally (dismissal expired)
+
+### 7. Analytics Verification
+1. **Service worker console**:
+   - Monitor for any new analytics events related to dismissal
+   - Verify no errors in console during dismissal operations
+   - Verify normal activation events still fire correctly
+
+### 8. Performance Testing
+1. **Rapid navigation**:
+   - Dismiss pill, then navigate quickly between pages
+   - Verify no performance issues or memory leaks
+   - Verify dismissal checks don't slow down page loads
+
+2. **Storage operations**:
+   - Monitor storage read/write operations
+   - Verify efficient storage usage (no excessive writes)
+
 ## Troubleshooting
 - If the panel does not appear, verify checkout URL and session
 - If links 404, confirm `providerReferenceId` exists in RAW deals and matches the product URL
@@ -466,3 +574,6 @@ Open the service worker console (chrome://extensions → Inspect service worker)
 - **Translation issues**: Check `initLanguage()` fallback and verify all translation keys exist
 - **Voucher reminders not suppressed**: Verify `showCashbackReminders` setting affects checkout detection
 - **Hover states not working**: Check CSS transitions and event handlers in popup component
+- **Pill dismissal not persisting**: Check `__wsOcPillDismissedByDomain` in session storage and verify `isPillDismissed()` function
+- **Pill reappearing after dismissal**: Verify all automatic triggers (DOMContentLoaded, visibilitychange, oc_activated) check dismissal state
+- **Fresh activation not clearing dismissal**: Verify `setPillDismissed(domain, false)` is called in oc_activated handler
