@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { translate, initLanguage, translateTransactionStatus } from '../shared/i18n'
+import { formatRelativeTime } from '../shared/time-utils'
+import { getUserEmail, clearUserEmail, maskEmail, getEmailDomain } from '../shared/email-storage'
 
 type WsProfile = any
 type WsTransaction = any
@@ -107,9 +109,12 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   const [session, setSession] = useState<boolean | null>(null)
   const [profile, setProfile] = useState<WsProfile | null>(null)
   const [walletData, setWalletData] = useState<any>(null)
+  const [balanceTimestamp, setBalanceTimestamp] = useState<number | null>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [qaBypass, setQaBypass] = useState<boolean>(false)
   const [autoOc, setAutoOc] = useState<boolean>(true)
+  const [storedEmail, setStoredEmail] = useState<string | null>(null)
+  const [showClearEmailConfirm, setShowClearEmailConfirm] = useState<boolean>(false)
 
   useEffect(() => {
     try { initLanguage() } catch {}
@@ -123,7 +128,40 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
         loadAutoOc()
       }
     })
+    loadStoredEmail()
   }, [])
+  
+  async function loadStoredEmail() {
+    try {
+      const email = await getUserEmail()
+      setStoredEmail(email)
+    } catch (error) {
+      console.warn('[SettingsPanel] Failed to load stored email:', error)
+    }
+  }
+  
+  async function handleClearEmail() {
+    try {
+      const email = storedEmail
+      await clearUserEmail()
+      setStoredEmail(null)
+      setShowClearEmailConfirm(false)
+      
+      // Track analytics
+      try {
+        chrome.runtime.sendMessage({
+          type: 'ANALYTICS_TRACK',
+          event: 'session_recovery_email_cleared',
+          params: { 
+            reason: 'manual',
+            email_domain: email ? getEmailDomain(email) : 'unknown'
+          }
+        })
+      } catch {}
+    } catch (error) {
+      console.error('[SettingsPanel] Failed to clear email:', error)
+    }
+  }
 
   async function checkSession(): Promise<boolean> {
     try {

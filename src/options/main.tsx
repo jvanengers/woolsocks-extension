@@ -3,6 +3,7 @@ import { translate, initLanguage, translateTransactionStatus } from '../shared/i
 import { createRoot } from 'react-dom/client'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
+import VerificationEmailScreen from '../shared/VerificationEmailScreen'
 
 type WsProfile = any
 type WsTransaction = any
@@ -117,6 +118,8 @@ function Options() {
   const [walletData, setWalletData] = useState<any>(null)
   const [transactions, setTransactions] = useState<WsTransaction[]>([])
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
+  const [showVerificationScreen, setShowVerificationScreen] = useState<boolean>(false)
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
 
   useEffect(() => {
     try { initLanguage() } catch {}
@@ -161,8 +164,54 @@ function Options() {
     setTransactions(tx)
   }
 
-  const openLogin = () => {
+  const openLogin = async () => {
+    // Check if we have stored email for verification flow
+    try {
+      const { getUserEmail } = await import('../shared/email-storage')
+      const storedEmail = await getUserEmail()
+      
+      if (storedEmail) {
+        // Show verification screen instead of redirecting
+        setVerificationEmail(storedEmail)
+        setShowVerificationScreen(true)
+        
+        // Track verification screen shown
+        try {
+          chrome.runtime.sendMessage({
+            type: 'ANALYTICS_TRACK',
+            event: 'verification_screen_shown',
+            params: { context: 'options' }
+          })
+        } catch {}
+        
+        // Automatically send verification email on first show
+        handleSendVerificationEmail()
+        return
+      }
+    } catch (error) {
+      console.warn('[Options] Failed to check stored email:', error)
+    }
+    
+    // Fallback to woolsocks.eu redirect
     chrome.tabs.create({ url: 'https://woolsocks.eu/nl/profile', active: true })
+  }
+  
+  const handleSendVerificationEmail = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'SEND_VERIFICATION_EMAIL' })
+      
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to send verification email')
+      }
+    } catch (error) {
+      console.error('[Options] Failed to send verification email:', error)
+      throw error
+    }
+  }
+  
+  const handleCloseVerificationScreen = () => {
+    setShowVerificationScreen(false)
+    setVerificationEmail(null)
   }
 
   const firstName: string | undefined =
@@ -173,6 +222,26 @@ function Options() {
 
   const sockValue = typeof sockValueRaw === 'number' ? sockValueRaw : 0
 
+  // Show verification email screen if triggered
+  if (showVerificationScreen && verificationEmail) {
+    return (
+      <div style={{ 
+        width: '100%', 
+        maxWidth: 400, 
+        margin: '0 auto', 
+        padding: 24, 
+        background: '#fff', 
+        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' 
+      }}>
+        <VerificationEmailScreen
+          email={verificationEmail}
+          onClose={handleCloseVerificationScreen}
+          onResend={handleSendVerificationEmail}
+        />
+      </div>
+    )
+  }
+  
   // Show onboarding if not completed
   if (showOnboarding) {
     return (
