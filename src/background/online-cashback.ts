@@ -16,7 +16,7 @@ const EXCLUDED_HOSTS = new Set<string>([
 ])
 
 const COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes cooldown to avoid repeated redirects
-const OC_DEBUG = true
+const OC_DEBUG = false // Set to true for debugging
 const ACTIVE_TTL_MS = 10 * 60 * 1000 // 10 minutes active state per domain
 
 type RedirectState = {
@@ -449,8 +449,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       }
 
       // Fallback: detect organic landing with affiliate markers and mark active
-      if (hasAffiliateMarkers(url)) {
-        if (OC_DEBUG) console.log('[WS OC] affiliate markers detected on landing', { url })
+      // BUT: Skip this if domain is in cooldown (we just tried to activate it ourselves)
+      const cooldownUntil = await getCooldownUntil(clean)
+      const inCooldown = cooldownUntil && Date.now() - cooldownUntil < COOLDOWN_MS
+      
+      if (hasAffiliateMarkers(url) && !inCooldown) {
+        if (OC_DEBUG) console.log('[WS OC] affiliate markers detected on organic landing', { url })
         try {
           const partner: PartnerLite | null = await getPartnerByHostname(clean, url)
           if (partner) {
@@ -504,8 +508,13 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (state.active) { setIcon('active', tabId) }
       } catch {}
 
+      if (OC_DEBUG) console.log('[WS OC] Looking up partner for', clean)
       const partner: PartnerLite | null = await getPartnerByHostname(clean, url)
-      if (!partner) { if (OC_DEBUG) console.log('[WS OC] no partner for', clean); return }
+      if (!partner) { 
+        if (OC_DEBUG) console.log('[WS OC] no partner for', clean)
+        track('oc_blocked', { domain: clean, reason: 'no_partner' })
+        return 
+      }
       track('oc_partner_detected', { domain: clean, partner_name: partner.name })
       if (OC_DEBUG) console.log('[WS OC] partner', { name: partner.name })
 
@@ -548,10 +557,21 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       } catch {}
 
       const userCountry = await getUserCountryCode()
+      if (OC_DEBUG) console.log('[WS OC] User country:', userCountry)
       const ocCategory = (partner.categories || []).find(c => /online\s*cashback/i.test(String(c?.name || '')) || /cashback/i.test(String(c?.name || '')))
-      if (!ocCategory) { track('oc_blocked', { domain: clean, reason: 'no_deals' }); if (OC_DEBUG) console.log('[WS OC] no online cashback category'); return }
+      if (!ocCategory) { 
+        track('oc_blocked', { domain: clean, reason: 'no_deals' })
+        if (OC_DEBUG) console.log('[WS OC] no online cashback category for', clean)
+        return 
+      }
+      if (OC_DEBUG) console.log('[WS OC] Found OC category with', ocCategory.deals?.length || 0, 'deals')
       const eligible = filterOnlineCountry(ocCategory.deals as Deal[], userCountry)
-      if (!eligible.length) { track('oc_blocked', { domain: clean, reason: 'no_country_match', country: userCountry }); if (OC_DEBUG) console.log('[WS OC] no eligible deals for country', userCountry); return }
+      if (!eligible.length) { 
+        track('oc_blocked', { domain: clean, reason: 'no_country_match', country: userCountry })
+        if (OC_DEBUG) console.log('[WS OC] no eligible deals for country', userCountry, 'on', clean)
+        return 
+      }
+      if (OC_DEBUG) console.log('[WS OC] Found', eligible.length, 'eligible deals for', userCountry)
 
       // Respect user settings
       try {
@@ -643,27 +663,43 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       if (!best || !best.id) { track('oc_blocked', { domain: clean, reason: 'no_link' }); if (OC_DEBUG) console.log('[WS OC] best deal missing id', best); return }
 
       track('oc_eligible', { domain: clean, partner_name: partner.name, deals_count: eligible.length, deal_id: best.id, amount_type: best.amountType, rate: best.rate, country: userCountry })
-      // Notify UI that deals were found with list (for pre-activation state)
-      try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_deals_found', host: clean, deals: eligible }) } catch {}
+      // Skip the "deals found" panel - go straight to countdown after fetching redirect URL
       if (OC_DEBUG) console.log('[WS OC] eligible', { dealId: best.id, rate: best.rate, amountType: best.amountType })
 
       // Request tracked redirect URL (only if logged in); otherwise show login-required state
       track('oc_redirect_requested', { domain: clean, deal_id: best.id, provider: best.provider })
-      // Tell UI setting up - this hides the banner to prevent redirect loops
-      try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_redirect_requested', host: clean }) } catch {}
+      // Note: Do NOT send oc_redirect_requested message here - it hides UI before countdown shows
+      // The message will be sent in handleCountdownComplete when we actually navigate
       if (OC_DEBUG) console.log('[WS OC] requesting redirect', { dealId: best.id })
       // Guard: if site is already active (ActivationRegistry says active), do not redirect again
-      try { const state = getDomainActivationState(clean); if (state.active) { if (OC_DEBUG) console.log('[WS OC] skip redirect - already active', { host: clean }); return } } catch {}
+      try { 
+        const state = getDomainActivationState(clean)
+        if (OC_DEBUG) console.log('[WS OC] Activation state check:', { active: state.active, clickId: state.clickId })
+        if (state.active) { 
+          if (OC_DEBUG) console.log('[WS OC] skip redirect - already active', { host: clean })
+          return 
+        } 
+      } catch (e) {
+        if (OC_DEBUG) console.log('[WS OC] Error checking activation state:', e)
+      }
+      
       // Guard: if there is a domain-scoped pending in-flight redirect, skip issuing another
-      if (hasValidDomainPending(clean)) { if (OC_DEBUG) console.log('[WS OC] skip redirect - pending in-flight', { host: clean }); return }
+      const hasPending = hasValidDomainPending(clean)
+      if (OC_DEBUG) console.log('[WS OC] Pending redirect check:', hasPending)
+      if (hasPending) { 
+        if (OC_DEBUG) console.log('[WS OC] skip redirect - pending in-flight', { host: clean })
+        return 
+      }
       
       // Fetch redirect URL with timeout to prevent hanging
+      if (OC_DEBUG) console.log('[WS OC] Fetching redirect URL for deal', best.id)
       let redir: { url: string; clickId?: string } | null = null
       try {
         const timeoutPromise = new Promise<null>((_, reject) => 
           setTimeout(() => reject(new Error('Redirect URL request timeout')), 10000)
         )
         redir = await Promise.race([requestRedirectUrl(best.id), timeoutPromise])
+        if (OC_DEBUG) console.log('[WS OC] Redirect URL fetched:', redir ? 'success' : 'null')
       } catch (e) {
         console.error('[WS OC] Error fetching redirect URL:', e)
         // Set cooldown to prevent repeated attempts when fetch fails
@@ -680,10 +716,32 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
         return
       }
+      if (OC_DEBUG) console.log('[WS OC] Redirect URL valid, proceeding to countdown')
       // Check platform and user settings to determine redirect behavior
-      const platform = getPlatform()
-      const supportsAuto = allowsAutoRedirect()
-      const requiresGesture = requiresUserGesture()
+      let platform = 'unknown'
+      let supportsAuto = true
+      let requiresGesture = false
+      
+      try {
+        platform = getPlatform()
+        if (OC_DEBUG) console.log('[WS OC] Platform detected:', platform)
+      } catch (e) {
+        console.error('[WS OC] Error detecting platform:', e)
+      }
+      
+      try {
+        supportsAuto = allowsAutoRedirect()
+        if (OC_DEBUG) console.log('[WS OC] Auto-redirect supported:', supportsAuto)
+      } catch (e) {
+        console.error('[WS OC] Error checking auto-redirect support:', e)
+      }
+      
+      try {
+        requiresGesture = requiresUserGesture()
+        if (OC_DEBUG) console.log('[WS OC] User gesture required:', requiresGesture)
+      } catch (e) {
+        console.error('[WS OC] Error checking user gesture requirement:', e)
+      }
       
       console.log(`[WS OC Debug] Activation decision for ${clean}: platform=${platform}, supportsAuto=${supportsAuto}, requiresGesture=${requiresGesture}`)
       
@@ -697,20 +755,14 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         // Chrome/Firefox: Show countdown banner for auto-activation
         track('oc_countdown_shown', { domain: clean, deal_id: best.id, platform })
         
-        // Ping-gated retry logic: wait for content script to be ready before sending countdown
+        // Send countdown message immediately - content script will handle it when ready
+        // Retries ensure message gets through even if content script loads after background sends
         const sendCountdownWithRetry = async (attempts = 0): Promise<void> => {
-          const maxAttempts = 5
-          const delays = [0, 100, 300, 500, 1000]
+          const maxAttempts = 3
+          const delays = [0, 50, 150] // Shorter delays for faster UI
           
           if (attempts > 0) {
-            await new Promise(resolve => setTimeout(resolve, delays[attempts - 1] || 1000))
-          }
-          
-          // First, ping to check if content script is ready
-          const pingOk = await pingContentScript(tabId)
-          if (!pingOk && attempts < maxAttempts - 1) {
-            console.log(`[WS OC Debug] Content script not ready for countdown (attempt ${attempts + 1}), retrying...`)
-            return sendCountdownWithRetry(attempts + 1)
+            await new Promise(resolve => setTimeout(resolve, delays[attempts - 1] || 150))
           }
           
           return new Promise<void>((resolve) => {
@@ -727,10 +779,11 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
                   sendCountdownWithRetry(attempts + 1).then(resolve)
                 } else {
                   console.error(`[WS OC Debug] All ${maxAttempts} attempts failed for countdown message`)
-                  // Persist a short-lived pending UI event so content can render on load
+                  // Persist a short-lived pending UI event so content can render on DOMContentLoaded
                   try {
                     const payload = { kind: 'oc_countdown_start', host: clean, dealInfo: best, countdown: 3, ts: Date.now() }
                     chrome.storage.session.set({ __wsOcPendingUi: payload }).catch?.(() => {})
+                    console.log(`[WS OC Debug] Stored pending countdown in session storage as fallback`)
                   } catch {}
                   resolve()
                 }
@@ -964,6 +1017,11 @@ async function handleCountdownComplete(domain: string, dealInfo: any, tabId?: nu
     }
     
     if (OC_DEBUG) console.log('[WS OC] navigating to affiliate after countdown', { url: redirUrl })
+    
+    // Hide UI before redirect to prevent it from hanging during navigation
+    try { 
+      await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_redirect_requested', host: domain }) 
+    } catch {}
     
     try {
       await chrome.tabs.update(tabId, { url: redirUrl })

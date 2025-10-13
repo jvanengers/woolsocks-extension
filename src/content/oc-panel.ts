@@ -10,7 +10,7 @@ type Deal = { id?: string | number; name?: string; rate?: number; amountType?: s
 import { translate, initLanguage } from '../shared/i18n'
 
 // Boot diagnostics
-const OC_DEBUG = true
+const OC_DEBUG = false // Set to true for debugging
 const BOOT_HASH = '__OC_BOOT_v1__'
 const domain = (() => { try { return window.location.hostname.replace(/^www\./i, '').toLowerCase() } catch { return 'unknown' } })()
 if (OC_DEBUG) console.log(`[WS OC Content] ${BOOT_HASH} loaded on ${domain}`)

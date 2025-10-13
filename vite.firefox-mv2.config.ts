@@ -288,6 +288,26 @@ function handleMV2CompatibilityPlugin(): Plugin {
     };
   }
   
+  // Polyfill chrome.storage.session for Firefox MV2 (doesn't exist in MV2)
+  // Map to chrome.storage.local with a __session_ prefix
+  if (typeof chrome !== 'undefined' && chrome.storage && !chrome.storage.session) {
+    chrome.storage.session = {
+      get: function(keys) {
+        return chrome.storage.local.get(keys);
+      },
+      set: function(items) {
+        return chrome.storage.local.set(items);
+      },
+      remove: function(keys) {
+        return chrome.storage.local.remove(keys);
+      },
+      clear: function() {
+        // Don't clear all local storage, just return a resolved promise
+        return Promise.resolve();
+      }
+    };
+  }
+  
 ${content}
   
   // Return module.exports so other scripts can require() from background
