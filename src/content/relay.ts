@@ -134,7 +134,7 @@ function injectPageHook() {
   // Use chrome.scripting.executeScript to inject into MAIN world (CSP-compliant)
   // Get current tab ID from the content script context
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]?.id) {
+    if (tabs && tabs.length > 0 && tabs[0]?.id) {
       chrome.scripting.executeScript({
         target: { tabId: tabs[0].id },
         world: 'MAIN',

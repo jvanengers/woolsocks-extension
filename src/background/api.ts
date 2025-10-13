@@ -15,8 +15,23 @@ const DIAG = false
 const SITE_BASE = 'https://woolsocks.eu'
 
 function canCreateRelayTab(): boolean {
-  // Allow programmatic relay tab creation only on Chrome (offscreen supported)
-  try { return !!(chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function' } catch { return false }
+  // Allow programmatic relay tab creation on:
+  // - Chrome with offscreen support (preferred)
+  // - Firefox (MV2) without offscreen but with regular tab creation
+  try {
+    // Chrome with offscreen
+    if ((chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function') {
+      return true
+    }
+    // Firefox or other browsers - allow relay via regular tabs
+    // Check if we're in Firefox by looking for browser global or MV2 manifest
+    if (typeof (globalThis as any).browser !== 'undefined' || chrome.runtime.getManifest().manifest_version === 2) {
+      return true
+    }
+    return false
+  } catch { 
+    return false 
+  }
 }
 
 async function getHeaders(): Promise<HeadersInit> {
@@ -52,7 +67,7 @@ async function getUserId(): Promise<string | null> {
     if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
     const minHeaders: HeadersInit = { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId || '' }
 
-    // Attempt direct background call
+    // Attempt direct background call only - no relay fallback to avoid tab creation
     let json: any = null
     try {
       const direct = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, { credentials: 'include', headers: minHeaders as any })
@@ -61,10 +76,12 @@ async function getUserId(): Promise<string | null> {
       }
     } catch {}
 
-    // Fallback to relay with custom headers (no getHeaders)
+    // If direct fetch fails, just return null - don't create relay tabs
+    // Session detection will fail gracefully, and user can manually log in
     if (!json) {
-      const rel = await relayFetchViaTabCustomHeaders<{ data?: { id?: string; userId?: string } }>(`/user-info/api/v0`, minHeaders as Record<string, string>)
-      json = rel.data
+      cachedUserId = null
+      resolvingUserId = false
+      return null
     }
 
     const id = (
@@ -144,7 +161,7 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
 
   async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
     const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
-    if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    if (tabs && tabs.length > 0 && tabs[0]?.id) return { tabId: tabs[0].id, created: false }
     if (!canCreateRelayTab()) {
       // Do not create a visible tab on platforms without offscreen support
       throw new Error('Relay tab creation disabled on this platform')
@@ -216,44 +233,6 @@ async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promis
       try { await chrome.tabs.remove(tabId) } catch {}
     }
   }
-}
-
-// Relay variant that uses provided headers (avoids getHeaders recursion)
-async function relayFetchViaTabCustomHeaders<T>(endpoint: string, headersOverride: Record<string, string>, init?: RequestInit): Promise<{ data: T | null; status: number }> {
-  async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
-    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
-    if (tabs[0]?.id) return { tabId: tabs[0].id, created: false }
-    if (!canCreateRelayTab()) {
-      throw new Error('Relay tab creation disabled on this platform')
-    }
-    const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
-    return { tabId: t.id!, created: true }
-  }
-  async function ping(tabId: number): Promise<boolean> {
-    return new Promise((resolve) => {
-      try { chrome.tabs.sendMessage(tabId, { type: 'WS_PING' }, () => resolve(!chrome.runtime.lastError)) } catch { resolve(false) }
-    })
-  }
-  async function send(tabId: number): Promise<{ data: T | null; status: number }> {
-    return new Promise((resolve) => {
-      chrome.tabs.sendMessage(
-        tabId,
-        { type: 'WS_RELAY_FETCH', payload: { url: `${SITE_BASE}/api/wsProxy${endpoint}`, init: { ...init, headers: headersOverride, credentials: 'include' } } },
-        (resp) => {
-          if (chrome.runtime.lastError || !resp) return resolve({ data: null, status: 0 })
-          try { const json = resp.bodyText ? JSON.parse(resp.bodyText) : null; resolve({ data: json as T, status: resp.status }) } catch { resolve({ data: null, status: resp.status }) }
-        }
-      )
-    })
-  }
-  let created = false
-  let tabId = 0
-  try {
-    const got = await ensureRelayTab(); tabId = got.tabId; created = got.created
-    let ready = await ping(tabId); let tries = 0
-    while (!ready && tries < 6) { await new Promise(r => setTimeout(r, 250)); ready = await ping(tabId); tries++ }
-    return await send(tabId)
-  } catch { return { data: null, status: 0 } } finally { if (created && tabId) { try { await chrome.tabs.remove(tabId) } catch {} } }
 }
 
 async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {
@@ -466,11 +445,12 @@ function pickBestMerchant(query: string, list: any[]): any | null {
   return first?.data || first || null
 }
 
-function buildGiftProductUrl(d: any): string | undefined {
+function buildGiftProductUrl(d: any, locale?: string): string | undefined {
   const pid = d?.providerReferenceId || d?.productId || d?.id
-  if (pid) return `${SITE_BASE}/nl-NL/giftcards-shop/products/${pid}`
+  const loc = (locale && String(locale).trim()) || 'nl-NL'
+  if (pid) return `${SITE_BASE}/${loc}/giftcards-shop/products/${pid}`
   const m = (d?.links?.webLink || '').match(/giftcards-shop\/products\/([a-f0-9-]{36})/i)
-  return m ? `${SITE_BASE}/nl-NL/giftcards-shop/products/${m[1]}` : undefined
+  return m ? `${SITE_BASE}/${loc}/giftcards-shop/products/${m[1]}` : undefined
 }
 
 function extractObMerchantIdFromImageUrl(url?: string | null): string | null {
@@ -660,7 +640,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
         rate,
         description: d?.description || (d?.siteContents && d.siteContents[0]) || '',
         imageUrl: d?.imageUrl,
-        dealUrl: buildGiftProductUrl(d),
+        dealUrl: undefined, // filled when locale is known
         // Cashback enrichments
         // id set below based on deal class to avoid mixing UUID (giftcard) with rewardId (cashback)
         amountType: d?.amountType as any,
@@ -676,6 +656,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
       }
       const cls = classify(d?.dealType)
       if (cls === 'VOUCHERS') {
+        // Attach a locale-aware product URL lazily later once we know the visited/target country
         // Extract a product id for the details endpoint
         const explicitId = (d as any)?.providerReferenceId || (d as any)?.productId || (d as any)?.id
         let productId: string | null = explicitId || null
@@ -715,7 +696,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     }
 
     // Helper to fetch giftcard product details and filter by ONLINE usage
-    async function filterVoucherCandidatesOnlineOnly(cands: Array<{ id: string; item: any }>): Promise<any[]> {
+async function filterVoucherCandidatesOnlineOnly(cands: Array<{ id: string; item: any }>): Promise<any[]> {
       if (!cands.length) return []
       const results = await Promise.all(cands.map(async (c) => {
         try {
@@ -724,7 +705,13 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
           const usageType = (product?.usageType || '').toString().toUpperCase()
           const normalized = usageType.replace(/[^A-Z]/g, '')
           const include = normalized === 'ALL' || normalized.includes('ONLINE')
-          return include ? c.item : null
+          if (!include) return null
+          // Enrich with voucherCountry (from product country if present) and defer URL building
+          try {
+            const dealCountry = String((product?.countryCode || product?.country || '').toString()).toUpperCase()
+            if (dealCountry) (c.item as any).voucherCountry = dealCountry
+          } catch {}
+          return c.item
         } catch {
           return null
         }
@@ -743,6 +730,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     }
     if (vouchers.length) {
       const max = Math.max(...vouchers.map(d => d.rate || 0))
+      // Build locale-aware URLs lazily at display time; keep items country-tagged here
       categories.push({ name: 'Vouchers', deals: vouchers, maxRate: max })
       voucherAvailable = true
       cashbackRate = Math.max(cashbackRate, max)
@@ -905,13 +893,23 @@ export async function getUserCountryCode(): Promise<string> {
 // Fetch user's language preference from Woolsocks API
 export async function getUserLanguage(): Promise<string | null> {
   try {
-    const response = await fetchViaSiteProxy<{ data?: { language?: string; locale?: string } }>('/user-info/api/v0')
+    // Try direct fetch first without relay fallback to avoid tab creation on startup
+    const headers = await getHeaders()
+    const resp = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, {
+      credentials: 'include',
+      headers,
+      method: 'GET',
+    })
     
-    if (response.status === 200 && response.data?.data) {
-      // Try language field first, then locale as fallback
-      return response.data.data.language || response.data.data.locale || null
+    if (resp.ok) {
+      const json: any = await resp.json()
+      if (json?.data) {
+        // Try language field first, then locale as fallback
+        return json.data.language || json.data.locale || null
+      }
     }
     
+    // If direct fetch fails, just return null - don't try relay fallback on startup
     return null
   } catch (error) {
     console.warn('[WS API] Failed to fetch user language:', error)

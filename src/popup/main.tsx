@@ -5,6 +5,7 @@ import { translate, initLanguage } from '../shared/i18n'
 import { track } from '../background/analytics'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
+import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 
 interface Deal {
   name: string
@@ -36,6 +37,9 @@ function App() {
     document.body.style.margin = '0'
     document.body.style.background = 'transparent'
     
+    // Load Woolsocks fonts
+    loadWoolsocksFonts().catch(console.warn)
+    
     // Check if onboarding should be shown
     const completed = hasCompletedOnboarding()
     setShowOnboarding(!completed)
@@ -50,21 +54,57 @@ function App() {
     })()
     ;(async () => {
       try {
-        // Ask background to check via user-info with relay fallback
+        // Firefox MV2: Try reading from storage FIRST (most reliable)
+        console.log('[Popup] Checking storage for cached session state...')
+        let stored = await chrome.storage.local.get(['__wsSessionActive', '__wsSessionCheckedAt'])
+        let age = stored.__wsSessionCheckedAt ? Date.now() - stored.__wsSessionCheckedAt : Infinity
+        
+        if (typeof stored.__wsSessionActive === 'boolean' && age < 30000) {
+          console.log('[Popup] Using cached session state from storage (immediate):', stored.__wsSessionActive, `(${Math.round(age)}ms old)`)
+          setSession(stored.__wsSessionActive)
+          return
+        }
+        
+        // If no cached session or too old, trigger a fresh check
+        console.log('[Popup] No recent cached session, sending CHECK_ACTIVE_SESSION message...')
         const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' })
+        console.log('[Popup] CHECK_ACTIVE_SESSION response:', resp)
         if (resp && typeof resp.active === 'boolean') {
+          console.log('[Popup] Setting session from background response:', resp.active)
           setSession(resp.active)
           return
         }
-      } catch {}
+        
+        console.log('[Popup] No valid response from background, waiting for storage update...')
+        
+        // Wait for background to update storage (multiple attempts)
+        for (let i = 0; i < 3; i++) {
+          await new Promise(resolve => setTimeout(resolve, 200))
+          stored = await chrome.storage.local.get(['__wsSessionActive', '__wsSessionCheckedAt'])
+          age = stored.__wsSessionCheckedAt ? Date.now() - stored.__wsSessionCheckedAt : Infinity
+          console.log(`[Popup] Storage check attempt ${i + 1}:`, stored.__wsSessionActive, `(${Math.round(age)}ms old)`)
+          if (typeof stored.__wsSessionActive === 'boolean' && age < 2000) {
+            console.log('[Popup] Using cached session state from storage:', stored.__wsSessionActive)
+            setSession(stored.__wsSessionActive)
+            return
+          }
+        }
+        
+        console.log('[Popup] No valid response from background or storage after retries, falling back to cookie check')
+      } catch (err) {
+        console.error('[Popup] Error sending CHECK_ACTIVE_SESSION:', err)
+      }
       // Final safety fallback: cookie presence (any session-like cookie)
       try {
         const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
         const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
         const all = [...site, ...api]
+        console.log('[Popup] Cookies found:', all.length, all.map(c => c.name))
         const has = all.some(c => c.name === 'ws-session' || /session/i.test(String(c?.name || '')))
+        console.log('[Popup] Cookie-based session check:', has)
         setSession(has)
-      } catch {
+      } catch (err) {
+        console.error('[Popup] Error checking cookies:', err)
         setSession(false)
       }
     })()
@@ -192,14 +232,65 @@ function App() {
 
   // Load deals from current tab
   useEffect(() => {
-    ;(async () => {
+    let isMounted = true
+    
+    const loadDeals = async () => {
       try {
-        // Get current tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-        if (!tab?.url) return
-
-        const url = new URL(tab.url)
-        const hostname = url.hostname
+        let hostname = ''
+        
+        // Try to get tab from chrome.tabs.query (works in Chrome)
+        let tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (tabs && tabs.length > 0 && tabs[0]?.url) {
+          const url = new URL(tabs[0].url)
+          hostname = url.hostname
+          console.log('[Popup] Got tab from query:', hostname)
+        } else {
+          // Firefox fallback: read from storage (background tracks active tab)
+          console.log('[Popup] Tab query failed, reading from storage...')
+          let stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabUpdated'])
+          let age = stored.__wsCurrentTabUpdated ? Date.now() - stored.__wsCurrentTabUpdated : Infinity
+          
+          // If storage is too old (> 5 seconds), ask background to refresh it
+          if (age > 5000 || !stored.__wsCurrentTabUrl) {
+            console.log('[Popup] Storage too old or missing, asking background to refresh tab info...')
+            try {
+              // Send a message to background to get current active tab
+              const tabInfo = await chrome.runtime.sendMessage({ type: 'GET_CURRENT_TAB' })
+              if (tabInfo?.url) {
+                const url = new URL(tabInfo.url)
+                hostname = url.hostname
+                console.log('[Popup] Got tab from background query:', hostname)
+              } else {
+                // Wait a bit and check storage again
+                await new Promise(resolve => setTimeout(resolve, 100))
+                stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabUpdated'])
+                age = stored.__wsCurrentTabUpdated ? Date.now() - stored.__wsCurrentTabUpdated : Infinity
+              }
+            } catch (err) {
+              console.error('[Popup] Error getting current tab from background:', err)
+            }
+          }
+          
+          if (stored.__wsCurrentTabUrl) {
+            age = stored.__wsCurrentTabUpdated ? Date.now() - stored.__wsCurrentTabUpdated : Infinity
+            if (age < 10000) { // Use if less than 10 seconds old
+              const url = new URL(stored.__wsCurrentTabUrl)
+              hostname = url.hostname
+              console.log('[Popup] Got tab from storage:', hostname, `(${Math.round(age)}ms old)`)
+            } else {
+              console.warn('[Popup] Stored tab URL is too old:', age / 1000, 'seconds')
+            }
+          } else {
+            console.warn('[Popup] No stored tab URL found')
+          }
+        }
+        
+        if (!hostname) {
+          console.warn('[Popup] Could not determine current tab hostname')
+          return
+        }
+        
+        if (!isMounted) return
         
         // Store the domain for display
         setCurrentDomain(hostname.replace(/^www\./, ''))
@@ -228,12 +319,28 @@ function App() {
         } catch {}
 
         // Check merchant support
-        const response: any = await chrome.runtime.sendMessage({ 
+        console.log('[Popup] Checking merchant support for:', hostname)
+        let response: any = await chrome.runtime.sendMessage({ 
           type: 'CHECK_MERCHANT_SUPPORT', 
           hostname 
         })
+        
+        console.log('[Popup] Merchant support response:', response)
+        
+        // Firefox MV2 workaround: check storage if response is undefined
+        if (!response || typeof response.supported !== 'boolean') {
+          console.log('[Popup] No merchant support response, checking storage...')
+          await new Promise(resolve => setTimeout(resolve, 200))
+          const stored = await chrome.storage.local.get(['__wsMerchantSupport', '__wsMerchantSupportHostname', '__wsMerchantSupportUpdated'])
+          const age = stored.__wsMerchantSupportUpdated ? Date.now() - stored.__wsMerchantSupportUpdated : Infinity
+          if (stored.__wsMerchantSupportHostname === hostname && age < 5000) {
+            console.log('[Popup] Using cached merchant support from storage')
+            response = stored.__wsMerchantSupport
+          }
+        }
 
         if (response?.supported && response?.partner) {
+          console.log('[Popup] Partner found:', response.partner.name)
           const partner = response.partner
           
           // Extract online cashback deals
@@ -244,12 +351,19 @@ function App() {
             setOnlineCashbackDeals(ocCategory.deals.slice(0, 2)) // Show max 2 deals
           }
 
-          // Extract voucher deals from categories
+          // Extract voucher deals from categories, country-scoped by current tab
           const voucherCategory = partner.categories?.find((c: any) => 
             /voucher/i.test(c.name || '') || c.name === 'Vouchers'
           )
           if (voucherCategory?.deals && voucherCategory.deals.length > 0) {
-            setVouchers(voucherCategory.deals.slice(0, 3)) // Show max 3 vouchers
+            try {
+              const visitedCountry = await chrome.runtime.sendMessage({ type: 'REQUEST_VISITED_COUNTRY', domain: hostname })
+              const countryCode = (visitedCountry && visitedCountry.country) ? String(visitedCountry.country).toUpperCase() : ''
+              const filtered = voucherCategory.deals.filter((d: any) => String((d as any).voucherCountry || d.country || '').toUpperCase() === countryCode)
+              setVouchers((filtered.length ? filtered : voucherCategory.deals).slice(0, 3)) // Show max 3 vouchers
+            } catch {
+              setVouchers(voucherCategory.deals.slice(0, 3))
+            }
           }
 
           // Tracking active state already handled above independent of partner
@@ -274,7 +388,24 @@ function App() {
       } catch (err) {
         console.error('Failed to load deals:', err)
       }
-    })()
+    }
+    
+    // Load deals immediately
+    loadDeals()
+    
+    // Listen for storage changes (when background updates tab info)
+    const storageListener = (changes: any) => {
+      if (changes.__wsCurrentTabUrl || changes.__wsCurrentTabUpdated) {
+        console.log('[Popup] Tab URL changed in storage, reloading deals...')
+        loadDeals()
+      }
+    }
+    chrome.storage.onChanged.addListener(storageListener)
+    
+    return () => {
+      isMounted = false
+      chrome.storage.onChanged.removeListener(storageListener)
+    }
   }, [session])
 
   if (session === null) {
@@ -407,7 +538,7 @@ function App() {
                   <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <span style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 14, 
                   fontWeight: 500, 
                   color: '#100B1C',
@@ -436,7 +567,7 @@ function App() {
                   gap: 4, 
                   border: 'none', 
                   cursor: 'pointer',
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 14
                 }}
               >
@@ -471,7 +602,7 @@ function App() {
                   border: 'none',
                   borderRadius: 4,
                   cursor: 'pointer',
-                  fontFamily: 'Woolsocks, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 14,
                   fontWeight: 500,
                   lineHeight: 1.4
@@ -540,7 +671,7 @@ function App() {
                   style={{ width: 18, height: 18 }}
                 />
                 <span style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 12,
                   color: '#100B1C',
                   opacity: 0.5,
@@ -593,7 +724,7 @@ function App() {
                       flexShrink: 0
                     }}>
                       <span style={{ 
-                        fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                        fontFamily: getWoolsocksFontFamily(),
                         fontSize: 12,
                         fontWeight: 500,
                         color: '#100B1C',
@@ -606,7 +737,7 @@ function App() {
                       flex: 1,
                       color: '#100B1C',
                       fontFeatureSettings: "'liga' off, 'clig' off",
-                      fontFamily: 'Woolsocks',
+                      fontFamily: getWoolsocksFontFamily(),
                       fontSize: 16,
                       fontStyle: 'normal',
                       fontWeight: 400,
@@ -651,7 +782,7 @@ function App() {
                       <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="#268E60"/>
                     </svg>
                     <span style={{ 
-                      fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                      fontFamily: getWoolsocksFontFamily(),
                       fontSize: 16,
                       color: '#268E60'
                     }}>
@@ -683,7 +814,7 @@ function App() {
                   style={{ width: 18, height: 18 }}
                 />
                 <span style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 12,
                   color: '#100B1C',
                   opacity: 0.5,
@@ -753,7 +884,7 @@ function App() {
                         flex: 1,
                         color: '#100B1C',
                         fontFeatureSettings: "'liga' off, 'clig' off",
-                        fontFamily: 'Woolsocks',
+                        fontFamily: getWoolsocksFontFamily(),
                         fontSize: 16,
                         fontStyle: 'normal',
                         fontWeight: 400,
@@ -773,7 +904,7 @@ function App() {
                           justifyContent: 'center'
                         }}>
                           <span style={{ 
-                            fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                            fontFamily: getWoolsocksFontFamily(),
                             fontSize: 12,
                             fontWeight: 500,
                             color: '#FFFFFF',
@@ -806,7 +937,7 @@ function App() {
                 padding: '8px 0'
               }}>
                 <span style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 14,
                   color: '#100B1C',
                   opacity: 0.5,

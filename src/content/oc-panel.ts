@@ -455,7 +455,7 @@ function ensureMount(): ShadowRoot {
     .manual-activation-left { display:flex !important; align-items:center !important; gap:12px !important; flex:1 !important; min-width:0 !important; }
     .manual-activation-title { font-size: 20px !important; font-weight: 700 !important; color:#0F0B1C !important; line-height:1.25 !important; }
     .manual-activation-sub { font-size: 14px !important; color:#6B7280 !important; line-height:1.4 !important; margin-top:6px !important; }
-    .manual-activate-btn { background:#211940 !important; color:#FFFFFF !important; border:none !important; border-radius:8px !important; height:48px !important; padding: 0 16px !important; font-size:14px !important; font-weight:600 !important; cursor:pointer !important; font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important; }
+    .manual-activate-btn { background:#211940 !important; color:#FFFFFF !important; border:none !important; border-radius:8px !important; height:48px !important; padding: 0 16px !important; font-size:14px !important; font-weight:600 !important; cursor:pointer !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important; }
     .manual-activate-btn:hover { opacity:.92 !important; }
     .icon-btn { background: transparent !important; border: none !important; cursor: pointer !important; padding: 0 !important; display:flex !important; align-items:center !important; justify-content:center !important; width: 48px !important; height: 48px !important; }
     .cta-btn { 
@@ -463,7 +463,7 @@ function ensureMount(): ShadowRoot {
       height: 32px !important; padding: 0 12px !important; 
       background: #211940 !important; color: #FFFFFF !important; 
       border: none !important; border-radius: 4px !important; cursor: pointer !important;
-      font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
       font-size: 14px !important; font-weight: 500 !important; line-height: 1.4 !important;
     }
     .pill-row { display:flex !important; align-items:center !important; gap:8px !important; white-space: nowrap !important; padding: 8px !important; }
@@ -536,7 +536,7 @@ function ensureMount(): ShadowRoot {
       letter-spacing: -0.15px !important;
       width: 100% !important;
       word-break: break-word !important;
-      font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     }
     .deck-footer {
       display: flex !important;
@@ -559,7 +559,7 @@ function ensureMount(): ShadowRoot {
       background: #211940 !important;
       color: #FFFFFF !important;
       text-align: center !important;
-      font-family: 'Woolsocks', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
       font-size: 14px !important;
       font-style: normal !important;
       font-weight: 500 !important;
@@ -646,19 +646,6 @@ function showDealsFound(host: string, deals: Deal[]) {
     <div class="row header">${translate('ocPanel.dealsFoundAt', { host: escapeHtml(safeHost) })}</div>
     <div class="progress"><div class="bar"></div></div>
     ${list}
-  `)
-  r.getElementById?.('ws-oc-container')?.replaceChildren(box)
-}
-
-function showSettingUp(host: string) {
-  const r = ensureMount(); clearTimers()
-  const box = document.createElement('div'); box.className = 'panel compact'
-  const safeHost = host.replace(/^www\./i, '')
-  render(box, `
-    <div class="setup-row">
-      <div class="setup-text">${translate('ocPanel.settingUpFor', { host: escapeHtml(safeHost) })}</div>
-      <img class="logo logo-30 spin" alt="Woolsocks" src="${WS_LOGO.yellow}">
-    </div>
   `)
   r.getElementById?.('ws-oc-container')?.replaceChildren(box)
 }
@@ -1075,7 +1062,9 @@ chrome.runtime.onMessage.addListener(async (msg: any) => {
       showDealsFound(ev.host, ev.deals || [])
     }
   } else if (ev.kind === 'oc_redirect_requested') {
-    showSettingUp(ev.host)
+    // Hide banner immediately - redirect is about to happen and will destroy this content script
+    // When user lands back on merchant, oc_activated will be sent to show the "active" pill
+    hideAll()
   } else if (ev.kind === 'oc_blocked') {
     if (ev.reason === 'no_deals') showNoDeals(); else hideAll()
   } else if (ev.kind === 'oc_activated') {

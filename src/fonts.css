@@ -1,0 +1,122 @@
+/* Woolsocks Font Family - Embedded Fonts */
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-LightSlanted.otf') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-RegularSlanted.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-MediumSlanted.otf') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Alternative Woolsocks variants for special styling */
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-LightAlt.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-LightAltSlanted.otf') format('opentype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-RegularAlt.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-RegularAltSlanted.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-MediumAlt.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-MediumAltSlanted.otf') format('opentype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-BoldAlt.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Woolsocks Alt';
+  src: url('chrome-extension://__MSG_@@extension_id__/public/fonts/Woolsocks-BoldAltSlanted.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}

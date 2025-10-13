@@ -1,6 +1,6 @@
 # Woolsocks Browser Extension (MV3)
 
-A Chrome MV3 extension that shows Woolsocks voucher offers and automatically enables online cashback on supported merchant sites.
+A cross-browser MV3 extension that shows Woolsocks voucher offers and automatically enables online cashback on supported merchant sites. Supports Chrome, Firefox (desktop and mobile), and other Chromium-based browsers.
 
 ## Current scope and constraints
 
@@ -59,14 +59,34 @@ Key points:
 
 ### Prerequisites
 - Node.js 20.19+ or 22.12+
-- Chrome/Chromium
+- Chrome/Chromium or Firefox
 
 ### Install & build
-```
+
+#### Chrome Build
+```bash
 npm install
-npm run build
+npm run build:chrome
 ```
 Load the `dist/` folder in `chrome://extensions` (Developer mode → Load unpacked).
+
+#### Firefox Build
+```bash
+npm install
+npm run build:firefox
+```
+Load the `dist-firefox/` folder in Firefox at `about:debugging` (This Firefox → Load Temporary Add-on).
+
+#### Build Both
+```bash
+npm run build:all
+```
+
+#### Package for Distribution
+```bash
+npm run package
+```
+Creates `.zip` (Chrome) and `.xpi` (Firefox) files for store submission.
 
 ### Translation Management
 The extension supports multiple languages through Lokalise integration. Use these commands to sync translations:
@@ -108,7 +128,7 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - `notifications` — user feedback when cashback activates.
 - `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
 - `webNavigation` — detect top-level navigations to trigger cashback flow and re-emit activation.
-- `offscreen` — host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening a visible tab (prevents user-visible tab flashes; used only on Chrome where supported).
+- `offscreen` — host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening a visible tab (prevents user-visible tab flashes; used only on Chrome where supported; Firefox uses tab-based relay fallback).
 - Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
 
 ### Permission justifications
@@ -120,7 +140,7 @@ See [TESTING.md](TESTING.md) for a short manual test matrix.
 - **`storage`** — Store user settings, per-domain cooldowns, activation registry, analytics queue, and cached data for reliable operation.
 - **`scripting`** — Inject minimal UI components (voucher panels, activation pills) only on detected merchant sites; never injects into sensitive origins.
 - **`notifications`** — Provide clear user feedback when cashback activates successfully.
-- **`offscreen`** — Host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening visible tabs (prevents user-visible tab flashes; used only on Chrome where supported).
+- **`offscreen`** — Host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening visible tabs (prevents user-visible tab flashes; used only on Chrome where supported; Firefox uses tab-based relay fallback).
 
 #### Host Permission Justifications
 

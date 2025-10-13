@@ -2,12 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { crx } from '@crxjs/vite-plugin'
 
-// Minimal MV3 manifest injected by CRXJS during build
+// Firefox-specific MV3 manifest (removes offscreen permission)
 const manifest = {
   manifest_version: 3,
   name: 'Woolsocks',
   version: '0.10.0',
   description: 'Activate cashback automatically and discover gift cards at checkout on supported merchants.',
+  applications: {
+    gecko: {
+      id: 'woolsocks@woolsocks.eu'
+    }
+  },
   action: {
     default_title: 'Woolsocks',
     default_popup: 'src/popup/index.html',
@@ -31,7 +36,8 @@ const manifest = {
     page: 'src/options/index.html',
     open_in_tab: false,
   },
-  permissions: ['tabs', 'scripting', 'storage', 'notifications', 'cookies', 'webNavigation', 'offscreen'],
+  // Firefox doesn't support offscreen API - remove this permission
+  permissions: ['tabs', 'scripting', 'storage', 'notifications', 'cookies', 'webNavigation'],
   host_permissions: ['https://*/*', 'http://*/*', 'https://woolsocks.eu/*', 'https://api.woolsocks.eu/*'],
   content_scripts: [
     {
@@ -77,7 +83,7 @@ const manifest = {
   ],
   web_accessible_resources: [
     {
-      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf'],
+      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png'],
       matches: ['<all_urls>'],
     },
   ],
@@ -90,6 +96,7 @@ const manifest = {
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
   build: {
+    outDir: 'dist-firefox',
     rollupOptions: {
       input: {
         popup: 'src/popup/index.html',
@@ -99,7 +106,7 @@ export default defineConfig({
         entrance: 'src/content/entrance.ts',
         ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
-        offscreen: 'src/offscreen/relay.html',
+        // Note: offscreen is not included for Firefox builds
       },
     },
   },

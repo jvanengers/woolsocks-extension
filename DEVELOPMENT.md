@@ -296,22 +296,51 @@ document.querySelector('.total-price') // Better than document.body
 
 ## 📦 Building & Deployment
 
+### Building for Different Browsers
+
+#### Chrome Build
+```bash
+npm run build:chrome    # Builds to dist/
+```
+
+#### Firefox Build
+```bash
+npm run build:firefox   # Builds to dist-firefox/
+```
+
+#### Build Both Versions
+```bash
+npm run build:all       # Builds both Chrome and Firefox versions
+```
+
+#### Package Extensions
+```bash
+npm run package         # Creates .zip (Chrome) and .xpi (Firefox) files
+```
+
 ### Development Build
 ```bash
-npm run build
+npm run build           # Defaults to Chrome build
 ```
 
 ### Production Build
 ```bash
-npm run build:prod
+npm run build:prod      # (if configured)
 ```
 
 ### Chrome Web Store Preparation
 
-1. Build production version
+1. Build Chrome version: `npm run build:chrome`
 2. Test thoroughly
-3. Create ZIP file of `dist/` folder
+3. Package: `npm run package` (creates `.zip` file)
 4. Upload to Chrome Web Store Developer Dashboard
+
+### Firefox AMO Preparation
+
+1. Build Firefox version: `npm run build:firefox`
+2. Test thoroughly on Firefox Developer Edition
+3. Package: `npm run package` (creates `.xpi` file)
+4. Upload to AMO (Add-ons.mozilla.org)
 
 ### Releasing Updates
 

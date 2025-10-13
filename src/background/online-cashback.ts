@@ -33,6 +33,10 @@ type RedirectState = {
 const tabRedirectState = new Map<number, RedirectState>()
 const navigationDebounce = new Map<string, number>() // key = `${tabId}:${host}`
 
+// Global limit to prevent runaway activation loops (e.g., when not authenticated)
+let activeActivationProcesses = 0
+const MAX_CONCURRENT_ACTIVATIONS = 5
+
 // Some affiliates open a new tab; tabId-based pending can be lost. Keep a
 // short-lived domain-scoped pending as a fallback to recognize landings.
 type PendingByDomain = { affiliateHost?: string; clickId?: string; partnerName?: string; deal?: Deal; originalUrl?: string; until: number }
@@ -220,6 +224,18 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
 
       console.log(`[WS OC Debug] Navigation detected: ${clean}`)
       if (OC_DEBUG) console.log('[WS OC] nav', { tabId, host: clean })
+      
+      // Debug: Check what's in our pending maps
+      console.log(`[WS OC Debug] Checking pending states for ${clean}:`)
+      console.log(`[WS OC Debug] pendingByDomain keys:`, Array.from(pendingByDomain.keys()))
+      console.log(`[WS OC Debug] tabRedirectState keys:`, Array.from(tabRedirectState.keys()))
+      console.log(`[WS OC Debug] tabRedirectState for tab ${tabId}:`, tabRedirectState.get(tabId))
+
+      // Global safety limit to prevent activation loops
+      if (activeActivationProcesses >= MAX_CONCURRENT_ACTIVATIONS) {
+        console.warn(`[WS OC] Too many concurrent activation processes (${activeActivationProcesses}), skipping ${clean}`)
+        return
+      }
 
       // Debounce duplicate onCommitted events for the same (tab, host)
       const debounceKey = `${tabId}:${clean}`
@@ -227,6 +243,12 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const last = navigationDebounce.get(debounceKey) || 0
       if (now - last < 1500) return
       navigationDebounce.set(debounceKey, now)
+      
+      // Increment active processes counter
+      activeActivationProcesses++
+      console.log(`[WS OC Debug] Active activation processes: ${activeActivationProcesses}`)
+      
+      try {
 
       // Notify UI: scan start
       try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_scan_start', host: clean }) } catch {}
@@ -613,10 +635,21 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       try { const state = getDomainActivationState(clean); if (state.active) { if (OC_DEBUG) console.log('[WS OC] skip redirect - already active', { host: clean }); return } } catch {}
       // Guard: if there is a domain-scoped pending in-flight redirect, skip issuing another
       if (hasValidDomainPending(clean)) { if (OC_DEBUG) console.log('[WS OC] skip redirect - pending in-flight', { host: clean }); return }
+      
+      // Fetch redirect URL with timeout to prevent hanging
       let redir: { url: string; clickId?: string } | null = null
       try {
-        redir = await requestRedirectUrl(best.id)
-      } catch (e) {}
+        const timeoutPromise = new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('Redirect URL request timeout')), 10000)
+        )
+        redir = await Promise.race([requestRedirectUrl(best.id), timeoutPromise])
+      } catch (e) {
+        console.error('[WS OC] Error fetching redirect URL:', e)
+        // Show login required as fallback if redirect fetch fails
+        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
+        return
+      }
+      
       if (!redir || !redir.url) {
         if (OC_DEBUG) console.log('[WS OC] no redirect url returned (likely not logged in)')
         try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
@@ -645,6 +678,16 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             host: clean, 
             dealInfo: best, 
             countdown: 3 
+          }, (_response) => {
+            if (chrome.runtime.lastError) {
+              console.error(`[WS OC Debug] Failed to send countdown message to tab ${tabId}:`, chrome.runtime.lastError.message)
+              // Fallback: show login required if content script isn't responding
+              try { 
+                chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) 
+              } catch {}
+            } else {
+              console.log(`[WS OC Debug] Successfully sent countdown message for ${clean}`)
+            }
           }) 
         } catch (e) {
           console.error(`[WS OC Debug] Error sending countdown message for ${clean}:`, e)
@@ -676,10 +719,25 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
             deals: eligible,
             platform: platform,
             isManualMode: true
+          }, (_response) => {
+            if (chrome.runtime.lastError) {
+              console.error(`[WS OC Debug] Failed to send manual activation message to tab ${tabId}:`, chrome.runtime.lastError.message)
+              // Fallback: show login required if content script isn't responding
+              try { 
+                chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) 
+              } catch {}
+            } else {
+              console.log(`[WS OC Debug] Successfully sent manual activation message for ${clean}`)
+            }
           }) 
         } catch (e) {
           console.error(`[WS OC Debug] Error sending manual activation message (else branch) for ${clean}:`, e)
         }
+      }
+      } finally {
+        // Decrement active processes counter
+        activeActivationProcesses = Math.max(0, activeActivationProcesses - 1)
+        console.log(`[WS OC Debug] Activation process completed. Active processes: ${activeActivationProcesses}`)
       }
     }, { url: [{ schemes: ['http', 'https'] }] })
 

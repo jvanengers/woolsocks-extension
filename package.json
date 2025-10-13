@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:chrome",
+    "build:chrome": "tsc -b && vite build",
+    "build:firefox": "tsc -b && vite build --config vite.firefox-mv2.config.ts",
+    "build:firefox-mv3": "tsc -b && vite build --config vite.firefox.config.ts",
+    "build:all": "npm run build:chrome && npm run build:firefox",
+    "package": "node scripts/package-extension.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "sync-push": "node scripts/push-to-lokalise.js",

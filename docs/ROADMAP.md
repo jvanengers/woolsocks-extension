@@ -103,18 +103,160 @@ Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder 
 
 ## 6) Firefox support (desktop and mobile)
 
-Status: Ready for refinement
+Status: Ready for implementation
 
-Goal: Port MV3 functionality to Firefox variants.
+Goal: Port MV3 functionality to Firefox variants with full feature parity and AMO distribution.
 
-- Desktop
-  - Validate APIs parity (alarms, storage, webNavigation, cookies). Replace gaps with polyfills/workarounds.
-- Android (Firefox Mobile)
-  - Optimize for limited APIs; ensure popup/options UI renders and core detection works.
-- Packaging
-  - WebExtension manifest adjustments; AMO listing and signing.
-- Success criteria
-  - Feature parity for detection, reminders, voucher panel, and cashback activation on desktop; core flows on mobile.
+### Desktop Firefox
+
+**API Compatibility Assessment:**
+- ✅ **Storage API**: Full compatibility with `chrome.storage.local` and `chrome.storage.sync`
+- ✅ **Tabs API**: Full compatibility with `chrome.tabs` for tab management and URL updates
+- ✅ **WebNavigation API**: Full compatibility for navigation event detection
+- ✅ **Cookies API**: Full compatibility for session cookie observation
+- ✅ **Scripting API**: Full compatibility for content script injection
+- ✅ **Notifications API**: Full compatibility for user feedback
+- ❌ **Offscreen API**: Not supported in Firefox; use tab-based relay fallback
+- ✅ **Background Scripts**: Service worker support available (MV3 compatible)
+
+**Implementation Requirements:**
+- **Manifest adjustments**: Remove `offscreen` permission, ensure MV3 compatibility
+- **Relay system**: Use existing tab-based relay (already implemented with platform guards)
+- **Platform detection**: Leverage existing `getPlatform()` function (already detects Firefox)
+- **Auto-activation**: Firefox supports auto-redirects with user consent (already configured)
+- **Build system**: Use existing `webextension-polyfill` dependency for cross-browser compatibility
+
+**Technical Implementation:**
+```typescript
+// Platform guards already implemented in src/shared/platform.ts
+export function getPlatform(): Platform {
+  if (userAgent.includes('firefox')) return 'firefox'
+  // ... other platforms
+}
+
+// API compatibility already handled in src/background/api.ts
+function canCreateRelayTab(): boolean {
+  // Chrome only - Firefox uses tab-based relay
+  try { return !!(chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function' } catch { return false }
+}
+```
+
+### Android Firefox (Mobile)
+
+**API Limitations:**
+- ✅ **Core APIs**: Storage, tabs, webNavigation, cookies, scripting all supported
+- ✅ **Popup UI**: Full support for extension popup and options pages
+- ✅ **Content Scripts**: Full support for checkout detection and voucher panels
+- ⚠️ **Performance**: Optimize for mobile constraints (memory, battery)
+- ⚠️ **UI Adaptation**: Ensure popup renders correctly on mobile screens
+
+**Mobile Optimizations:**
+- Reduce memory footprint for background scripts
+- Optimize content script injection timing
+- Ensure popup dimensions work on mobile screens
+- Test voucher panel positioning on mobile viewports
+
+### Packaging and Distribution
+
+**AMO (Add-ons.mozilla.org) Requirements:**
+- **Manifest V3**: Firefox supports MV3 extensions (no conversion needed)
+- **Code Review**: Submit for AMO review and signing
+- **Privacy Policy**: Required for extensions with data collection
+- **Permissions Justification**: Document all permission usage (already documented in README.md)
+- **Source Code**: May be required for review (consider open-sourcing)
+
+**Build Process:**
+- Use existing Vite build system with `@crxjs/vite-plugin`
+- Generate Firefox-compatible manifest (remove `offscreen` permission)
+- Package as `.xpi` file for AMO submission
+- Test on Firefox Developer Edition and stable releases
+
+### Implementation Plan
+
+**Phase 1: Desktop Firefox (2-3 weeks)**
+1. **Week 1**: 
+   - Create Firefox-specific build configuration
+   - Remove `offscreen` permission from Firefox manifest
+   - Test all core functionality (detection, reminders, voucher panel, cashback activation)
+   - Verify platform guards work correctly
+
+2. **Week 2**:
+   - Comprehensive testing on Firefox Developer Edition
+   - Performance testing and optimization
+   - Fix any Firefox-specific issues
+   - Prepare AMO submission package
+
+3. **Week 3**:
+   - Submit to AMO for review
+   - Address any review feedback
+   - Prepare documentation and support materials
+
+**Phase 2: Mobile Firefox (1-2 weeks)**
+1. **Week 1**:
+   - Test on Firefox Mobile (Android)
+   - Optimize for mobile performance
+   - Ensure UI renders correctly on mobile screens
+   - Test core flows (detection, voucher panel, manual activation)
+
+2. **Week 2**:
+   - Performance optimization for mobile constraints
+   - Final testing and bug fixes
+   - Prepare mobile-specific documentation
+
+### Success Criteria
+
+**Desktop Firefox:**
+- ✅ Feature parity with Chrome: detection, reminders, voucher panel, cashback activation
+- ✅ No user-visible tab flashing (uses tab-based relay instead of offscreen)
+- ✅ Passes AMO review and gets published
+- ✅ All existing platform guards work correctly
+- ✅ Performance comparable to Chrome version
+
+**Mobile Firefox:**
+- ✅ Core flows work: detection, voucher panel, manual activation
+- ✅ Popup and options UI render correctly on mobile
+- ✅ Performance optimized for mobile constraints
+- ✅ No memory leaks or excessive battery usage
+
+**Distribution:**
+- ✅ Successfully published on AMO
+- ✅ Users can install and use without issues
+- ✅ Support documentation updated for Firefox users
+- ✅ Analytics track Firefox usage separately
+
+### Technical Notes
+
+**Existing Compatibility:**
+- Platform detection already implemented (`src/shared/platform.ts`)
+- Firefox auto-activation already configured (`allowsAutoRedirect()` returns true for Firefox)
+- Tab-based relay already implemented as fallback for non-Chrome browsers
+- `webextension-polyfill` already included in dependencies
+- All core APIs already compatible with Firefox
+
+**No Code Changes Required:**
+- Platform guards already handle Firefox detection
+- Relay system already falls back to tab-based for Firefox
+- Auto-activation already enabled for Firefox
+- All permissions already Firefox-compatible (except `offscreen`)
+
+**Build Configuration:**
+```typescript
+// vite.config.ts - add Firefox build target
+export default defineConfig({
+  plugins: [
+    react(),
+    crx({ manifest, ...chromeConfig }),
+    // Add Firefox-specific build
+    crx({ manifest: firefoxManifest, ...firefoxConfig })
+  ]
+})
+```
+
+**Risk Mitigation:**
+- Low risk: Most functionality already Firefox-compatible
+- Existing platform guards prevent Chrome-specific code from running on Firefox
+- Tab-based relay already tested and working
+- `webextension-polyfill` provides additional compatibility layer
 
 ---
 
@@ -133,7 +275,7 @@ Goal: Provide cross-browser reminders on Android using a local VPN service to ob
 - Success criteria
   - Works across all Android browsers; low battery impact; no content inspection; user can deep link to web/app flows.
 
-## 8) Explicit auto-activation consent per platform
+## 8) Disable auto-activation on Safari
 
 Status: Ready for refinement
 
@@ -218,22 +360,23 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
 
 ## 11) Enforce country-scoped deals (vouchers and online cashback)
 
-Problem: Deals from outside the user's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
+Problem: Deals from outside the visited site's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
 
 - Goal
-  - Restrict eligibility and presentation of deals to the user's effective country/locale for both vouchers and online cashback.
-- Country source of truth
-  - Derive from: signed-in profile country; else explicit setting in extension; else browser locale fallback.
-  - Persist in storage; allow override via Settings.
+  - Restrict eligibility and presentation of deals so that the visited domain's country matches the offer's country for both vouchers and online cashback.
+- Country source of truth (runtime)
+  - Primary: derive country from the visited URL/domain using domain/locale parsing (e.g., TLD `.nl`, path `/nl/`, brand-specific patterns).
+  - Secondary fallback (only when domain cannot be resolved): signed-in profile country; else explicit extension setting; else browser locale.
+  - Persist last derived country in storage for diagnostics; allow override via Settings for debugging.
 - Filtering and matching
-  - For vouchers: include only `GIFTCARD` where provider/country matches user country; exclude cross-country products (e.g., amazon.com for NL).
-  - For online cashback: include only `CASHBACK` with `usageType ONLINE` and matching `country` and domain/locale mapping.
-  - Maintain a domain→country/locale map (per partner) to avoid cross-locale hostnames (e.g., `.com` vs `.nl`).
+  - Vouchers (`GIFTCARD`): include only when the voucher's canonical product URL locale segment matches the visited domain country (e.g., product URL path `/nl-NL/giftcards-shop/...` → NL). Do not rely on a query parameter; country is conveyed via the locale path segment.
+  - Online cashback (`CASHBACK` with `usageType ONLINE`): include only when the deal's `country` matches the visited domain country (from domain/locale mapping).
+  - Maintain and use a domain→country/locale map (per partner) to avoid cross-locale hostnames (e.g., `.com` vs `.nl`) and to correctly interpret path-based locales (e.g., `nike.com/nl/en`).
 - UX
   - If a site is detected but only cross-country deals exist, show a neutral message: "No deals available for your country." Optionally offer a country switch entry point.
   - Respect real-time blacklist to suppress prompts on sensitive sites.
 - Analytics
-  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `user_country`, `flow` (voucher/oc).
+  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `visited_country`, `flow` (voucher/oc).
 - Success criteria
   - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
 
@@ -361,6 +504,252 @@ Completed: 2025-10-10 — commit `[TBD]` (feat: remove unused webRequest permiss
 - ✅ Analytics delivery unchanged (already event-driven)
 - ✅ No performance degradation or reliability issues
 
+## 16) Post-installation landing page
+
+Status: Ready for implementation
+
+Goal: Automatically open a welcome/landing page when users first install the extension to guide them through setup, explain features, and improve onboarding experience.
+
+- Trigger
+  - Use `chrome.runtime.onInstalled` event with `reason: "install"` to detect first-time installations.
+  - Differentiate from updates (`reason: "update"`) to avoid reopening on each update.
+- Landing page
+  - Open a dedicated page (e.g., `woolsocks.eu/welcome` or extension's options page with welcome flow).
+  - Include: feature overview, permissions explanation, setup instructions, login/signup prompt.
+  - Consider deep linking to specific sections based on installation context (e.g., user country, referral source).
+- UX considerations
+  - Open in new tab automatically after installation completes.
+  - Provide clear "Skip" or "Get started" options for user control.
+  - Track page views and interactions to measure onboarding effectiveness.
+- Platform differences
+  - Chrome: Full support for `onInstalled` event.
+  - Firefox: Full support for `onInstalled` event.
+  - Safari: Limited support; may require alternative approach (e.g., first popup open detection).
+- Analytics
+  - Track `extension_installed`, `landing_page_opened`, `landing_page_skipped`, `landing_page_completed` with platform, version, country.
+- Success criteria
+  - Landing page opens automatically on first install for Chrome/Firefox; alternative detection for Safari; >80% of new users see landing page; improved conversion to login/setup.
+
+---
+
+## 17) Grocery deals (supermarkets and drugstores)
+
+Status: Ready for refinement
+
+Goal: Show relevant grocery deals when users visit supported supermarket and drugstore websites, enabling them to discover in-store promotions and special offers for products they're interested in.
+
+- Merchant detection
+  - Detect visits to supported grocery merchants: supermarkets (e.g., Albert Heijn, Jumbo, Plus) and drugstores (e.g., Etos, Kruidvat, DA).
+  - Maintain a curated list of supported grocery domains per country.
+  - Use existing domain detection infrastructure with grocery-specific merchant classification.
+- Deal fetching and filtering
+  - Fetch grocery deals (`GROCERY` deal type) from API for detected merchant.
+  - Filter by user's country and merchant/partner match.
+  - Include deal metadata: product name, description, discount/offer details, validity period, images.
+  - Respect real-time blacklist to suppress prompts on sensitive pages.
+- UX presentation
+  - Show deals in extension popup or content panel when visiting supported grocery site.
+  - Display deal cards with: product image, title, discount info (e.g., "2 for €5", "30% off"), expiration date.
+  - Provide clear visual distinction from online cashback and voucher deals.
+  - Sort by relevance: expiration date, discount percentage, popularity.
+- Navigation and deep linking
+  - Clicking a deal opens `woolsocks.eu/deals/{dealId}` in new tab to view full details.
+  - Pass context parameters: `merchant`, `country`, `deal_type=grocery`, `source=extension`.
+  - Landing page shows full deal description, terms, availability, related products.
+- Deal categories and search
+  - Optionally support category filtering (e.g., dairy, snacks, personal care) if API provides categories.
+  - Consider keyword search or product name filtering for large deal sets.
+- Privacy and consent
+  - No tracking of specific products viewed or purchased in-store.
+  - Only track deal impressions and clicks at aggregate level.
+  - Respect platform policies for content injection and navigation.
+- Analytics
+  - Track `grocery_merchant_detected`, `grocery_deals_shown`, `grocery_deal_view`, `grocery_deal_click` with `domain`, `partner_name`, `deal_id`, `country`, `category`, `ext_version`.
+- Success criteria
+  - Grocery deals display on supported merchants; >70% of users interact with at least one grocery deal within first month; clear differentiation from other deal types; compliant with platform policies.
+
+---
+
+## 18) Autoreward detection and bank connection guidance
+
+Status: Ready for refinement
+
+Goal: Detect when users visit merchants that support autorewards (automatic cashback via connected bank accounts) and provide contextual guidance based on their bank connection status.
+
+- Merchant detection
+  - Detect visits to merchants offering autoreward deals (identified by `AUTOREWARD` deal type).
+  - Fetch autoreward availability from API based on domain and user's country.
+  - Include partner info: supported banks, reward rates, terms, minimum purchase requirements.
+  - Respect real-time blacklist to suppress prompts on sensitive pages.
+- Bank connection status check
+  - Query user's bank connection status from backend API (requires authentication).
+  - Retrieve connected bank details: bank name, account number (last 3-4 digits), connection validity.
+  - Cache connection status locally with short TTL (5-15 minutes) for performance.
+- UX flow: Not connected
+  - Show reminder panel or popup notification when visiting autoreward merchant.
+  - Message: "Earn automatic cashback here! Download the Woolsocks app and connect your bank to get started."
+  - Primary action: Deep link to app download (App Store/Play Store) or direct app open if installed.
+  - Secondary action: "Learn more" → opens `woolsocks.eu/autorewards` explaining the feature.
+  - Include visual: bank connection illustration, reward rate preview.
+- UX flow: Connected
+  - Show guidance panel with activation instructions when visiting autoreward merchant.
+  - Message: "Earn [X]% cashback automatically! Pay with your connected [Bank Name] account ending in ...123 to activate."
+  - Include: merchant logo, reward rate, purchase requirements (if any), expected reward timeframe.
+  - Optional action: "View details" → opens `woolsocks.eu/autorewards/{dealId}` with full terms.
+  - Show success state if recent purchase detected (if API provides confirmation).
+- Deep linking and app integration
+  - Link to app with context: `woolsocks://autorewards/connect?merchant={merchantId}&source=extension`.
+  - On mobile browsers, use universal links for seamless app opening.
+  - On desktop, show QR code or SMS link to continue on mobile device.
+- Platform considerations
+  - Desktop: Show QR code or app download link for mobile app connection flow.
+  - Mobile web: Direct deep link to app with fallback to app store.
+  - App group/shared storage: Sync connection status between app and extension (iOS/Safari).
+- Privacy and security
+  - Never expose full account numbers; only show last 3-4 digits for verification.
+  - Bank connection managed exclusively by app backend; extension only displays status.
+  - Clear messaging about data usage and PSD2/Open Banking compliance.
+  - Provide "disconnect bank" option in app settings with clear consequences.
+- Multiple bank accounts
+  - If user has multiple connected banks, show applicable ones for current merchant.
+  - Allow selection if merchant supports multiple banks: "Pay with [Bank A ...123] or [Bank B ...456]".
+- Analytics
+  - Track `autoreward_detected`, `autoreward_not_connected_shown`, `autoreward_connected_shown`, `autoreward_app_link_clicked`, `autoreward_detail_view` with `domain`, `partner_name`, `deal_id`, `bank_status`, `bank_name`, `country`, `ext_version`.
+- Success criteria
+  - Autoreward merchants detected reliably; bank connection status accurate with <5s latency; clear differentiation between connected/not-connected UX; >40% conversion from "not connected" prompt to app download/open; compliant with banking regulations and platform policies.
+
+---
+
+## 19) In-extension merchant search and navigation
+
+Status: Ready for implementation
+
+Goal: Allow users to search for merchants directly within the extension popup and navigate to their websites with a single click, enabling proactive discovery of cashback opportunities.
+
+- Search interface
+  - Add search input field in extension popup (prominent placement, e.g., top of popup).
+  - Support real-time search with debounced input (300ms delay to reduce API calls).
+  - Display search results as a list below the input field.
+  - Show "no results" state with suggestions or popular merchants when query yields nothing.
+- Merchant search API
+  - Query merchant/partner search endpoint with user's search term and country.
+  - Filter results by user's country to show only eligible merchants.
+  - Return merchant metadata: name, logo, domain, available deal types (cashback/voucher/grocery/autoreward), rates.
+  - Support fuzzy matching and autocomplete suggestions for better UX.
+  - Cache popular/recent searches locally for instant results.
+- Search result display
+  - Show merchant cards with: logo, name, cashback rate (e.g., "Up to 5% cashback"), deal types (icons/badges).
+  - Indicate deal availability: "Online cashback", "Vouchers", "Grocery deals", "Autorewards".
+  - Highlight best rate or special promotion if applicable (e.g., "Increased rate: 10%!").
+  - Sort results by relevance: exact name match first, then by popularity/rate.
+- Navigation and activation
+  - Clicking a merchant card opens the merchant's website in current or new tab.
+  - If online cashback is available and auto-activation is enabled, trigger activation flow.
+  - If vouchers are available, optionally show voucher panel after navigation.
+  - Pass tracking parameters for attribution: `utm_source=woolsocks_extension&utm_medium=merchant_search`.
+- Search features
+  - Recent searches: Show last 3-5 searched merchants for quick access.
+  - Popular merchants: Display top merchants by country when search is empty.
+  - Category filters: Optionally filter by category (e.g., fashion, electronics, travel, grocery).
+  - Favorites/bookmarks: Allow users to star favorite merchants for quick access.
+- UX considerations
+  - Keyboard navigation: arrow keys to navigate results, Enter to open selected merchant.
+  - Clear search button: quick way to reset and start new search.
+  - Loading states: show skeleton/spinner while fetching results.
+  - Error handling: graceful fallback if API fails (show cached/popular merchants).
+- Platform consistency
+  - Works identically on Chrome, Firefox, Safari extensions.
+  - Mobile-optimized for Firefox Mobile and Safari iOS (touch-friendly).
+- Privacy
+  - Search queries not logged server-side unless explicitly stated for analytics.
+  - Clear opt-in for search history/suggestions.
+  - Provide "Clear search history" option in settings.
+- Analytics
+  - Track `merchant_search_query`, `merchant_search_results`, `merchant_search_click`, `merchant_search_no_results` with `query`, `result_count`, `merchant_name`, `position`, `deal_types`, `country`, `ext_version`.
+- Success criteria
+  - Search responds within <500ms for most queries; >60% of searches result in merchant click; keyboard navigation works smoothly; feature used by >30% of active users within first month; compliant with platform policies.
+
+---
+
+## 20) AI-powered price comparison on product pages
+
+Status: Ready for refinement
+
+Goal: When users visit e-commerce product pages, automatically detect the product and show alternative prices at other stores, including cashback opportunities, to help users find the best total deal.
+
+- Product page detection
+  - Detect when user is on a product detail page (vs. category/listing/homepage).
+  - Use heuristics: URL patterns (`/product/`, `/p/`, `/item/`), structured data (JSON-LD, microdata), page layout signals.
+  - Maintain per-merchant detection rules for major retailers to improve accuracy.
+  - Respect real-time blacklist to suppress price comparison on sensitive pages.
+- Product information extraction
+  - Extract product details from page: title, brand, model number, SKU, EAN/UPC/GTIN, price, images.
+  - Parse structured data: Schema.org Product markup, Open Graph tags, merchant-specific meta tags.
+  - Use AI/ML for fallback extraction when structured data unavailable: title from H1/product name element, price from price element, attributes from description.
+  - Normalize product names and remove merchant-specific formatting.
+- AI-powered product matching
+  - Send extracted product data to backend AI service for cross-store matching.
+  - Use embeddings/semantic search to find identical or highly similar products across partner stores.
+  - Match on multiple signals: exact EAN/GTIN match (highest confidence), brand + model number, normalized title similarity, image similarity, attribute matching.
+  - Filter by product category to reduce false positives (e.g., don't match clothing with electronics).
+  - Return confidence scores for each match (high/medium/low).
+- Price comparison API
+  - Query backend API with product identifiers and user's country.
+  - Fetch prices from partner stores for matched products.
+  - Include: store name, product URL, current price, original price (if on sale), stock availability, shipping costs (if available).
+  - Integrate cashback/voucher data: cashback rate, available vouchers, net price after cashback.
+  - Return results sorted by best total value (price - cashback).
+- UX presentation
+  - Show price comparison panel/card in popup or injected content panel on page.
+  - Display comparison table/cards with: store logo, product name, price, cashback rate, total cost after cashback.
+  - Highlight best deal: "Best price" or "Best value with cashback" badge.
+  - Show price difference: "€5 cheaper" or "Same price + 3% cashback".
+  - Include product image thumbnail for visual confirmation of match.
+  - Sort options: lowest price, best value (price - cashback), highest cashback.
+- Navigation and activation
+  - Clicking an alternative store opens product page in new tab.
+  - If cashback is available and auto-activation enabled, trigger activation flow.
+  - Pass tracking parameters: `utm_source=woolsocks_extension&utm_medium=price_comparison&utm_campaign=product_match`.
+- Match confidence and user feedback
+  - Show confidence indicator for matches: "Exact match", "Very similar", "Similar product".
+  - Allow user to report incorrect matches: "Not the same product" feedback button.
+  - Use feedback to improve AI matching model over time.
+  - Option to manually search for product if auto-match fails.
+- Performance and efficiency
+  - Cache product matches for 24 hours (product IDs → match results).
+  - Only trigger price check when user shows interest: hover over extension icon, open popup, or after 5s dwell time on page.
+  - Debounce repeated checks on same product page (single check per session).
+  - Set timeout for AI matching (3-5 seconds); show partial results if available.
+- Merchant coverage
+  - Start with major e-commerce partners where product data is structured and reliable.
+  - Gradually expand to smaller merchants as detection/extraction improves.
+  - Maintain merchant-specific extractors for popular stores with unique markup.
+- Privacy and consent
+  - Clear opt-in during onboarding: "Help me find better prices with AI-powered comparison".
+  - Product data sent to backend only for matching; not stored permanently or shared.
+  - Option to disable price comparison per site or globally in settings.
+  - Transparent about AI usage and data handling in privacy policy.
+- Edge cases and limitations
+  - Handle products with variants (size, color): try to match exact variant or show closest match with variant notice.
+  - Handle region-specific products: only compare within user's country/region.
+  - Handle marketplace listings: aggregate prices or show primary seller.
+  - Show "No alternatives found" state gracefully with option to search manually.
+- Platform considerations
+  - Chrome/Firefox: Full functionality with content scripts and AI backend.
+  - Safari: Comply with App Store review guidelines; ensure no automatic data collection without consent.
+  - Mobile: Optimize UI for smaller screens; consider simplified comparison view.
+- Backend AI service
+  - Product matching model: fine-tuned transformer or embedding model for product similarity.
+  - Training data: historical product catalogs, EAN/GTIN databases, user feedback on matches.
+  - API design: `/api/v0/price-comparison/match` with product data → returns matched products + prices.
+  - Scalability: caching, rate limiting per user, fallback to simpler matching if AI service unavailable.
+- Analytics
+  - Track `price_comparison_triggered`, `price_comparison_shown`, `price_comparison_alternative_click`, `price_comparison_best_deal_click`, `price_comparison_feedback` with `source_merchant`, `source_price`, `target_merchant`, `target_price`, `cashback_rate`, `price_difference`, `match_confidence`, `country`, `ext_version`.
+- Success criteria
+  - Product detection accuracy >85% on supported merchants; AI matching precision >90% for "exact match" confidence; >50% of comparisons show at least 2 alternatives; >30% of users click alternative store from comparison; <3s avg response time for price check; compliant with platform policies and privacy regulations.
+
+---
+
 ## Completed items
 
 ### 2) Voucher analytics (events only)
@@ -407,6 +796,7 @@ Status: Backlog (triage weekly)
 - Countdown UI: Ensure consistent spacing and cancel alignment across sites
 - Popup/options: Ensure language fallback uses browser locale when not logged in (done; monitor)
 - Asset usage: Use correct illustration `Chillin girl.png` in activation card (done)
+- Lokalise: Spanish (es) translation upload fails with 403 permission error (investigate Lokalise permissions; translations work correctly in extension builds)
 
 Success criteria
 - All onboarding screens render consistently in popup dimensions

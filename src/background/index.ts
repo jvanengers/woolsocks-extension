@@ -1,5 +1,6 @@
 // Background service worker: URL detection, icon state, messaging
 import { getPartnerByHostname, getAllPartners, refreshDeals, initializeScraper, setupScrapingSchedule, getUserLanguage, hasActiveSession, resetCachedUserId } from './api.ts'
+import { getCountryForDomain, getVoucherLocaleForCountry } from './partners-config'
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
@@ -61,17 +62,61 @@ const ICONS: Record<IconState, IconPaths> = {
 }
 
 function setIcon(state: IconState, tabId?: number) {
-  const path = ICONS[state] || ICONS.neutral
-  const titleMap: Record<IconState, string> = {
-    neutral: t().icons.noDeals,
-    available: t().icons.cashbackAvailable,
-    active: t().icons.cashbackActive,
-    voucher: t().icons.voucherAvailable,
-    error: t().icons.attentionNeeded,
+  try {
+    console.log(`[WS Icon] setIcon called with state=${state}, tabId=${tabId}`)
+    
+    const path = ICONS[state] || ICONS.neutral
+    console.log(`[WS Icon] Icon path resolved:`, path)
+    
+    let titleMap: Record<IconState, string>
+    try {
+      titleMap = {
+        neutral: t().icons.noDeals,
+        available: t().icons.cashbackAvailable,
+        active: t().icons.cashbackActive,
+        voucher: t().icons.voucherAvailable,
+        error: t().icons.attentionNeeded,
+      }
+    } catch (err) {
+      console.warn(`[WS Icon] Failed to get translated titles, using fallbacks:`, err)
+      titleMap = {
+        neutral: 'No deals',
+        available: 'Cashback available',
+        active: 'Cashback active',
+        voucher: 'Voucher available',
+        error: 'Attention needed',
+      }
+    }
+    
+    console.log(`[WS Icon] Setting icon to ${state} for tab ${tabId || 'all'}`)
+    
+    // Firefox MV2 browserAction.setIcon() returns a Promise, not a callback
+    // Chrome action.setIcon() supports both callback and Promise
+    try {
+      const result = chrome.action.setIcon({ path: path as any, tabId })
+      if (result && typeof result.then === 'function') {
+        // Promise-based (Firefox)
+        result.then(() => {
+          console.log(`[WS Icon] Successfully set icon to ${state} (Promise)`)
+        }).catch((err: any) => {
+          console.error(`[WS Icon] Failed to set icon to ${state} (Promise):`, err)
+        })
+      } else {
+        // Callback-based (Chrome) - callback already provided above
+        console.log(`[WS Icon] Icon set call completed (callback-based)`)
+      }
+    } catch (err) {
+      console.error(`[WS Icon] Exception calling setIcon:`, err)
+    }
+    
+    try {
+      chrome.action.setTitle({ title: titleMap[state], tabId })
+    } catch (err) {
+      console.error(`[WS Icon] Exception calling setTitle:`, err)
+    }
+  } catch (err) {
+    console.error(`[WS Icon] Exception in setIcon:`, err)
   }
-  // Pass multi-size path map when available; Chrome will pick best size
-  chrome.action.setIcon({ path: path as any, tabId })
-  chrome.action.setTitle({ title: titleMap[state], tabId })
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -116,6 +161,16 @@ chrome.runtime.onStartup?.addListener(async () => {
   }
   // Ensure online cashback flow is active when service worker wakes up
   try { setupOnlineCashbackFlow(setIcon) } catch {}
+  
+  // Store current active tab for popup (Firefox workaround)
+  try {
+    const tabs = await chrome.tabs.query({ active: true })
+    if (tabs && tabs.length > 0) {
+      await storeCurrentTabInfo(tabs[0])
+    }
+  } catch (err) {
+    console.error('[WS] Failed to store active tab on startup:', err)
+  }
 })
 
 // Ensure the online cashback flow is registered even if neither onInstalled nor onStartup fire
@@ -127,6 +182,16 @@ function ensureOcFlowRegistered() {
 }
 // Call immediately at top-level so webNavigation listeners are attached as soon as the SW starts
 ensureOcFlowRegistered()
+
+// Also store the current active tab immediately on load (Firefox workaround)
+;(async () => {
+  try {
+    const tabs = await chrome.tabs.query({ active: true })
+    if (tabs && tabs.length > 0) {
+      await storeCurrentTabInfo(tabs[0])
+    }
+  } catch {}
+})()
 
 // Domains where the extension should never trigger
 const EXCLUDED_DOMAINS = [
@@ -234,14 +299,35 @@ async function evaluateTab(tabId: number, url?: string | null) {
   }
 }
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' || changeInfo.url) {
+    // Store current tab info for popup (Firefox workaround)
+    if (tab.active) {
+      await storeCurrentTabInfo(tab)
+    }
     evaluateTab(tabId, changeInfo.url ?? tab.url)
   }
 })
 
+// Helper to store current tab info
+async function storeCurrentTabInfo(tab: chrome.tabs.Tab) {
+  if (tab.url && !tab.url.startsWith('moz-extension://') && !tab.url.startsWith('chrome-extension://')) {
+    try {
+      await chrome.storage.local.set({ 
+        __wsCurrentTabUrl: tab.url,
+        __wsCurrentTabId: tab.id,
+        __wsCurrentTabUpdated: Date.now()
+      })
+      console.log('[WS] Stored current tab:', tab.url)
+    } catch (err) {
+      console.error('[WS] Failed to store tab info:', err)
+    }
+  }
+}
+
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   const tab = await chrome.tabs.get(activeInfo.tabId)
+  await storeCurrentTabInfo(tab)
   await evaluateTab(activeInfo.tabId, tab.url)
 })
 
@@ -351,9 +437,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true })
     return false
   } else if (message?.type === 'CHECK_MERCHANT_SUPPORT') {
+    console.log('[WS] CHECK_MERCHANT_SUPPORT request for:', message.hostname)
     ;(async () => {
-      const partner = await getPartnerByHostname(message.hostname)
-      sendResponse({ supported: !!partner, partner })
+      try {
+        const partner = await getPartnerByHostname(message.hostname)
+        console.log('[WS] Partner found:', partner ? partner.name : 'none')
+        if (partner) {
+          console.log('[WS] Partner categories:', partner.categories?.map(c => c.name))
+        }
+        const result = { supported: !!partner, partner }
+        // Store for Firefox MV2 workaround
+        await chrome.storage.local.set({ 
+          __wsMerchantSupport: result,
+          __wsMerchantSupportHostname: message.hostname,
+          __wsMerchantSupportUpdated: Date.now()
+        })
+        sendResponse(result)
+        console.log('[WS] Merchant support response sent')
+      } catch (err) {
+        console.error('[WS] Error checking merchant support:', err)
+        sendResponse({ supported: false, partner: null })
+      }
     })()
     return true
   } else if (message?.type === 'CHECK_CASHBACK_STATUS') {
@@ -449,12 +553,98 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse(data)
     })()
     return true
-  } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
+  } else if (message?.type === 'GET_CURRENT_TAB') {
+    // Firefox MV2 workaround: popup can't reliably query tabs, so background does it
+    console.log('[WS] GET_CURRENT_TAB request received')
     ;(async () => {
-      const active = await hasActiveSession()
-      sendResponse({ active })
+      try {
+        let tabs = await chrome.tabs.query({ active: true })
+        console.log('[WS] Query result:', tabs ? `${tabs.length} tabs` : 'undefined')
+        
+        // Firefox may return undefined, try to get all tabs and filter
+        if (!tabs || !Array.isArray(tabs) || tabs.length === 0) {
+          console.log('[WS] No tabs from active:true, trying to get all tabs...')
+          const allTabs = await chrome.tabs.query({})
+          console.log('[WS] All tabs found:', allTabs ? allTabs.length : 'undefined')
+          if (allTabs && Array.isArray(allTabs)) {
+            console.log('[WS] All tab URLs:', allTabs.map(t => ({ id: t.id, url: t.url, active: t.active })))
+          }
+          tabs = (allTabs && Array.isArray(allTabs)) ? allTabs.filter(t => t.active) : []
+          console.log('[WS] Found', tabs.length, 'active tabs from all tabs')
+        }
+        
+        console.log('[WS] Tabs before filtering:', tabs ? tabs.map(t => ({ id: t.id, url: t.url, active: t.active })) : 'undefined')
+        
+        const activeTab = tabs && Array.isArray(tabs) 
+          ? tabs.find(t => t.url && !t.url.startsWith('moz-extension://') && !t.url.startsWith('chrome-extension://'))
+          : null
+          
+        console.log('[WS] Active tab after filtering:', activeTab ? { id: activeTab.id, url: activeTab.url } : 'null')
+          
+        if (activeTab) {
+          console.log('[WS] Found active tab:', activeTab.url)
+          await storeCurrentTabInfo(activeTab)
+          sendResponse({ url: activeTab.url, id: activeTab.id })
+        } else {
+          console.warn('[WS] No active tab found via query, falling back to stored tab info')
+          // Fallback: return stored tab info if query fails
+          const stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabId', '__wsCurrentTabUpdated'])
+          if (stored.__wsCurrentTabUrl && stored.__wsCurrentTabUpdated) {
+            const age = Date.now() - stored.__wsCurrentTabUpdated
+            if (age < 30000) { // Use if less than 30 seconds old
+              console.log('[WS] Using stored tab info:', stored.__wsCurrentTabUrl, `(${Math.round(age)}ms old)`)
+              sendResponse({ url: stored.__wsCurrentTabUrl, id: stored.__wsCurrentTabId })
+            } else {
+              console.warn('[WS] Stored tab info too old:', age / 1000, 'seconds')
+              sendResponse({ url: null, id: null })
+            }
+          } else {
+            console.warn('[WS] No stored tab info available')
+            sendResponse({ url: null, id: null })
+          }
+        }
+      } catch (err) {
+        console.error('[WS] Error getting current tab:', err)
+        // Fallback: return stored tab info on error
+        try {
+          const stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabId', '__wsCurrentTabUpdated'])
+          if (stored.__wsCurrentTabUrl && stored.__wsCurrentTabUpdated) {
+            const age = Date.now() - stored.__wsCurrentTabUpdated
+            if (age < 30000) {
+              console.log('[WS] Using stored tab info after error:', stored.__wsCurrentTabUrl)
+              sendResponse({ url: stored.__wsCurrentTabUrl, id: stored.__wsCurrentTabId })
+            } else {
+              sendResponse({ url: null, id: null })
+            }
+          } else {
+            sendResponse({ url: null, id: null })
+          }
+        } catch {
+          sendResponse({ url: null, id: null })
+        }
+      }
     })()
     return true
+  } else if (message?.type === 'CHECK_ACTIVE_SESSION') {
+    // Check session asynchronously
+    // Firefox MV2 has issues with sendResponse() in async handlers,
+    // so we store the result and let the popup read it
+    console.log('[WS] CHECK_ACTIVE_SESSION request received')
+    ;(async () => {
+      try {
+        const active = await hasActiveSession()
+        console.log('[WS] hasActiveSession result:', active)
+        // Store session state for popup to read
+        await chrome.storage.local.set({ __wsSessionActive: active, __wsSessionCheckedAt: Date.now() })
+        sendResponse({ active })
+        console.log('[WS] Response sent successfully')
+      } catch (err) {
+        console.error('[WS] hasActiveSession error:', err)
+        await chrome.storage.local.set({ __wsSessionActive: false, __wsSessionCheckedAt: Date.now() })
+        sendResponse({ active: false })
+      }
+    })()
+    return true // Keep message channel open for async response
   } else if (message?.type === 'REQUEST_ACTIVATION_STATE') {
     try {
       const { domain } = message
@@ -464,6 +654,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     } catch {
       sendResponse({ active: false })
     }
+    return true
+  } else if (message?.type === 'REQUEST_VISITED_COUNTRY') {
+    ;(async () => {
+      try {
+        const { domain } = message
+        const country = await getCountryForDomain(domain || '')
+        sendResponse({ country })
+      } catch (e) {
+        sendResponse({ country: null })
+      }
+    })()
     return true
   } else if (message?.type === 'REFRESH_PARTNERS') {
     ;(async () => {
@@ -739,6 +940,44 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
   const checkoutTotal = checkoutInfo.total
   
   console.log(translate('debug.showingOffer', { name: partner.name, rate: String(partner.cashbackRate) }))
+
+  // --- Country-scoped voucher filtering and locale-aware URL building -------
+  try {
+    const visitedCountry = await getCountryForDomain(checkoutInfo.merchant)
+    const userLang = (await getUserLanguage().catch(() => 'nl-NL')) || 'nl-NL'
+    const locale = getVoucherLocaleForCountry(visitedCountry, userLang)
+    const voucherCat = Array.isArray(partner.categories)
+      ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
+      : null
+    if (voucherCat && Array.isArray(voucherCat.deals)) {
+      const beforeCount = voucherCat.deals.length
+      const filtered = voucherCat.deals.filter((d: any) => {
+        const dc = String((d as any).voucherCountry || d.country || '').toUpperCase()
+        if (!dc) return false
+        const match = dc === String(visitedCountry).toUpperCase()
+        if (!match) {
+          try { track('voucher_country_filtered_out', { domain: checkoutInfo.merchant, visited_country: visitedCountry, deal_country: dc }) } catch {}
+        }
+        return match
+      })
+      // Update dealUrl with correct locale
+      const withUrls = filtered.map((d: any) => {
+        try {
+          const pid = d?.providerReferenceId || d?.productId || d?.id
+          if (pid) d.dealUrl = `https://woolsocks.eu/${locale}/giftcards-shop/products/${encodeURIComponent(String(pid))}`
+          else if (typeof d?.dealUrl === 'string') {
+            const m = String(d.dealUrl).match(/products\/([A-Za-z0-9-]{8,})/)
+            if (m && m[1]) d.dealUrl = `https://woolsocks.eu/${locale}/giftcards-shop/products/${m[1]}`
+          }
+        } catch {}
+        return d
+      })
+      ;(voucherCat as any).deals = withUrls
+      if (beforeCount && withUrls.length === 0) {
+        try { track('deal_country_mismatch', { domain: checkoutInfo.merchant, visited_country: visitedCountry, flow: 'voucher' }) } catch {}
+      }
+    }
+  } catch {}
   
   // Inject translations into page context first (MAIN world)
   const asset = (p: string) => chrome.runtime.getURL(p)
@@ -944,8 +1183,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
 
       <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
         <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
+          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
         </div>
         ${hasMultipleVouchers ? `
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
@@ -995,13 +1234,13 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
         `}
 
         <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
-          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
+          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
+          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
         </div>
 
         <div style="display: flex; align-items: center;">
-          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: Woolsocks, sans-serif; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
+          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
             <span>${translations.voucher.viewDetails}</span>
             ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
           </button>
@@ -1386,8 +1625,8 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     minimizedBanner.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: space-between; padding-left: 0; padding-right: 8px; padding-top: 0; padding-bottom: 0; width: 100%; height: 32px;">
         <div style="display: flex; gap: 4px; align-items: center; padding: 0 2px;">
-          <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; font-family: Woolsocks, sans-serif; font-size: 16px; font-weight: 400; line-height: 1.45; white-space: nowrap;">€${cashbackAmount}</div>
-          <div style="font-family: Woolsocks, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.45; color: #100B1C; letter-spacing: 0.1px; white-space: nowrap;">Savings available at ${hostForLabel}</div>
+          <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-weight: 400; line-height: 1.45; white-space: nowrap;">€${cashbackAmount}</div>
+          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.45; color: #100B1C; letter-spacing: 0.1px; white-space: nowrap;">Savings available at ${hostForLabel}</div>
         </div>
         <div aria-hidden="true" style="display:flex; align-items:center; justify-content:center; width: 32px; height: 32px;">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">

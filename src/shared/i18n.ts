@@ -186,14 +186,14 @@ const translations: Record<Language, Translations> = {
       activationContent: 'Click the extension icon or the popup to activate cashback. The icon turns green when active.',
       activationTitle: 'Activate Cashback',
       askMeEachTime: 'Ask me each time',
-      askMeEachTimeDescription: 'Show activation button, I\\\'ll click when I want cashback',
+      askMeEachTimeDescription: 'Show activation button, I\'ll click when I want cashback',
       automaticWithCountdown: 'Automatic',
       automaticWithCountdownDescription: 'Auto-redirect with 3-second countdown and cancel option',
       cashbackActivationContent: 'How would you like to activate cashback when you visit partner stores?',
       cashbackActivationTitle: 'Cashback Activation',
       cashbackContent: 'When you visit partner sites like Amazon or Zalando, our icon will turn yellow to show cashback is available.',
       cashbackTitle: 'Cashback Detection',
-      dontRemindMe: 'Don\\\'t remind me',
+      dontRemindMe: 'Don\'t remind me',
       dontRemindMeDescription: 'No cashback detection or reminders',
       finish: 'Finish',
       next: 'Next',
@@ -517,8 +517,8 @@ const translations: Record<Language, Translations> = {
       noMerchant: 'Aucun marchand trouvé dans le système Woolsocks pour: %1$s',
       noVouchers: 'Aucun bon disponible pour le marchand: %1$s',
       partnerData: 'Données du partenaire:',
-      scriptInjected: 'Script de paiement universel injecté pour l\\\'onglet %1$s sur %1$s',
-      showingOffer: 'Affichage de l\\\'offre de bon pour %1$s avec %1$s% de cashback'
+      scriptInjected: 'Script de paiement universel injecté pour l\'onglet %1$s sur %1$s',
+      showingOffer: 'Affichage de l\'offre de bon pour %1$s avec %1$s% de cashback'
     },
     icons: {
       attentionNeeded: 'Attention nécessaire',
@@ -543,16 +543,16 @@ const translations: Record<Language, Translations> = {
       noDealsFound: 'Aucune offre trouvée',
       settingUpFor: 'Configuration du suivi cashback pour %1$s',
       shopAndPayNormally: 'Achetez et payez normalement',
-      signupLogin: 'S\\\'inscrire / Se connecter',
+      signupLogin: 'S\'inscrire / Se connecter',
       viewConditions: 'Voir les conditions'
     },
     onboarding: {
-      activationContent: 'Cliquez sur l\\\'icône de l\\\'extension ou la popup pour activer le cashback. L\\\'icône devient verte quand elle est active.',
+      activationContent: 'Cliquez sur l\'icône de l\'extension ou la popup pour activer le cashback. L\'icône devient verte quand elle est active.',
       activationTitle: 'Activer le cashback',
       askMeEachTime: 'Me demander à chaque fois',
-      askMeEachTimeDescription: 'Afficher le bouton d\\\'activation, je clique quand je veux du cashback',
+      askMeEachTimeDescription: 'Afficher le bouton d\'activation, je clique quand je veux du cashback',
       automaticWithCountdown: 'Automatique',
-      automaticWithCountdownDescription: 'Redirection automatique avec compte à rebours de 3 secondes et option d\\\'annulation',
+      automaticWithCountdownDescription: 'Redirection automatique avec compte à rebours de 3 secondes et option d\'annulation',
       cashbackActivationContent: 'Comment souhaitez-vous activer le cashback lorsque vous visitez des magasins partenaires ?',
       cashbackActivationTitle: 'Activation du cashback',
       cashbackContent: 'Lorsque vous visitez des sites partenaires comme Amazon ou Zalando, notre icône devient jaune pour indiquer que le cashback est disponible.',
@@ -566,7 +566,7 @@ const translations: Record<Language, Translations> = {
       skip: 'Passer',
       vouchersContent: 'À la caisse, nous suggérons des cartes cadeaux qui vous donnent un cashback instantané sur votre achat.',
       vouchersTitle: 'Économies avec les cartes cadeaux',
-      welcomeContent: 'Ne ratez plus jamais de cashback. Cette extension vous aide à récupérer de l\\\'argent sur vos achats en ligne.',
+      welcomeContent: 'Ne ratez plus jamais de cashback. Cette extension vous aide à récupérer de l\'argent sur vos achats en ligne.',
       welcomeTitle: 'Bienvenue chez Woolsocks !'
     },
     options: {
@@ -581,7 +581,7 @@ const translations: Record<Language, Translations> = {
       enabled: 'Activé',
       greeting: 'Salut %1$s 👋',
       loginAtWs: 'Se connecter à Woolsocks',
-      manualActivationDescription: 'Afficher le bouton d\\\'activation, vous cliquez quand vous voulez du cashback',
+      manualActivationDescription: 'Afficher le bouton d\'activation, vous cliquez quand vous voulez du cashback',
       myCashbackTransactions: 'Mes transactions de cashback',
       noActiveSession: 'Aucune session active',
       noRecentTransactions: 'Aucune transaction récente',
@@ -615,13 +615,13 @@ const translations: Record<Language, Translations> = {
     voucher: {
       cashbackSuffix: ' de cashback',
       cashbackText: 'Vous obtenez ',
-      footer: 'Woolsocks - l\\\'application argent',
+      footer: 'Woolsocks - l\'application argent',
       instructions: 'Achetez le bon sur Woolsocks.eu et entrez le code du bon lors du paiement.',
       notNow: 'Pas maintenant',
-      purchaseAmount: 'Montant d\\\'achat',
+      purchaseAmount: 'Montant d\'achat',
       title: 'Bon',
       usps: {
-        cashbackOnPurchase: '% de cashback sur l\\\'achat',
+        cashbackOnPurchase: '% de cashback sur l\'achat',
         instantDelivery: 'Livraison instantanée',
         useOnlineAtCheckout: 'Utiliser en ligne lors du paiement'
       },
@@ -664,7 +664,7 @@ const translations: Record<Language, Translations> = {
       viewConditions: 'Visualizza condizioni'
     },
     onboarding: {
-      activationContent: 'Clicca sull\\\'icona dell\\\'estensione o sul popup per attivare il cashback. L\\\'icona diventa verde quando è attiva.',
+      activationContent: 'Clicca sull\'icona dell\'estensione o sul popup per attivare il cashback. L\'icona diventa verde quando è attiva.',
       activationTitle: 'Attiva cashback',
       askMeEachTime: 'Chiedimi ogni volta',
       askMeEachTimeDescription: 'Mostra il pulsante di attivazione, clicco quando voglio cashback',
@@ -732,13 +732,13 @@ const translations: Record<Language, Translations> = {
     voucher: {
       cashbackSuffix: ' di cashback',
       cashbackText: 'Riceverai ',
-      footer: 'Woolsocks - l\\\'app del denaro',
+      footer: 'Woolsocks - l\'app del denaro',
       instructions: 'Acquista il voucher su Woolsocks.eu e inserisci il codice voucher al momento del pagamento.',
       notNow: 'Non ora',
-      purchaseAmount: 'Importo dell\\\'acquisto',
+      purchaseAmount: 'Importo dell\'acquisto',
       title: 'Voucher',
       usps: {
-        cashbackOnPurchase: '% di cashback sull\\\'acquisto',
+        cashbackOnPurchase: '% di cashback sull\'acquisto',
         instantDelivery: 'Consegna istantanea',
         useOnlineAtCheckout: 'Usa online al momento del pagamento'
       },

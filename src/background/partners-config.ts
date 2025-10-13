@@ -610,3 +610,21 @@ export async function getPartnerConfigStats(): Promise<{
     }
   }
 }
+
+// --- Voucher locale helpers --------------------------------------------------
+
+/**
+ * Map a country code to a voucher locale string using a preferred language.
+ * Language is flexible (e.g., nl,de,fr,en,es,it) and combined with country (ES, FR, IT, IE, DE, BE, NL).
+ * Examples: de-DE, nl-BE, es-ES. Falls back to en-<COUNTRY> if language is missing.
+ */
+export function getVoucherLocaleForCountry(country: string, preferredLanguage?: string | null): string {
+  const countryCode = String(country || 'NL').toUpperCase()
+  const langRaw = (preferredLanguage || '').toString()
+  // Accept forms like "nl" or "nl-NL"; prefer the language subtag before '-'
+  const lang = (langRaw.split('-')[0] || '').trim().toLowerCase() || 'en'
+  return `${lang}-${countryCode}`
+}
+
+/** Supported voucher countries (expandable). */
+export const SUPPORTED_VOUCHER_COUNTRIES: ReadonlyArray<string> = ['NL', 'DE', 'FR', 'ES', 'IT', 'IE', 'BE']

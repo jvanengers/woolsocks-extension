@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { translate, initLanguage, translateTransactionStatus } from '../shared/i18n'
+import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 
 type WsProfile = any
 type WsTransaction = any
@@ -113,6 +114,10 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
   useEffect(() => {
     try { initLanguage() } catch {}
+    
+    // Load Woolsocks fonts
+    loadWoolsocksFonts().catch(console.warn)
+    
     checkSession().then((has) => {
       setSession(has)
       if (has) {
@@ -260,7 +265,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       padding: variant === 'popup' ? 0 : 16, 
       borderRadius: variant === 'popup' ? 0 : 12, 
       background: variant === 'popup' ? '#F5F5F6' : '#fff', 
-      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+      fontFamily: getWoolsocksFontFamily(),
       minHeight: variant === 'popup' ? 'auto' : 'auto'
     }}>
 
@@ -326,7 +331,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                 padding: '16px 8px 6px 8px'
               }}>
                 <h1 style={{ 
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: getWoolsocksFontFamily(),
                   fontSize: 16, 
                   fontWeight: 500, 
                   color: '#100B1C',
@@ -403,7 +408,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                         <div style={{ 
                           fontSize: 12, 
                           fontWeight: 600,
-                          fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          fontFamily: getWoolsocksFontFamily(),
                           color: '#100B1C',
                           lineHeight: 1.45,
                           overflow: 'hidden',
@@ -418,7 +423,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                         </div>
                         <div style={{ 
                           fontSize: 12, 
-                          fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          fontFamily: getWoolsocksFontFamily(),
                           color: '#100B1C',
                           opacity: 0.5,
                           lineHeight: 1.4
@@ -437,7 +442,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                         <div style={{ 
                           fontSize: 12, 
                           fontWeight: 600,
-                          fontFamily: 'Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          fontFamily: getWoolsocksFontFamily(),
                           color: '#100B1C',
                           lineHeight: 1.45,
                           whiteSpace: 'nowrap'
@@ -446,7 +451,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                         </div>
                         <div style={{ 
                           fontSize: 12,
-                          fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                          fontFamily: getWoolsocksFontFamily(),
                           color: '#100B1C',
                           opacity: 0.5,
                           lineHeight: 1.4,
@@ -470,7 +475,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                     style={{
                       background: 'transparent',
                       color: '#0084FF',
-                      fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                      fontFamily: getWoolsocksFontFamily(),
                       fontSize: 14,
                       fontStyle: 'normal',
                       fontWeight: 500,

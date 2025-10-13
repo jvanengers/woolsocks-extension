@@ -3,6 +3,7 @@ import { translate, initLanguage, translateTransactionStatus } from '../shared/i
 import { createRoot } from 'react-dom/client'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
+import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 
 type WsProfile = any
 type WsTransaction = any
@@ -121,6 +122,9 @@ function Options() {
   useEffect(() => {
     try { initLanguage() } catch {}
     
+    // Load Woolsocks fonts
+    loadWoolsocksFonts().catch(console.warn)
+    
     // Check if onboarding should be shown
     const completed = hasCompletedOnboarding()
     setShowOnboarding(!completed)
@@ -197,7 +201,7 @@ function Options() {
   }
 
   return (
-    <div style={{ width: 360, padding: 16, borderRadius: 12, background: '#fff', fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif' }}>
+    <div style={{ width: 360, padding: 16, borderRadius: 12, background: '#fff', fontFamily: getWoolsocksFontFamily() }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>{translate('options.title')}</h2>
         <div style={{ fontSize: 12, color: '#666' }}>{translate('options.sectionTitle')}</div>
@@ -274,7 +278,7 @@ function Options() {
                 style={{
                   background: 'transparent',
                   color: 'var(--action-link-default, #0084FF)',
-                  fontFamily: 'Woolsocks, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
+                  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif',
                   fontSize: 14,
                   fontStyle: 'normal',
                   fontWeight: 500,

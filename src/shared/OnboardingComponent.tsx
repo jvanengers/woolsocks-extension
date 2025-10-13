@@ -3,6 +3,7 @@ import { translate, initLanguage } from './i18n'
 import { getOnboardingSteps, getCashbackActivationOptions, applyCashbackActivationPreference } from './onboarding'
 import { getPlatform } from './platform'
 import StepIndicator from './StepIndicator'
+import { loadWoolsocksFonts, getWoolsocksFontFamily } from './fonts'
 
 // Assets
 const WS_LOGO = {
@@ -23,6 +24,10 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
 
   useEffect(() => {
     try { initLanguage() } catch {}
+    
+    // Load Woolsocks fonts
+    loadWoolsocksFonts().catch(console.warn)
+    
     // When used as settings (cashbackOnly), preselect from saved user settings
     if (cashbackOnly && typeof chrome !== 'undefined' && chrome.storage) {
       (async () => {
@@ -129,7 +134,8 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
           fontWeight: 600,
           color: '#111827',
           margin: '0 0 12px 0',
-          lineHeight: 1.3
+          lineHeight: 1.3,
+          fontFamily: getWoolsocksFontFamily()
         }}>
           {step.title}
         </h2>
@@ -137,7 +143,8 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
           fontSize: variant === 'popup' ? 14 : 16,
           color: '#6B7280',
           margin: 0,
-          lineHeight: 1.5
+          lineHeight: 1.5,
+          fontFamily: getWoolsocksFontFamily()
         }}>
           {step.content}
         </p>
@@ -173,8 +180,8 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
                   <div style={{ width: 8, height: 8, borderRadius: 999, background: selected ? '#0084FF' : 'transparent' }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#0F0B1C', marginBottom: 4 }}>{option.label}</div>
-                  <div style={{ fontSize: 13, color: '#6B7280' }}>{option.description}</div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#0F0B1C', marginBottom: 4, fontFamily: getWoolsocksFontFamily() }}>{option.label}</div>
+                  <div style={{ fontSize: 13, color: '#6B7280', fontFamily: getWoolsocksFontFamily() }}>{option.description}</div>
                 </div>
                 {/* Illustration only on first card */}
                 {idx === 0 && (
@@ -190,7 +197,8 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
                       background: selected ? '#0084FF' : '#E5F3FF',
                       color: selected ? '#FFFFFF' : '#0084FF',
                       fontSize: 12,
-                      fontWeight: 600
+                      fontWeight: 600,
+                      fontFamily: getWoolsocksFontFamily()
                     }}>{translate('onboarding.recommended')}</span>
                   </div>
                 )}
@@ -214,7 +222,8 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
               display: 'flex', height: 48, padding: 0, justifyContent: 'center', alignItems: 'center', gap: 8,
               border: 'none', borderRadius: 4, background: 'transparent',
               color: '#0084FF', fontSize: 14, fontWeight: 500,
-              cursor: 'pointer', textAlign: 'center', flex: 1
+              cursor: 'pointer', textAlign: 'center', flex: 1,
+              fontFamily: getWoolsocksFontFamily()
             }}
           >
             {translate('onboarding.skip')}
@@ -229,7 +238,7 @@ export default function OnboardingComponent({ onComplete, variant = 'popup', cas
             background: (isCashbackActivationStep && !selectedOption) || isLoading ? '#9CA3AF' : '#211940',
             color: 'var(--action-button-fill-content-default, #FFF)',
             textAlign: 'center',
-            fontFamily: 'Woolsocks',
+            fontFamily: getWoolsocksFontFamily(),
             fontSize: 14,
             fontStyle: 'normal',
             fontWeight: 500,
