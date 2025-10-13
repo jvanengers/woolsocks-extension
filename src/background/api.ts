@@ -100,20 +100,10 @@ async function getUserId(): Promise<string | null> {
       }
     }
 
-    // 3) Final fallback to ephemeral relay tab when offscreen is unavailable
+    // No tab relay fallback - avoid creating visible tabs when not authenticated
+    // If both direct fetch and offscreen fail, just return null gracefully
     if (!json) {
-      console.log('[WS API] getUserId trying tab relay...')
-      try {
-        const viaTab = await relayFetchViaTab<any>('/user-info/api/v0', { method: 'GET' })
-        console.log('[WS API] getUserId tab relay result:', viaTab?.status, !!viaTab?.data)
-        json = viaTab?.data || null
-      } catch (e) {
-        console.log('[WS API] getUserId tab relay error:', e)
-      }
-    }
-
-    if (!json) {
-      console.log('[WS API] getUserId failed - no valid response from any method')
+      console.log('[WS API] getUserId failed - no valid response (not authenticated or cookies unavailable)')
       cachedUserId = null
       resolvingUserId = false
       return null
@@ -905,14 +895,31 @@ export async function fetchMerchantConditions(merchantId: string | number): Prom
 }
 
 export async function getUserCountryCode(): Promise<string> {
-  // Try to derive from user info endpoint; fall back to NL
+  // Prefer authoritative country from user-info; fall back to previous behavior and NL
+  try {
+    const headers = await getHeaders()
+    const resp = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, {
+      credentials: 'include',
+      headers,
+      method: 'GET',
+    })
+    if (resp.ok) {
+      const json: any = await resp.json()
+      const data = json?.data || json
+      // Try common fields that can carry country information
+      const raw = data?.country || data?.countryCode || data?.profile?.country || data?.profile?.countryCode || null
+      if (typeof raw === 'string' && raw.trim()) {
+        return raw.trim().toUpperCase()
+      }
+    }
+  } catch {}
+
+  // Fallback: derive from language if available
   try {
     const lang = await getUserLanguage()
     if (lang) {
-      // Expect forms like "nl" or "nl-NL"; prefer region if present
       const parts = lang.split('-')
       if (parts.length === 2 && parts[1]) return parts[1].toUpperCase()
-      // Map common languages to default region
       const map: Record<string, string> = { nl: 'NL', en: 'NL', de: 'DE', fr: 'FR', it: 'IT', es: 'ES' }
       return map[lang.toLowerCase()] || 'NL'
     }

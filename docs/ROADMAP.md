@@ -369,20 +369,22 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
 Problem: Deals from outside the visited site's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
 
 - Goal
-  - Restrict eligibility and presentation of deals so that the visited domain's country matches the offer's country for both vouchers and online cashback.
+  - Apply country-scoping rules aligned with product constraints:
+    - Vouchers: restricted by the visited domain’s country.
+    - Online cashback: restricted by the user account’s country (service rule).
 - Country source of truth (runtime)
-  - Primary: derive country from the visited URL/domain using domain/locale parsing (e.g., TLD `.nl`, path `/nl/`, brand-specific patterns).
-  - Secondary fallback (only when domain cannot be resolved): signed-in profile country; else explicit extension setting; else browser locale.
-  - Persist last derived country in storage for diagnostics; allow override via Settings for debugging.
+  - Vouchers (per-visit): derive country from the visited URL/domain using domain/locale parsing (e.g., TLD `.nl`, path `/nl/`, brand-specific patterns).
+  - Online cashback (per-user): use signed-in profile country as the authoritative source; fall back to language-derived default only when user country is unknown.
+  - Persist last derived values in storage for diagnostics; allow override via Settings for debugging.
 - Filtering and matching
   - Vouchers (`GIFTCARD`): include only when the voucher's canonical product URL locale segment matches the visited domain country (e.g., product URL path `/nl-NL/giftcards-shop/...` → NL). Do not rely on a query parameter; country is conveyed via the locale path segment.
-  - Online cashback (`CASHBACK` with `usageType ONLINE`): include only when the deal's `country` matches the visited domain country (from domain/locale mapping).
-  - Maintain and use a domain→country/locale map (per partner) to avoid cross-locale hostnames (e.g., `.com` vs `.nl`) and to correctly interpret path-based locales (e.g., `nike.com/nl/en`).
+  - Online cashback (`CASHBACK` with `usageType ONLINE`): include only when the deal's `country` matches the user's account country.
+  - Maintain and use a domain→country/locale map (per partner) for voucher scoping to avoid cross-locale hostnames (e.g., `.com` vs `.nl`) and to correctly interpret path-based locales (e.g., `nike.com/nl/en`).
 - UX
   - If a site is detected but only cross-country deals exist, show a neutral message: "No deals available for your country." Optionally offer a country switch entry point.
   - Respect real-time blacklist to suppress prompts on sensitive sites.
 - Analytics
-  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `visited_country`, `flow` (voucher/oc).
+  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `visited_country` (voucher) or `user_country` (online cashback), `flow` (voucher/oc).
 - Success criteria
   - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
 
@@ -753,6 +755,72 @@ Goal: When users visit e-commerce product pages, automatically detect the produc
   - Track `price_comparison_triggered`, `price_comparison_shown`, `price_comparison_alternative_click`, `price_comparison_best_deal_click`, `price_comparison_feedback` with `source_merchant`, `source_price`, `target_merchant`, `target_price`, `cashback_rate`, `price_difference`, `match_confidence`, `country`, `ext_version`.
 - Success criteria
   - Product detection accuracy >85% on supported merchants; AI matching precision >90% for "exact match" confidence; >50% of comparisons show at least 2 alternatives; >30% of users click alternative store from comparison; <3s avg response time for price check; compliant with platform policies and privacy regulations.
+
+---
+
+## 21) Migrate from Google Analytics to Firebase Analytics
+
+Status: Ready for implementation
+
+Goal: Migrate analytics tracking from the current Google Analytics 4 setup to Firebase Analytics SDK for better integration with the Firebase ecosystem and improved analytics capabilities.
+
+- Firebase configuration
+  - App ID: `1:569989225682:web:8036c27a88e992c2cd210b`
+  - Project: `woolsocks-release`
+  - Measurement ID: `G-WK9ZNG07JV`
+  - API Key: `AIzaSyBtq8BW-qwWDB8JUbOp_RCrseWKkEoHIec`
+  - Auth Domain: `woolsocks-release.firebaseapp.com`
+  - Database URL: `https://woolsocks-release.firebaseio.com`
+  - Storage Bucket: `woolsocks-release.firebasestorage.app`
+  - Messaging Sender ID: `569989225682`
+- SDK integration
+  - Install Firebase JS SDK (v7.20.0+) via npm: `firebase` package.
+  - Initialize Firebase app with provided config in background script/offscreen context.
+  - Replace current GA4 Measurement Protocol HTTP calls with Firebase Analytics SDK methods.
+  - Use `logEvent()` for custom events instead of direct HTTP POST to GA4 endpoint.
+  - Preserve all existing event names and parameters for continuity.
+- Event mapping
+  - Map all current GA4 custom events to Firebase Analytics events: `voucher_detected`, `voucher_click`, `voucher_used`, `cashback_activated`, etc.
+  - Preserve custom parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `ext_version`, `click_id`.
+  - Use standard Firebase fields for currency and user properties.
+  - Ensure key events remain designated: `voucher_click`, `voucher_used`, `cashback_activated`.
+- User identification
+  - Set user ID with `setUserId()` when user logs in (use stable `userId` from backend).
+  - Set user properties with `setUserProperties()`: country, user_type (logged_in/anonymous), account_age.
+  - Clear user ID on logout.
+- Platform compatibility
+  - Chrome: Full Firebase SDK support; initialize in background service worker or offscreen document.
+  - Firefox: Verify Firebase SDK compatibility with MV3 service workers; use offscreen/tab-based relay if needed.
+  - Safari: Test Firebase SDK in Safari Web Extension context; consider native Firebase SDK integration in host app for iOS/macOS.
+- Privacy and consent
+  - Maintain existing analytics consent flow: no tracking until user accepts.
+  - Set Firebase Analytics `analytics_storage` consent based on user preferences.
+  - Update privacy policy to reflect Firebase Analytics usage.
+  - Ensure compliance with GDPR/CCPA: anonymize IP, respect DNT if applicable.
+- Migration strategy
+  - Phase 1: Add Firebase Analytics alongside current GA4 (dual tracking for validation).
+  - Phase 2: Monitor parity between GA4 and Firebase events for 1-2 weeks.
+  - Phase 3: Remove GA4 Measurement Protocol code once Firebase is validated.
+  - Phase 4: Update documentation and monitoring dashboards to use Firebase console.
+- BigQuery integration
+  - Enable Firebase Analytics → BigQuery export for BI dashboards (completes Roadmap Item 2 dependency).
+  - Configure daily export schedule and schema mapping.
+  - Update existing dashboards to query BigQuery tables instead of GA4 export.
+- Testing and validation
+  - Verify event delivery in Firebase Console DebugView during development.
+  - Compare event counts between GA4 and Firebase during dual tracking phase.
+  - Test user ID and user properties propagation.
+  - Validate offline event queuing and retry logic.
+  - Test across all platforms: Chrome, Firefox, Safari (desktop and mobile).
+- Performance considerations
+  - Firebase SDK is heavier than direct HTTP calls; measure impact on service worker memory/startup.
+  - Consider lazy loading Firebase SDK only when analytics consent is granted.
+  - Set appropriate event batch size and upload interval.
+- Analytics
+  - Track migration itself: `analytics_migrated_to_firebase` with `previous_system=ga4`, `migration_date`, `ext_version`.
+  - Monitor Firebase event delivery rates and compare with GA4 baseline.
+- Success criteria
+  - Firebase Analytics receives all events with <5% discrepancy vs. GA4 during dual tracking; BigQuery export enabled and validated; GA4 code removed; dashboards updated; performance impact <10% increase in service worker memory; compliant with privacy policies.
 
 ---
 
