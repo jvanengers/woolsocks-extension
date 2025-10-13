@@ -49,21 +49,27 @@ Goal: Deliver BI export and reporting for voucher funnel metrics using a data wa
 
 ---
 
-## 4) Anonymous online cashback clickouts and claim-after-login
+## 4) Email-only accounts for clickouts (no verification required)
 
-Status: Blocked, Waiting for backend changes
+Status: Ready for implementation
 
-Goal: Allow clickouts when anonymous and let users claim cashback later.
+Goal: Allow users to enter an email address to create a lightweight account (no email verification required) and immediately generate tracked clickouts associated to that account.
 
-- Clickout flow (anonymous)
-  - Generate ephemeral click/session id client-side; store locally with timestamp and domain.
-  - Redirect through affiliate with id embedded (or mapped server-side via relay endpoint if required).
-- Claim flow
-  - On later login, reconcile recent anonymous clicks (time/windowed) with cookie-authorized session; attach to user.
+- Prerequisite (email capture)
+  - Collect user email in extension UI (popup/panel) with explicit consent.
+  - Create user record server-side using email only; return stable `userId`.
+  - Store `userId` and email locally with timestamp; provide clear delete option.
+- Clickout flow (authenticated-by-email-only)
+  - Use the returned `userId` in click/session creation; no anonymous clickouts.
+  - Redirect through affiliate with user-linked click id (or via relay endpoint as required).
+  - Persist recent clickouts locally for UX/diagnostics.
+- Optional later verification (enhancement)
+  - If/when user later verifies email or logs into full account, nothing to reconcile: clickouts are already associated.
 - Fraud/abuse controls
   - Include domain, IP coarse hash, and UA fingerprint hash (privacy-preserving) for dedupe/risk.
+  - Rate limit email-only account creations and clickouts.
 - Success criteria
-  - Anonymous click leads to tracked activation; upon login within window, click is associated and visible in account.
+  - Users can provide email and perform tracked clickouts immediately; clickouts appear under the created account without further action.
 
 ---
 
