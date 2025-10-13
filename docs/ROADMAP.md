@@ -366,6 +366,8 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
 
 ## 11) Enforce country-scoped deals (vouchers and online cashback)
 
+Status: Completed — 2025-10-13 (see Completed items)
+
 Problem: Deals from outside the visited site's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
 
 - Goal
@@ -859,6 +861,16 @@ Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous us
 - Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
 - Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
 - Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
+
+---
+### 11) Enforce country-scoped deals (vouchers and online cashback)
+
+Completed: 2025-10-13 — commit `ea32a5d`
+
+- Vouchers: filtered by visited domain country; voucher product URLs localized via `getVoucherLocaleForCountry()`.
+- Online cashback: filtered by user account country (from `user-info`), not visited domain country.
+- Added analytics for mismatches and voucher filters: `deal_country_mismatch`, `voucher_country_filtered_out`.
+- Updated roadmap to reflect service rule: online cashback by user country.
 
 ---
 ## Small bugs/fixes (ongoing)
