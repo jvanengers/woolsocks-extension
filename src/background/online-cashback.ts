@@ -671,27 +671,43 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         console.log(`[WS OC Debug] Initiating auto-activation countdown for ${clean}`)
         // Chrome/Firefox: Show countdown banner for auto-activation
         track('oc_countdown_shown', { domain: clean, deal_id: best.id, platform })
-        try { 
-          chrome.tabs.sendMessage(tabId, { 
-            __wsOcUi: true, 
-            kind: 'oc_countdown_start', 
-            host: clean, 
-            dealInfo: best, 
-            countdown: 3 
-          }, (_response) => {
-            if (chrome.runtime.lastError) {
-              console.error(`[WS OC Debug] Failed to send countdown message to tab ${tabId}:`, chrome.runtime.lastError.message)
-              // Fallback: show login required if content script isn't responding
-              try { 
-                chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) 
-              } catch {}
-            } else {
-              console.log(`[WS OC Debug] Successfully sent countdown message for ${clean}`)
-            }
-          }) 
-        } catch (e) {
-          console.error(`[WS OC Debug] Error sending countdown message for ${clean}:`, e)
+        
+        // Retry logic for content script race condition
+        const sendCountdownWithRetry = async (attempts = 0): Promise<void> => {
+          const maxAttempts = 5
+          const delays = [0, 100, 300, 500, 1000]
+          
+          if (attempts > 0) {
+            await new Promise(resolve => setTimeout(resolve, delays[attempts - 1] || 1000))
+          }
+          
+          return new Promise<void>((resolve) => {
+            chrome.tabs.sendMessage(tabId, { 
+              __wsOcUi: true, 
+              kind: 'oc_countdown_start', 
+              host: clean, 
+              dealInfo: best, 
+              countdown: 3 
+            }, (_response) => {
+              if (chrome.runtime.lastError) {
+                console.log(`[WS OC Debug] Countdown message attempt ${attempts + 1}/${maxAttempts} failed:`, chrome.runtime.lastError.message)
+                if (attempts < maxAttempts - 1) {
+                  sendCountdownWithRetry(attempts + 1).then(resolve)
+                } else {
+                  console.error(`[WS OC Debug] All ${maxAttempts} attempts failed for countdown message`)
+                  resolve()
+                }
+              } else {
+                console.log(`[WS OC Debug] Successfully sent countdown message for ${clean} (attempt ${attempts + 1})`)
+                resolve()
+              }
+            })
+          })
         }
+        
+        sendCountdownWithRetry().catch(e => {
+          console.error(`[WS OC Debug] Error in countdown retry logic:`, e)
+        })
         
         // Store redirect state for when countdown completes
         const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url, startedAt: Date.now() }

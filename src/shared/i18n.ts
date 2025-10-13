@@ -240,7 +240,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'Pending',
       statusRejected: 'Rejected',
       title: 'Woolsocks',
-      viewAllTransactions: 'View all transactions'
+      viewAllTransactions: 'View more'
     },
     popup: {
       autoActivation: 'Auto-activation',
@@ -365,7 +365,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'In behandeling',
       statusRejected: 'Afgewezen',
       title: 'Woolsocks',
-      viewAllTransactions: 'Bekijk alle transacties'
+      viewAllTransactions: 'Meer weergeven'
     },
     popup: {
       autoActivation: 'Automatisch activeren',
@@ -482,7 +482,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'Ausstehend',
       statusRejected: 'Abgelehnt',
       title: 'Einstellungen',
-      viewAllTransactions: 'Alle Transaktionen anzeigen'
+      viewAllTransactions: 'Mehr anzeigen'
     },
     popup: {
       autoActivation: 'Automatische Aktivierung',
@@ -599,7 +599,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'En attente',
       statusRejected: 'Rejeté',
       title: 'Paramètres',
-      viewAllTransactions: 'Voir toutes les transactions'
+      viewAllTransactions: 'Voir plus'
     },
     popup: {
       autoActivation: 'Activation automatique',
@@ -716,7 +716,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'In sospeso',
       statusRejected: 'Rifiutato',
       title: 'Impostazioni',
-      viewAllTransactions: 'Visualizza tutte le transazioni'
+      viewAllTransactions: 'Vedi altro'
     },
     popup: {
       autoActivation: 'Attivazione automatica',
@@ -833,7 +833,7 @@ const translations: Record<Language, Translations> = {
       statusPending: 'Pendiente',
       statusRejected: 'Rechazado',
       title: 'Configuración',
-      viewAllTransactions: 'Ver todas las transacciones'
+      viewAllTransactions: 'Ver más'
     },
     popup: {
       autoActivation: 'Activación automática',

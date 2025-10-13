@@ -57,9 +57,16 @@ export function resetCachedUserId() {
 }
 
 async function getUserId(): Promise<string | null> {
-  if (typeof cachedUserId !== 'undefined') return cachedUserId
-  if (resolvingUserId) return null
+  if (typeof cachedUserId !== 'undefined') {
+    console.log('[WS API] getUserId returning cached:', cachedUserId ? 'authenticated' : 'null')
+    return cachedUserId
+  }
+  if (resolvingUserId) {
+    console.log('[WS API] getUserId already resolving, returning null')
+    return null
+  }
   resolvingUserId = true
+  console.log('[WS API] getUserId starting fresh lookup...')
   try {
     // Build minimal headers without calling getHeaders (to avoid recursion)
     const { wsAnonId } = await chrome.storage.local.get(['wsAnonId'])
@@ -67,18 +74,46 @@ async function getUserId(): Promise<string | null> {
     if (!anonId) { anonId = crypto.randomUUID(); await chrome.storage.local.set({ wsAnonId: anonId }) }
     const minHeaders: HeadersInit = { 'x-application-name': 'WOOLSOCKS_WEB', 'x-user-id': anonId || '' }
 
-    // Attempt direct background call only - no relay fallback to avoid tab creation
     let json: any = null
+
+    // 1) Try direct background fetch first (fast path when cookies are available to SW)
     try {
+      console.log('[WS API] getUserId trying direct background fetch...')
       const direct = await fetch(`${SITE_BASE}/api/wsProxy/user-info/api/v0`, { credentials: 'include', headers: minHeaders as any })
+      console.log('[WS API] getUserId direct response:', direct.ok, direct.status)
       if (direct.ok) {
         try { json = await direct.json() } catch {}
       }
-    } catch {}
+    } catch (e) {
+      console.log('[WS API] getUserId direct fetch error:', e)
+    }
 
-    // If direct fetch fails, just return null - don't create relay tabs
-    // Session detection will fail gracefully, and user can manually log in
+    // 2) Fallback to offscreen relay (MV3) to ensure cookies are attached immediately after login
     if (!json) {
+      console.log('[WS API] getUserId trying offscreen relay...')
+      try {
+        const off = await relayFetchViaOffscreen<any>('/user-info/api/v0', { method: 'GET' })
+        console.log('[WS API] getUserId offscreen result:', off?.status, !!off?.data)
+        json = off?.data || null
+      } catch (e) {
+        console.log('[WS API] getUserId offscreen error:', e)
+      }
+    }
+
+    // 3) Final fallback to ephemeral relay tab when offscreen is unavailable
+    if (!json) {
+      console.log('[WS API] getUserId trying tab relay...')
+      try {
+        const viaTab = await relayFetchViaTab<any>('/user-info/api/v0', { method: 'GET' })
+        console.log('[WS API] getUserId tab relay result:', viaTab?.status, !!viaTab?.data)
+        json = viaTab?.data || null
+      } catch (e) {
+        console.log('[WS API] getUserId tab relay error:', e)
+      }
+    }
+
+    if (!json) {
+      console.log('[WS API] getUserId failed - no valid response from any method')
       cachedUserId = null
       resolvingUserId = false
       return null
@@ -91,10 +126,12 @@ async function getUserId(): Promise<string | null> {
       json?.id ||
       null
     ) as string | null
+    console.log('[WS API] getUserId resolved:', id ? 'authenticated' : 'null', 'from response:', json)
     cachedUserId = id
     resolvingUserId = false
     return id
-  } catch {
+  } catch (e) {
+    console.log('[WS API] getUserId exception:', e)
     cachedUserId = null
     resolvingUserId = false
     return null
@@ -445,13 +482,6 @@ function pickBestMerchant(query: string, list: any[]): any | null {
   return first?.data || first || null
 }
 
-function buildGiftProductUrl(d: any, locale?: string): string | undefined {
-  const pid = d?.providerReferenceId || d?.productId || d?.id
-  const loc = (locale && String(locale).trim()) || 'nl-NL'
-  if (pid) return `${SITE_BASE}/${loc}/giftcards-shop/products/${pid}`
-  const m = (d?.links?.webLink || '').match(/giftcards-shop\/products\/([a-f0-9-]{36})/i)
-  return m ? `${SITE_BASE}/${loc}/giftcards-shop/products/${m[1]}` : undefined
-}
 
 function extractObMerchantIdFromImageUrl(url?: string | null): string | null {
   if (!url) return null

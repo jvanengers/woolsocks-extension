@@ -1,48 +1,40 @@
 # Chrome Web Store Description - Woolsocks Extension v0.10.0
 
 ## Short Description
-Save money effortlessly with automatic cashback activation and smart voucher discovery at checkout.
+Save money online with automatic cashback activation and smart voucher discovery at checkout.
 
 ## Full Description
+Save money effortlessly while you shop. Woolsocks helps you activate eligible cashback and discover available gift card vouchers on participating online stores.
 
-Save money effortlessly with Woolsocks - your automatic cashback and voucher companion.
+What it does
+- Detects supported merchants as you browse
+- Shows a small panel at checkout when vouchers are available
+- Activates cashback with a visible countdown and cancel option
+- Works without login for browsing deals; sign in to track earnings
+- Clear privacy: minimal data, on-device content analysis, and full user control
 
-🎯 **AUTOMATIC CASHBACK ACTIVATION**
-• Activates cashback automatically when you visit supported online stores
-• Transparent countdown with cancel option before redirect
-• Works with 100+ Dutch merchants including Zalando, Bol.com, Amazon.nl, and more
-• See your cashback balance and track earnings in real-time
+How it works
+1) Visit an online store. If its eligible, the extension can activate cashback after a visible prompt.
+2) On checkout pages, a panel may show available vouchers and rates.
+3) Manage settings from the popup: enable/disable auto-activation or reminders.
 
-🎁 **SMART VOUCHER DISCOVERY**  
-• Detects checkout pages and shows available gift card vouchers
-• Enhanced detection for 25+ merchants: Rituals, HEMA, Douglas, Etos, Gamma, Bijenkorf, VVV, and more
-• Compare rates and choose the best deal instantly
-• Never miss a discount opportunity
+Transparency and control
+- You can disable auto-activation and use reminders only.
+- You can also turn off reminders entirely.
+- The extension explains when a redirect will happen and lets you cancel.
 
-🔒 **PRIVACY & TRANSPARENCY**
-• Works without login - see deals anonymously
-• Minimal data collection, privacy-first design
-• Clear affiliate disclosure and user consent
-• Full control: toggle auto-activation on/off anytime
-• No background tracking or data selling
+Privacy
+- No sensitive data is collected. Page analysis is local, used only to detect eligibility and checkout context.
+- Authentication is only required for account features like balance and history.
 
-✨ **KEY FEATURES**
-• Country-aware deals (Netherlands focus)
-• Server-confirmed activation prevents duplicate redirects
-• Intelligent caching for instant performance
-• Clean, modern interface with real-time updates
-• Settings panel for full customization
-
-💡 **HOW IT WORKS**
-1. Browse normally - extension detects supported merchants
-2. At checkout, see available voucher deals in a small panel
-3. For cashback, get a brief notification before activation
-4. Track your earnings and manage settings in the popup
-
-Perfect for Dutch online shoppers who want to maximize savings without the hassle.
+Support
+- Country-aware eligibility and a modern, lightweight UI.
 
 ## Keywords
-cashback, vouchers, discount, savings, shopping, Netherlands, Dutch, Zalando, Bol.com, Amazon, gift cards, deals, coupons, affiliate, automatic, checkout, e-commerce
+cashback, shopping, vouchers, gift cards, savings, browser extension
 
 ## Category
 Shopping
+
+## Reviewer Test Instructions (concise)
+1. Sign in at woolsocks.eu (optional, for balance). 2. Visit a supported merchant; expect visible prompt and activation (icon turns green). 3. Open a checkout/cart page; voucher panel should appear if available. 4. In the popup, toggle auto-activation OFF to use reminders only; verify no auto-redirect. 5. Turn reminders OFF; verify no prompts.

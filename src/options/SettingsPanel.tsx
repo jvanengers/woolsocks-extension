@@ -326,21 +326,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
           {variant === 'popup' ? (
             <>
-              {/* Page title only - no back button or balance since they're in the main header */}
-              <div style={{ 
-                padding: '16px 8px 6px 8px'
-              }}>
-                <h1 style={{ 
-                  fontFamily: getWoolsocksFontFamily(),
-                  fontSize: 16, 
-                  fontWeight: 500, 
-                  color: '#100B1C',
-                  lineHeight: 1.3,
-                  margin: 0
-                }}>
-                  {translate('options.myCashbackTransactions')}
-                </h1>
-              </div>
+              {/* Header UI moved to popup header. Nothing here for popup variant. */}
             </>
           ) : (
             <>
@@ -352,9 +338,6 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
           {/* Recent transactions */}
           <div style={{ marginTop: variant === 'popup' ? 0 : 24 }}>
-            {variant !== 'popup' && (
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>{translate('options.recentTransactions')}</div>
-            )}
             {transactions.length === 0 && (
               <div style={{ fontSize: 12, color: '#666' }}>{translate('options.noRecentTransactions')}</div>
             )}
@@ -366,8 +349,19 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
               <div style={{ 
                 background: variant === 'popup' ? '#FFFFFF' : 'transparent',
                 borderRadius: variant === 'popup' ? '16px 16px 16px 16px' : 0,
-                padding: variant === 'popup' ? '24px 0' : '0'
+                padding: variant === 'popup' ? '12px 0 16px 0' : '0'
               }}>
+                {variant === 'popup' && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 8px 16px' }}>
+                    <div style={{ fontFamily: getWoolsocksFontFamily(), fontSize: 14, fontWeight: 600, color: '#100B1C' }}>{translate('options.recentTransactions')}</div>
+                    <button
+                      onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl-NL/profile', active: true })}
+                      style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: '#0084FF', fontFamily: getWoolsocksFontFamily(), fontSize: 12, fontWeight: 500 }}
+                    >
+                      {translate('options.viewAllTransactions')}
+                    </button>
+                  </div>
+                )}
                 <div style={{ 
                   display: 'flex', 
                   flexDirection: 'column',
@@ -464,31 +458,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                   ))}
                 </div>
 
-                {/* View all transactions link */}
-                <div style={{ 
-                  marginTop: 8, 
-                  textAlign: 'center', 
-                  padding: variant === 'popup' ? '0 16px' : '0' 
-                }}>
-                  <button
-                    onClick={() => chrome.tabs.create({ url: 'https://woolsocks.eu/nl-NL/profile', active: true })}
-                    style={{
-                      background: 'transparent',
-                      color: '#0084FF',
-                      fontFamily: getWoolsocksFontFamily(),
-                      fontSize: 14,
-                      fontStyle: 'normal',
-                      fontWeight: 500,
-                      lineHeight: '130%',
-                      border: 'none',
-                      padding: 0,
-                      cursor: 'pointer',
-                      textDecoration: 'none'
-                    }}
-                  >
-                    {translate('options.viewAllTransactions')}
-                  </button>
-                </div>
+                {/* View more moved into header above for popup variant */}
 
               </div>
             </div>
@@ -556,7 +526,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
                     color: '#6B7280',
                     border: 'none',
                     borderRadius: 8,
-                    padding: '8px 16px',
+                    padding: '8px 8px',
                     fontSize: 14,
                     fontWeight: 500,
                     cursor: 'pointer',

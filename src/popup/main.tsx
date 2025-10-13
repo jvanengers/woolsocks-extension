@@ -28,6 +28,39 @@ function App() {
   const [showReminders, setShowReminders] = useState<boolean>(true)
   const [currentDomain, setCurrentDomain] = useState<string>('')
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false)
+  
+  // Debug helper: log computed sizes of balance chips in header across views
+  useEffect(() => {
+    const logSizes = () => {
+      try {
+        const homeEl = document.getElementById('__ws_balance_chip_home')
+        const txEl = document.getElementById('__ws_balance_chip_tx')
+        const fmt = (el: HTMLElement | null) => {
+          if (!el) return null
+          const r = el.getBoundingClientRect()
+          const cs = getComputedStyle(el)
+          return {
+            width: Math.round(r.width),
+            height: Math.round(r.height),
+            paddingTop: cs.paddingTop,
+            paddingBottom: cs.paddingBottom,
+            paddingLeft: cs.paddingLeft,
+            paddingRight: cs.paddingRight,
+            lineHeight: cs.lineHeight,
+            fontSize: cs.fontSize
+          }
+        }
+        const home = fmt(homeEl as HTMLElement | null)
+        const tx = fmt(txEl as HTMLElement | null)
+        if (home || tx) {
+          console.log('[Popup Debug] Balance chip sizes:', { view, home, tx })
+        }
+      } catch {}
+    }
+    // Defer until layout settles
+    const t = setTimeout(logSizes, 0)
+    return () => clearTimeout(t)
+  }, [view, balance])
 
   useEffect(() => {
     // Ensure language is initialized from storage so translate() uses the user's setting
@@ -461,10 +494,15 @@ function App() {
     }}>
       {/* Header */}
       <div style={{ 
-        padding: '8px 8px 0 8px',
+        padding: view === 'transactions' ? '24px 8px 12px 8px' : '8px 8px 0 8px',
         display: 'flex', 
         justifyContent: 'space-between', 
-        alignItems: 'center'
+        alignItems: 'center',
+        position: 'relative',
+        background: view === 'transactions' ? '#FFFFFF' : 'transparent',
+        height: view === 'transactions' ? 96 : 'auto',
+        borderBottomLeftRadius: view === 'transactions' ? 16 : 0,
+        borderBottomRightRadius: view === 'transactions' ? 16 : 0
       }}>
         {view === 'consent' ? (
           <>
@@ -498,7 +536,7 @@ function App() {
           </>
         ) : view === 'transactions' ? (
           <>
-            {/* Left: back button */}
+            {/* Back button in top-left */}
             <button
               onClick={() => setView('home')}
               aria-label="Back"
@@ -514,41 +552,28 @@ function App() {
                 justifyContent: 'center',
                 width: 32,
                 height: 32,
-                borderRadius: 8
+                borderRadius: 8,
+                position: 'absolute',
+                left: 8,
+                top: 8
               }}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <path d="M15 18L9 12L15 6" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
-
-            {/* Right: balance display */}
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              alignItems: 'flex-end', 
-              gap: 2, 
-              padding: '6px 10px',
-              background: 'rgba(0,0,0,0.05)',
-              borderRadius: 8,
-              minHeight: 32
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646C15.3781 11.5124 18.5635 11.5124 20.5272 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ 
-                  fontFamily: getWoolsocksFontFamily(),
-                  fontSize: 14, 
-                  fontWeight: 500, 
-                  color: '#100B1C',
-                  lineHeight: 1.45,
-                  letterSpacing: '0.1px'
-                }}>
-                  €{balance.toFixed(2)}
-         </span>
-       </div>
-            </div>
+            {/* Centered big balance amount */}
+            {(() => {
+              const value = Number.isFinite(balance) ? balance : 0
+              const [whole, frac] = value.toFixed(2).split('.')
+              return (
+                <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
+                  <span style={{ fontFamily: getWoolsocksFontFamily(), fontSize: 16, color: '#100B1C', opacity: 0.8 }}>€</span>
+                  <span style={{ fontFamily: getWoolsocksFontFamily(), fontSize: 28, fontWeight: 600, color: '#100B1C', lineHeight: 1 }}>{Number(whole).toLocaleString('nl-NL')}</span>
+                  <span style={{ fontFamily: getWoolsocksFontFamily(), fontSize: 16, color: '#100B1C', opacity: 0.5 }}>,{frac}</span>
+                </div>
+              )
+            })()}
           </>
         ) : (
           session === true ? (
@@ -568,10 +593,12 @@ function App() {
                   border: 'none', 
                   cursor: 'pointer',
                   fontFamily: getWoolsocksFontFamily(),
-                  fontSize: 14
+                  fontSize: 14,
+                  minHeight: 32
                 }}
+                id="__ws_balance_chip_home"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
                   <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <span id="__ws_balance">€{balance.toFixed(2)}</span>
