@@ -9,6 +9,12 @@ export function onExecute() {
 type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
 import { translate, initLanguage } from '../shared/i18n'
 
+// Boot diagnostics
+const OC_DEBUG = true
+const BOOT_HASH = '__OC_BOOT_v1__'
+const domain = (() => { try { return window.location.hostname.replace(/^www\./i, '').toLowerCase() } catch { return 'unknown' } })()
+if (OC_DEBUG) console.log(`[WS OC Content] ${BOOT_HASH} loaded on ${domain}`)
+
 type UiEvent =
   | { kind: 'oc_scan_start'; host: string }
   | { kind: 'oc_deals_found'; host: string; deals: Deal[] }
@@ -392,10 +398,10 @@ function ensureMount(): ShadowRoot {
       box-shadow: 0px 4px 24px 0px rgba(0,0,0,0.1) !important;
       padding: 16px !important;
       min-width: 360px !important;
-      max-width: 400px !important;
+      max-width: 480px !important;
     }
     .countdown-content { display:block !important; }
-    .countdown-row { display:flex !important; align-items:center !important; gap:16px !important; }
+    .countdown-row { display:flex !important; align-items:center !important; gap:24px !important; }
     .countdown-text { flex: 1 !important; display:flex !important; flex-direction:column !important; gap:6px !important; }
     .countdown-title {
       font-size: 16px !important;
@@ -1044,10 +1050,20 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
 }
 
 // Message handling from background
-chrome.runtime.onMessage.addListener(async (msg: any) => {
+chrome.runtime.onMessage.addListener(async (msg: any, _sender, sendResponse) => {
+  // Handle ping request from background
+  if (msg?.__wsPing) {
+    if (OC_DEBUG) console.log('[WS OC Content] Received WS_PING, sending ACK')
+    sendResponse({ __wsAck: true })
+    return true
+  }
+  
   if (!msg || !msg.__wsOcUi) return
   const domain = getDomain()
   const ev = msg as UiEvent
+  
+  if (OC_DEBUG) console.log(`[WS OC Content] Received message: ${ev.kind}`)
+  
   if (ev.kind === 'oc_scan_start') {
     showChecking(ev.host)
   } else if (ev.kind === 'oc_deals_found') {
@@ -1091,6 +1107,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const domain = getDomain()
     if (await isPillDismissed(domain)) return // Add this check
     
+    // Set boot marker in session storage
+    try {
+      await chrome.storage.session.set({ __wsOcBoot: { host: domain, ts: Date.now() } })
+      if (OC_DEBUG) console.log(`[WS OC Content] DOMContentLoaded - boot marker set for ${domain}`)
+    } catch {}
+    
+    // Send WS_READY signal to background
+    try {
+      chrome.runtime.sendMessage({ __wsReady: true, host: domain })
+      if (OC_DEBUG) console.log(`[WS OC Content] Sent WS_READY for ${domain}`)
+    } catch {}
+    
     const key = '__wsOcActivePillByDomain'
     const result = await chrome.storage.session.get(key)
     const activePills = result[key] as Record<string, boolean> | undefined
@@ -1116,6 +1144,19 @@ document.addEventListener('visibilitychange', async () => {
         try { /* analytics breadcrumb */ (console as any).debug?.('[WS OC] reemit active from bg state') } catch {}
       }
     })
+  } catch {}
+  // Read pending UI event persisted by background if message delivery raced
+  try {
+    const { __wsOcPendingUi } = await chrome.storage.session.get(['__wsOcPendingUi']) as any
+    if (__wsOcPendingUi && __wsOcPendingUi.kind && typeof __wsOcPendingUi.ts === 'number') {
+      const age = Date.now() - __wsOcPendingUi.ts
+      if (age < 10000) { // valid for 10s
+        if (__wsOcPendingUi.kind === 'oc_countdown_start') {
+          showCountdownBanner(__wsOcPendingUi.host, __wsOcPendingUi.dealInfo, __wsOcPendingUi.countdown || 3)
+        }
+      }
+      try { await chrome.storage.session.remove(['__wsOcPendingUi']) } catch {}
+    }
   } catch {}
 })
 

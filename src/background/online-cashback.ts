@@ -205,6 +205,27 @@ function filterOnlineCountry(deals: Deal[], userCountry: string): Deal[] {
   return deals.filter(d => up(d.country) === country && up(d.usageType).includes('ONLINE'))
 }
 
+// Helper: Send WS_PING to content script to verify it's loaded
+async function pingContentScript(tabId: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, { __wsPing: true }, (response) => {
+        if (chrome.runtime.lastError) {
+          if (OC_DEBUG) console.log(`[WS OC] WS_PING failed for tab ${tabId}:`, chrome.runtime.lastError.message)
+          resolve(false)
+        } else if (response?.__wsAck) {
+          if (OC_DEBUG) console.log(`[WS OC] WS_PING success for tab ${tabId}`)
+          resolve(true)
+        } else {
+          resolve(false)
+        }
+      })
+    } catch {
+      resolve(false)
+    }
+  })
+}
+
 export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available' | 'active' | 'voucher' | 'error', tabId?: number) => void) {
   try {
     initAnalytics()
@@ -628,7 +649,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
 
       // Request tracked redirect URL (only if logged in); otherwise show login-required state
       track('oc_redirect_requested', { domain: clean, deal_id: best.id, provider: best.provider })
-      // Tell UI setting up
+      // Tell UI setting up - this hides the banner to prevent redirect loops
       try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_redirect_requested', host: clean }) } catch {}
       if (OC_DEBUG) console.log('[WS OC] requesting redirect', { dealId: best.id })
       // Guard: if site is already active (ActivationRegistry says active), do not redirect again
@@ -645,6 +666,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         redir = await Promise.race([requestRedirectUrl(best.id), timeoutPromise])
       } catch (e) {
         console.error('[WS OC] Error fetching redirect URL:', e)
+        // Set cooldown to prevent repeated attempts when fetch fails
+        try { await setCooldown(clean) } catch {}
         // Show login required as fallback if redirect fetch fails
         try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
         return
@@ -652,6 +675,8 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       
       if (!redir || !redir.url) {
         if (OC_DEBUG) console.log('[WS OC] no redirect url returned (likely not logged in)')
+        // Set cooldown to prevent repeated attempts when not authenticated
+        try { await setCooldown(clean) } catch {}
         try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
         return
       }
@@ -672,13 +697,20 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         // Chrome/Firefox: Show countdown banner for auto-activation
         track('oc_countdown_shown', { domain: clean, deal_id: best.id, platform })
         
-        // Retry logic for content script race condition
+        // Ping-gated retry logic: wait for content script to be ready before sending countdown
         const sendCountdownWithRetry = async (attempts = 0): Promise<void> => {
           const maxAttempts = 5
           const delays = [0, 100, 300, 500, 1000]
           
           if (attempts > 0) {
             await new Promise(resolve => setTimeout(resolve, delays[attempts - 1] || 1000))
+          }
+          
+          // First, ping to check if content script is ready
+          const pingOk = await pingContentScript(tabId)
+          if (!pingOk && attempts < maxAttempts - 1) {
+            console.log(`[WS OC Debug] Content script not ready for countdown (attempt ${attempts + 1}), retrying...`)
+            return sendCountdownWithRetry(attempts + 1)
           }
           
           return new Promise<void>((resolve) => {
@@ -695,6 +727,11 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
                   sendCountdownWithRetry(attempts + 1).then(resolve)
                 } else {
                   console.error(`[WS OC Debug] All ${maxAttempts} attempts failed for countdown message`)
+                  // Persist a short-lived pending UI event so content can render on load
+                  try {
+                    const payload = { kind: 'oc_countdown_start', host: clean, dealInfo: best, countdown: 3, ts: Date.now() }
+                    chrome.storage.session.set({ __wsOcPendingUi: payload }).catch?.(() => {})
+                  } catch {}
                   resolve()
                 }
               } else {
@@ -757,6 +794,59 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       }
     }, { url: [{ schemes: ['http', 'https'] }] })
 
+    // DOMContentLoaded: retry sending countdown or activated if content script is now ready
+    chrome.webNavigation.onDOMContentLoaded.addListener(async (details) => {
+      const { tabId, frameId, url } = details
+      if (frameId !== 0 || !isHttpUrl(url)) return
+      let host = ''
+      try { host = new URL(url).hostname } catch { return }
+      if (!host || isExcluded(host)) return
+      const clean = cleanHost(host)
+      
+      if (OC_DEBUG) console.log(`[WS OC] DOMContentLoaded for ${clean}, checking for pending UI...`)
+      
+      // Check for pending countdown
+      try {
+        const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
+        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < 10000) {
+          if (OC_DEBUG) console.log(`[WS OC] Found pending countdown for ${clean}, retrying...`)
+          const pingOk = await pingContentScript(tabId)
+          if (pingOk && __wsOcPendingUi.kind === 'oc_countdown_start') {
+            try {
+              await chrome.tabs.sendMessage(tabId, {
+                __wsOcUi: true,
+                kind: 'oc_countdown_start',
+                host: clean,
+                dealInfo: __wsOcPendingUi.dealInfo,
+                countdown: __wsOcPendingUi.countdown || 3
+              })
+              console.log(`[WS OC] Successfully retried countdown on DOMContentLoaded for ${clean}`)
+              await chrome.storage.session.remove('__wsOcPendingUi')
+            } catch (e) {
+              console.warn(`[WS OC] Failed to retry countdown on DOMContentLoaded:`, e)
+            }
+          }
+        }
+      } catch {}
+      
+      // Check for pending activation pill
+      try {
+        const key = '__wsOcActivePillByDomain'
+        const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+        if (current && current[clean]) {
+          const pingOk = await pingContentScript(tabId)
+          if (pingOk) {
+            try {
+              await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null })
+              console.log(`[WS OC] Successfully retried oc_activated on DOMContentLoaded for ${clean}`)
+            } catch (e) {
+              console.warn(`[WS OC] Failed to retry oc_activated on DOMContentLoaded:`, e)
+            }
+          }
+        }
+      } catch {}
+    }, { url: [{ schemes: ['http', 'https'] }] })
+    
     // Safety net: after full load, if we recorded activation for this domain in this session, re-emit UI message
     chrome.webNavigation.onCompleted.addListener(async (details) => {
       const { tabId, frameId, url } = details
@@ -770,11 +860,14 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
         if (current && current[clean]) {
           // Content script might have loaded after the first message; nudge UI to render the pill
-          try { 
-            await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null })
-            console.log(`[WS OC Debug] Safety net: successfully sent oc_activated message for ${clean}`)
-          } catch (error) {
-            console.warn(`[WS OC Debug] Safety net: failed to send oc_activated message for ${clean}:`, error)
+          const pingOk = await pingContentScript(tabId)
+          if (pingOk) {
+            try { 
+              await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null })
+              console.log(`[WS OC Debug] Safety net (onCompleted): successfully sent oc_activated message for ${clean}`)
+            } catch (error) {
+              console.warn(`[WS OC Debug] Safety net (onCompleted): failed to send oc_activated message for ${clean}:`, error)
+            }
           }
         }
       } catch {}
@@ -794,6 +887,49 @@ chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
     handleManualActivation(message.domain, message.dealInfo, sender.tab?.id)
   } else if (message.type === 'OC_MANUAL_ACTIVATE_DEAL') {
     handleManualActivationDeal(message.domain, message.dealInfo)
+  } else if (message.__wsReady && sender.tab?.id) {
+    // Content script signaled it's ready - check for pending UI events
+    const tabId = sender.tab.id
+    const clean = message.host
+    if (OC_DEBUG) console.log(`[WS OC] Received WS_READY from ${clean} (tab ${tabId})`)
+    
+    ;(async () => {
+      try {
+        // Check for pending countdown
+        const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
+        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < 10000) {
+          if (__wsOcPendingUi.kind === 'oc_countdown_start') {
+            try {
+              await chrome.tabs.sendMessage(tabId, {
+                __wsOcUi: true,
+                kind: 'oc_countdown_start',
+                host: clean,
+                dealInfo: __wsOcPendingUi.dealInfo,
+                countdown: __wsOcPendingUi.countdown || 3
+              })
+              console.log(`[WS OC] Successfully sent pending countdown on WS_READY for ${clean}`)
+              await chrome.storage.session.remove('__wsOcPendingUi')
+            } catch (e) {
+              console.warn(`[WS OC] Failed to send pending countdown on WS_READY:`, e)
+            }
+          }
+        }
+        
+        // Check for pending activation pill
+        const key = '__wsOcActivePillByDomain'
+        const current = (await chrome.storage.session.get(key))[key] as Record<string, boolean> | undefined
+        if (current && current[clean]) {
+          try {
+            await chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: [], dealId: null, providerMerchantId: null })
+            console.log(`[WS OC] Successfully sent pending oc_activated on WS_READY for ${clean}`)
+          } catch (e) {
+            console.warn(`[WS OC] Failed to send pending oc_activated on WS_READY:`, e)
+          }
+        }
+      } catch (e) {
+        console.error(`[WS OC] Error handling WS_READY:`, e)
+      }
+    })()
   }
 })
 
