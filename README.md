@@ -17,7 +17,7 @@
 - 📱 **Cross-Platform** - Desktop and mobile (Firefox Android)
 - 🚀 **Zero Configuration** - Works immediately after install
 - 🔄 **Session Recovery** - Seamless login with email verification
-- 🌐 **Country-Aware** - Automatically filters deals for your location
+- 🌐 **Multi-Country Support** - Works in NL, DE, BE, FR, IT, ES, IE with localized deals
 
 ## 🚀 Quick Start
 
@@ -132,7 +132,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for detailed roadmap.
 - Safari desktop & iOS support
 - Email-only accounts for quick signup
 - Enhanced analytics dashboard
-- Multi-language support expansion
+- Additional country support
 - Real-time blacklists and alternative UX
 
 ## 🔐 Privacy & Security
@@ -172,7 +172,7 @@ A: To detect any merchant that Woolsocks supports (100+ sites). We only activate
 A: Yes! Browse deals anonymously. Login is only needed to track your earnings and access your balance.
 
 **Q: Which countries are supported?**
-A: Currently Netherlands (NL). More countries coming soon - see our roadmap.
+A: We support 7 countries: Netherlands (NL), Germany (DE), Belgium (BE), France (FR), Italy (IT), Spain (ES), and Ireland (IE). The extension automatically detects your location and shows relevant deals.
 
 **Q: How does the cashback activation work?**
 A: When you visit a supported merchant, the extension shows a visible prompt with countdown. You can cancel anytime. If you proceed, it redirects through an affiliate link to enable cashback tracking.
