@@ -115,6 +115,18 @@ web-accessible-resources/
 *.crx
 *.pem
 
+# Build artifacts and versioned packages
+woolsocks-extension-*.zip
+woolsocks-extension-*.xpi
+webstore-upload.zip
+
+# Debug and test files
+debug-*.js
+*-demo.html
+*-test.html
+popup-test.html
+countdown-ui-demo.html
+
 # Temporary files
 tmp/
 temp/

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Community Support
+    url: https://github.com/amsterdam-platform-creation/browser-extensions/discussions
+    about: Please ask and answer questions here.
+  - name: Woolsocks Support
+    url: mailto:support@woolsocks.eu
+    about: Contact Woolsocks support team directly.

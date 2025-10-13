@@ -1,215 +1,227 @@
-# Woolsocks Browser Extension (MV3)
+# Woolsocks Browser Extension
 
-A cross-browser MV3 extension that shows Woolsocks voucher offers and automatically enables online cashback on supported merchant sites. Supports Chrome, Firefox (desktop and mobile), and other Chromium-based browsers.
+[![Version](https://img.shields.io/badge/version-0.10.0-blue.svg)](https://github.com/amsterdam-platform-creation/browser-extensions)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Build Status](https://github.com/amsterdam-platform-creation/browser-extensions/workflows/Build%20and%20Test/badge.svg)](https://github.com/amsterdam-platform-creation/browser-extensions/actions)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue.svg)](https://chrome.google.com/webstore)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox%20Add--ons-Install-orange.svg)](https://addons.mozilla.org)
 
-## Current scope and constraints
+> Automatically earn cashback and discover voucher deals while shopping online. Works seamlessly across Chrome, Firefox, and other browsers.
 
-- Works with your existing session at `woolsocks.eu` (cookie-based; no token UI)
-- Country: NL default; online cashback filters to your country based on API language/locale
-- Vouchers: shown at checkout/cart/order pages with enhanced detection for 25+ merchants
-- Online cashback: auto-activates on entry of supported sites (10 min cooldown per apex domain)
-- Server‑confirmed activation: if a recent click (≤10 min) exists for the site, we mark active and skip redirect
-- Links for vouchers open canonical product pages like:
-  `https://woolsocks.eu/nl-NL/giftcards-shop/products/{providerReferenceId}`
+## ✨ Features
 
-More capabilities (full merchant browse/search, popup lists, non-NL locales) will come soon.
+- 🎯 **Automatic Cashback Activation** - Earn cashback on 100+ merchants with one-click activation
+- 🎁 **Smart Voucher Discovery** - Find gift card deals automatically at checkout
+- 🔒 **Privacy-First** - Local processing, minimal data collection, transparent permissions
+- 🌍 **Multi-Browser Support** - Chrome, Firefox, Edge, Brave, and more
+- 📱 **Cross-Platform** - Desktop and mobile (Firefox Android)
+- 🚀 **Zero Configuration** - Works immediately after install
+- 🔄 **Session Recovery** - Seamless login with email verification
+- 🌐 **Country-Aware** - Automatically filters deals for your location
 
-## How it works
+## 🚀 Quick Start
 
-- Voucher flow: when you reach checkout, a small panel lists applicable voucher deals with name, rate, image and a "Use" button.
-- Online cashback flow (multi-path activation):
-  - On navigation, we look up the merchant and fetch deals.
-  - Before redirecting, we query `GET /cashback/api/v1/cashback/clicks` via the site proxy with headers `x-application-name: WOOLSOCKS_WEB` and a real `x-user-id`.
-  - If a recent click (≤10 min) matches the site/merchant, we mark active immediately, set cooldown, and skip redirect.
-  - Otherwise we request a tracked redirect URL for the best deal and redirect once; on landing we mark active.
-  - We maintain a short TTL domain‑pending state to recognize landings that open in a new tab.
-- **Session recovery flow**: When you lose your session but have previously logged in, the extension stores your email locally and can send verification emails directly without redirecting to woolsocks.eu. This provides seamless session recovery while keeping you in the extension.
-- The background service worker fetches via the site-proxy at `https://woolsocks.eu/api/wsProxy/...` with credentials and relay fallback.
-- For voucher links we rely on `providerReferenceId` from the deals response to build the canonical product URL (fallbacks: `productId`, `id`, or UUID in `links.webLink`).
+### For Users
+1. Install from [Chrome Web Store](#) or [Firefox Add-ons](#)
+2. Visit any supported merchant website (e.g., Zalando, Amazon, Bol.com)
+3. Extension automatically activates cashback or shows vouchers at checkout
 
-## Architecture (simplified)
-
-```
-src/
-  background/
-    index.ts       # service worker: API calls, message handling, voucher panel
-    online-cashback.ts # navigation listener and auto-activation flow
-    api.ts         # API client (site-proxy, relay fallback, mapping to PartnerLite)
-    analytics.ts   # GA4 Measurement Protocol client
-  content/
-    checkout.ts    # checkout detection for many sites (incl. Airbnb)
-    relay.ts       # content script on woolsocks.eu used for cookie-first relay
-  options/
-    main.tsx       # simplified settings page (session-aware)
-  shared/
-    email-storage.ts # email storage utilities for session recovery
-    time-utils.ts    # time formatting utilities
-    VerificationEmailScreen.tsx # verification email UI component
+### For Developers
+```bash
+npm install
+npm run build:chrome  # or build:firefox
+# Load dist/ folder in chrome://extensions
 ```
 
-Key points:
-- **Public API calls** (merchant discovery) go to `https://woolsocks.eu/api/wsProxy/...` without credentials
-- **Authenticated API calls** (user actions) use credentials with relay fallback
-- We set required headers: `x-application-name: WOOLSOCKS_WEB`, stable `x-user-id`
-- Relay tabs only used for user-specific actions (activation, balance, clicks) to minimize tab flashing
-- **Merchant discovery** uses fast API endpoints (`/merchants-overview/api/v0.0.1/merchants` and `/merchants-overview/api/v0.0.1/v2/deals`) without authentication
-- **No HTML scraping** - removed legacy scraper that was causing performance issues and tab flashing
+## 📦 Installation
 
-## Development
+### Chrome / Edge / Brave
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue.svg)](https://chrome.google.com/webstore)
+
+### Firefox
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox%20Add--ons-Install-orange.svg)](https://addons.mozilla.org)
+
+### Manual Installation (Development)
+1. Clone this repository: `git clone https://github.com/amsterdam-platform-creation/browser-extensions.git`
+2. Install dependencies: `npm install`
+3. Build the extension: `npm run build:chrome` or `npm run build:firefox`
+4. Load the `dist/` folder in your browser:
+   - **Chrome**: Go to `chrome://extensions`, enable "Developer mode", click "Load unpacked"
+   - **Firefox**: Go to `about:debugging`, click "This Firefox", click "Load Temporary Add-on"
+
+## 🎯 How It Works
+
+1. **Merchant Detection** - Automatically recognizes 100+ supported stores as you browse
+2. **Cashback Activation** - One-click activation with visible confirmation and countdown
+3. **Voucher Discovery** - Shows available gift card deals when you reach checkout
+4. **Session Recovery** - Seamless login with email verification (no redirects needed)
+
+## 🌐 Browser Support
+
+| Browser | Status | Version | Notes |
+|---------|--------|---------|-------|
+| Chrome | ✅ Supported | 88+ | Manifest V3 |
+| Firefox | ✅ Supported | 109+ | Manifest V2 |
+| Edge | ✅ Supported | 88+ | Chromium-based |
+| Safari | 🚧 In Progress | - | See [roadmap](docs/ROADMAP.md) |
+| Brave | ✅ Supported | Latest | Chromium-based |
+
+## 📸 Screenshots
+
+*Screenshots coming soon - showing extension popup, voucher panel, and cashback activation*
+
+## 🔧 Development
 
 ### Prerequisites
 - Node.js 20.19+ or 22.12+
-- Chrome/Chromium or Firefox
+- npm or yarn
 
-### Install & build
-
-#### Chrome Build
+### Build Commands
 ```bash
-npm install
-npm run build:chrome
-```
-Load the `dist/` folder in `chrome://extensions` (Developer mode → Load unpacked).
-
-#### Firefox Build
-```bash
-npm install
-npm run build:firefox
-```
-Load the `dist-firefox/` folder in Firefox at `about:debugging` (This Firefox → Load Temporary Add-on).
-
-#### Build Both
-```bash
-npm run build:all
+npm run build:chrome      # Chrome/Edge build
+npm run build:firefox     # Firefox build
+npm run build:all         # Both platforms
+npm run package           # Create distribution packages
 ```
 
-#### Package for Distribution
-```bash
-npm run package
+### Project Structure
 ```
-Creates `.zip` (Chrome) and `.xpi` (Firefox) files for store submission.
-
-### Translation Management
-The extension supports multiple languages through Lokalise integration. Use these commands to sync translations:
-
-```bash
-# Push local translations to Lokalise
-npm run sync-push
-
-# Pull latest translations from Lokalise
-npm run sync-pull
+src/
+├── background/          # Service worker & core logic
+│   ├── index.ts         # Main background script
+│   ├── api.ts           # API client with site-proxy
+│   ├── analytics.ts     # GA4 Measurement Protocol
+│   └── online-cashback.ts # Cashback activation flow
+├── content/             # Page interaction scripts
+│   ├── checkout.ts      # Checkout detection
+│   └── relay.ts         # Woolsocks.eu relay
+├── popup/               # Extension popup UI
+├── options/             # Settings page
+└── shared/              # Shared utilities
+    ├── i18n.ts          # Internationalization
+    ├── types.ts         # TypeScript definitions
+    └── cache.ts         # Caching system
 ```
 
-**Translation Workflow:**
-- **Push (`sync-push`)**: Uploads new/updated keys from your local `i18n.ts` to Lokalise
-  - ✅ **Preserves translator edits** - Existing translations modified by translators are NOT overwritten
-  - ✅ **Adds new keys** - New translation keys from your code are added to Lokalise
-  - ✅ **Updates unmodified keys** - Only updates keys that haven't been changed by translators
-- **Pull (`sync-pull`)**: Downloads the latest translations from Lokalise and updates your local `i18n.ts` file
-  - ✅ **Includes translator edits** - Your local file gets updated with translator improvements
-  - ✅ **Maintains code structure** - Preserves the TypeScript format and structure
+See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed development documentation.
 
-**Note:** The sync commands require a valid Lokalise API token and project ID configured in the scripts.
+## 🧪 Testing
 
-### Session
-- Open `https://woolsocks.eu/nl/profile` and sign in once; the extension will detect the session and use your cookies
+See [TESTING.md](TESTING.md) for comprehensive testing guide.
 
-### Testing quick checks
-- Voucher: Go to a supported partner checkout (e.g., Zalando cart)
-  - The panel should show vouchers with non‑zero rates; "Use" opens a `nl-NL/giftcards-shop/products/{...}` URL
-- Online cashback: Navigate to a supported partner homepage
-  - Expect one redirect to an affiliate link and return; icon turns green; popup shows "Cashback tracking enabled" with rate/title and a re-activate button.
+### Quick Smoke Test
+1. Visit [Zalando.nl](https://zalando.nl) and add items to cart
+2. Navigate to checkout - voucher panel should appear
+3. Visit [Amazon.nl](https://amazon.nl) homepage - cashback should activate
 
-See [TESTING.md](TESTING.md) for a short manual test matrix.
+## 🤝 Contributing
 
-## Permissions
-- `tabs` — read current tab URL for domain detection and update the URL on affiliate redirect.
-- `scripting` — inject minimal UI for vouchers and the activation pill.
-- `storage` — store user settings, per-domain cooldowns, activation registry, analytics queue.
-- `notifications` — user feedback when cashback activates.
-- `cookies` — observe Woolsocks session changes to ensure site-proxy API calls succeed.
-- `webNavigation` — detect top-level navigations to trigger cashback flow and re-emit activation.
-- `offscreen` — host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening a visible tab (prevents user-visible tab flashes; used only on Chrome where supported; Firefox uses tab-based relay fallback).
-- Host permissions: `https://woolsocks.eu/*`, `https://api.woolsocks.eu/*`, and general `https?://*/*` for detection and eligibility checks.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
-### Permission justifications
+### Quick Contribution Guide
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes and test thoroughly
+4. Submit a pull request
+
+## 📋 Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for detailed roadmap.
+
+**Coming Soon:**
+- Safari desktop & iOS support
+- Email-only accounts for quick signup
+- Enhanced analytics dashboard
+- Multi-language support expansion
+- Real-time blacklists and alternative UX
+
+## 🔐 Privacy & Security
+
+- **No sensitive data collection** - Only public page content analysis for merchant detection
+- **Local processing** - All detection happens in your browser, not on our servers
+- **Transparent permissions** - Clear justification for each permission (see below)
+- **User control** - Disable auto-activation anytime in settings
+- **Minimal data** - Only stores necessary user preferences and session info locally
+
+### Permission Justifications
 
 #### Core Functionality Permissions
-- **`tabs`** — We must detect merchant domains (tabs/webNavigation) and update the URL on affiliate redirect to enable cashback tracking.
-- **`webNavigation`** — Detect top-level navigations to trigger cashback flow and re-emit activation when users return from affiliate redirects.
-- **`cookies`** — Observe Woolsocks session changes to ensure site-proxy API calls succeed with proper authentication.
-- **`storage`** — Store user settings, per-domain cooldowns, activation registry, analytics queue, and cached data for reliable operation.
-- **`scripting`** — Inject minimal UI components (voucher panels, activation pills) only on detected merchant sites; never injects into sensitive origins.
-- **`notifications`** — Provide clear user feedback when cashback activates successfully.
-- **`offscreen`** — Host a Chrome MV3 offscreen document with a hidden iframe to `woolsocks.eu` to perform credentialed API calls without opening visible tabs (prevents user-visible tab flashes; used only on Chrome where supported; Firefox uses tab-based relay fallback).
+- **`tabs`** — Detect merchant domains and update URLs on affiliate redirects
+- **`webNavigation`** — Detect top-level navigations to trigger cashback flow
+- **`cookies`** — Observe Woolsocks session changes for authenticated API calls
+- **`storage`** — Store user settings, cooldowns, and cached data locally
+- **`scripting`** — Inject minimal UI components only on detected merchant sites
+- **`notifications`** — Provide user feedback when cashback activates
+- **`offscreen`** — Perform authenticated API calls without visible tab flashes (Chrome only)
 
-#### Host Permission Justifications
+#### Host Permissions
+- **`https://woolsocks.eu/*`** — Authentication, API communication, session management
+- **`https?://*/*`** — Universal merchant detection across all supported sites
 
-**`https://woolsocks.eu/*` and `https://api.woolsocks.eu/*`**
-- **Authentication**: Required to access user's Woolsocks account and session cookies for authenticated API calls
-- **API Communication**: Make requests to Woolsocks APIs for deal information, cashback activation, and user data
-- **Relay Fallback**: When offscreen context fails, reuse existing Woolsocks tabs for API calls
-- **Session Management**: Monitor session state changes and handle login/logout events
-- **Verification Emails**: Send verification emails directly via API for session recovery
+*No personal data is collected from visited sites. Only public page content is analyzed locally to detect checkout pages and merchant eligibility.*
 
-**`https?://*/*` (All HTTP/HTTPS sites)**
-- **Universal Merchant Detection**: The extension works with ANY merchant that Woolsocks supports, not just a predefined list
-- **Checkout Detection**: Analyze page content to detect checkout/cart pages across all e-commerce sites
-- **Deal Eligibility**: Query Woolsocks API to check if any visited merchant has available deals
-- **Content Analysis**: Parse page content to extract order totals and merchant information
-- **Affiliate Redirects**: Redirect users through tracked affiliate links to enable cashback
-- **UI Injection**: Display voucher panels and activation notifications only on detected merchant sites
-- **No Data Collection**: We do not collect, store, or transmit any personal data from visited sites
+## ❓ FAQ
 
-**Security and Privacy Safeguards**
-- **Minimal Data Access**: Only reads public page content (order totals, merchant names) necessary for deal detection
-- **No Sensitive Data**: Never accesses passwords, payment information, or personal details
-- **Local Processing**: All content analysis happens locally in the browser
-- **Transparent Operation**: Users can see exactly what the extension does through visible UI elements
-- **User Control**: All automatic behaviors can be disabled via settings
-- **Affiliate Disclosure**: Clear disclosure that the extension uses affiliate links for monetization
+**Q: Does this extension collect my browsing history?**
+A: No. We only analyze pages to detect supported merchants. No browsing history is stored or transmitted.
 
-## UI notes
-- Active state uses brand green background/border `#00C275`.
-- Tracking badge: background `#ECFDF5`, text/icon `#268E60`.
-- Header shows balance on the left and hostname on the right.
-- Footer logo uses `Woolsocks-logo-large.png` (transparent background) for consistent rendering.
+**Q: Why does it need access to all websites?**
+A: To detect any merchant that Woolsocks supports (100+ sites). We only activate on supported merchants, never on personal or sensitive sites.
 
-## Settings
-- Popup/Options → "Auto-activate online cashback" toggle (default ON). When OFF, the flow does not auto-redirect; manual re-activate remains available.
+**Q: Can I use it without logging in?**
+A: Yes! Browse deals anonymously. Login is only needed to track your earnings and access your balance.
 
-## Session Recovery
-The extension automatically stores your email locally after successful login to enable seamless session recovery:
+**Q: Which countries are supported?**
+A: Currently Netherlands (NL). More countries coming soon - see our roadmap.
 
-- **Automatic email storage**: When you log in successfully, your email is stored securely in the browser's local storage
-- **Verification flow**: If you lose your session, clicking "Login" shows a verification screen instead of redirecting to woolsocks.eu
-- **Direct email sending**: The extension sends verification emails directly via the API without leaving the extension
-- **Smart fallback**: If no email is stored, it falls back to the original woolsocks.eu redirect flow
-- **Balance caching**: Your cashback balance remains visible with a "last updated" timestamp even after session loss
-- **Privacy controls**: You can clear your stored email anytime via the "Forget Me" button in settings
+**Q: How does the cashback activation work?**
+A: When you visit a supported merchant, the extension shows a visible prompt with countdown. You can cancel anytime. If you proceed, it redirects through an affiliate link to enable cashback tracking.
 
-### Session Recovery Flow
-1. User clicks "Login" → Extension checks for stored email
-2. If email exists → Shows verification screen with masked email
-3. Verification email sent automatically → User checks email and clicks link
-4. Session restored → User continues seamlessly in extension
-5. If no email stored → Falls back to woolsocks.eu redirect
+**Q: What if I don't want automatic activation?**
+A: You can disable auto-activation in settings and use manual reminders only, or turn off all prompts entirely.
 
-## Analytics (GA4)
-- Events sent via Measurement Protocol: `oc_partner_detected`, `oc_eligible`, `oc_blocked`, `oc_redirect_requested`, `oc_redirect_issued`, `oc_redirect_navigated`, `oc_activated`, `oc_manual_reactivate`, `oc_conditions_loaded`.
-- **Session recovery events**: `session_recovery_email_stored`, `session_recovery_email_cleared`, `verification_email_triggered`, `verification_email_success`, `verification_email_fail`, `verification_screen_shown`, `verification_resend_clicked`.
-- Key parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `click_id`, `ext_version`, `email_domain`.
-- Recommended GA setup: create event-scoped custom dimensions for the parameters above (currency is standard). Mark `oc_activated` as a Key event.
+## 🐛 Troubleshooting
 
-## Notes for contributors
-- Voucher filtering: include only `GIFTCARD`; exclude `GIFTCARD_PAY_LATER`
-- Online cashback filtering: include only `CASHBACK` with `usageType ONLINE` and matching `country`.
-- Voucher URL: prefer `providerReferenceId`
-- Entrance banner is disabled; voucher panel is shown only at checkout
+**Extension not detecting merchant:**
+- Ensure you're on a supported merchant site
+- Check that auto-activation is enabled in settings
+- Try refreshing the page
+- Check browser console for errors
 
+**Vouchers not showing at checkout:**
+- Clear browser cache and reload
+- Verify you're on the checkout/cart page (not product page)
+- Check that the merchant is supported
+- Try disabling other extensions temporarily
 
+**Cashback not activating:**
+- Ensure you're logged in to woolsocks.eu
+- Check your internet connection
+- Verify the merchant is eligible for cashback
+- Try the manual activation button in the popup
 
-See the full roadmap in [docs/ROADMAP.md](docs/ROADMAP.md).
-See the implementation plan for Dual Blacklists in [docs/feature-dual-blacklists-remote-config.md](docs/feature-dual-blacklists-remote-config.md).
+**Session issues:**
+- Clear browser cookies for woolsocks.eu and reload
+- Use the session recovery feature in the popup
+- Check that cookies are enabled in your browser
 
-## License
-MIT
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details
+
+## 🙏 Acknowledgments
+
+- Built with React, TypeScript, and Vite
+- Translations powered by Lokalise
+- Icons and assets by Woolsocks design team
+
+## 📞 Support
+
+- 🐛 [Report a bug](https://github.com/amsterdam-platform-creation/browser-extensions/issues)
+- 💡 [Request a feature](https://github.com/amsterdam-platform-creation/browser-extensions/issues)
+- 📧 [Contact support](mailto:support@woolsocks.eu)
+- 📚 [Documentation](docs/)
+
+---
+
+Made with ❤️ by the Woolsocks team

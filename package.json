@@ -2,6 +2,18 @@
   "name": "woolsocks-extension",
   "private": true,
   "version": "0.10.0",
+  "description": "Browser extension for automatic cashback and voucher discovery",
+  "keywords": ["browser-extension", "cashback", "vouchers", "shopping", "chrome-extension", "firefox-addon"],
+  "author": "Woolsocks <team@woolsocks.eu>",
+  "license": "MIT",
+  "homepage": "https://woolsocks.eu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amsterdam-platform-creation/browser-extensions.git"
+  },
+  "bugs": {
+    "url": "https://github.com/amsterdam-platform-creation/browser-extensions/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
