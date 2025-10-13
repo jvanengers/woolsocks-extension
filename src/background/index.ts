@@ -999,7 +999,7 @@ async function injectVoucherInPage(
         func: (translations: any) => {
           try { (window as any).__wsTranslations = translations } catch {}
         },
-        args: [(t() as any).voucher],
+        args: [{ voucher: (t() as any).voucher }],
       })
       await scripting.executeScript({
         target: { tabId },
@@ -1028,7 +1028,7 @@ async function injectVoucherInPage(
     // Inject translations
     const setTranslations = `
       (function(){
-        try { window.__wsTranslations = ${JSON.stringify((t() as any).voucher)} } catch(e){}
+        try { window.__wsTranslations = ${JSON.stringify({ voucher: (t() as any).voucher })} } catch(e){}
       })();
     `
     await new Promise<void>((resolve) => {
@@ -1083,6 +1083,7 @@ function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspI
     },
     instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
   }
+  // Handle both cases: injected as {voucher: {...}} or injected as voucher object directly
   const translations = (injected && injected.voucher)
     ? injected
     : { voucher: injected || fallbackVoucher }
