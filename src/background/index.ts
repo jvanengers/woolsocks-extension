@@ -894,24 +894,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
       paymentIconUrls: paymentIconFiles.map(asset),
     }
 
-    chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      func: (translations) => {
-        try { (window as any).__wsTranslations = translations } catch {}
-      },
-      args: [t().voucher],
-    }).then(() => {
-      // Then render the voucher panel in MAIN world to avoid isolation issues
-      return chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        func: showVoucherDetailWithUsps,
-        args: [bolPartner, checkoutTotal, assets],
-      })
-    }).catch((e) => {
-      console.warn('[WS] Failed to inject/render voucher panel:', e)
-    })
+    await injectVoucherInPage(tabId, bolPartner, checkoutTotal, assets)
     
     return
   }
@@ -995,24 +978,74 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
     paymentIconUrls: paymentIconFiles.map(asset),
   }
 
-  chrome.scripting.executeScript({
-    target: { tabId },
-    world: 'MAIN',
-    func: (translations) => {
-      try { (window as any).__wsTranslations = translations } catch {}
-    },
-    args: [t().voucher],
-  }).then(() => {
-    // Then render the voucher panel in MAIN world to avoid isolation issues
-    return chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'MAIN',
-      func: showVoucherDetailWithUsps,
-      args: [partner, checkoutTotal, assets],
+  await injectVoucherInPage(tabId, partner, checkoutTotal, assets)
+}
+
+// Firefox MV2 compatible injection helper: inject voucher UI into MAIN world.
+// Uses chrome.scripting when available; falls back to tabs.executeScript + postMessage bridge.
+async function injectVoucherInPage(
+  tabId: number,
+  partner: any,
+  checkoutTotal: number,
+  assets: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }
+) {
+  // Try scripting API first (MV3/Chromium, and Firefox with limited support)
+  const scripting = (chrome as any).scripting
+  if (scripting && typeof scripting.executeScript === 'function') {
+    try {
+      await scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: (translations: any) => {
+          try { (window as any).__wsTranslations = translations } catch {}
+        },
+        args: [(t() as any).voucher],
+      })
+      await scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: (p: any, amount: number, a: any) => (window as any).showVoucherDetailWithUsps?.(p, amount, a),
+        args: [partner, checkoutTotal, assets],
+      })
+      return
+    } catch (e) {
+      console.warn('[WS] scripting.executeScript failed, falling back for MV2:', e)
+    }
+  }
+
+  // MV2 fallback: use tabs.executeScript to inject a small bootstrap that defines a page function
+  try {
+    const defineFunc = `
+      (function(){
+        try {
+          window.showVoucherDetailWithUsps = ${showVoucherDetailWithUsps.toString()};
+        } catch (e) { /* noop */ }
+      })();
+    `
+    await new Promise<void>((resolve) => {
+      chrome.tabs.executeScript(tabId, { code: defineFunc }, () => resolve())
     })
-  }).catch((e) => {
-    console.warn('[WS] Failed to inject/render voucher panel:', e)
-  })
+    // Inject translations
+    const setTranslations = `
+      (function(){
+        try { window.__wsTranslations = ${JSON.stringify((t() as any).voucher)} } catch(e){}
+      })();
+    `
+    await new Promise<void>((resolve) => {
+      chrome.tabs.executeScript(tabId, { code: setTranslations }, () => resolve())
+    })
+    // Call the function in page
+    const callFunc = `
+      (function(){
+        try { (window.showVoucherDetailWithUsps||function(){})(${JSON.stringify(partner)}, ${JSON.stringify(checkoutTotal)}, ${JSON.stringify(assets)}); } catch(e){}
+      })();
+    `
+    await new Promise<void>((resolve) => {
+      chrome.tabs.executeScript(tabId, { code: callFunc }, () => resolve())
+    })
+  } catch (e) {
+    console.warn('[WS] MV2 tabs.executeScript voucher injection failed:', e)
+  }
 }
 
 // MVP: Removed old complex voucher offer function - replaced with simplified version
