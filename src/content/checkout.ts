@@ -1120,10 +1120,13 @@ const mediamarktDetector: CheckoutDetector = {
     const hasPaymentRoot = !!document.querySelector('[data-test="checkout-payment-page"]')
     const hasSummary = !!document.querySelector('#totalPriceWrapper, [data-test="checkout-total"], h3.sc-94eb08bc-0.gZiaJK')
     
+    console.log('[WS] MediaMarkt detector - URL:', url, 'isCheckoutURL:', isCheckoutURL, 'hasPaymentRoot:', hasPaymentRoot, 'hasSummary:', hasSummary)
+    
     // Only return true if we have strong checkout indicators
     return isCheckoutURL && (hasPaymentRoot || hasSummary)
   },
   extractTotal: () => {
+    console.log('[WS] MediaMarkt extractTotal called')
     // First try exact selectors from the page you shared
     const exactSelectors = [
       '#totalPriceWrapper [data-test="checkout-total"] span',
@@ -1132,9 +1135,14 @@ const mediamarktDetector: CheckoutDetector = {
     ]
     for (const sel of exactSelectors) {
       const el = document.querySelector(sel)
+      console.log('[WS] MediaMarkt selector:', sel, 'found:', !!el, 'text:', el?.textContent)
       if (el && el.textContent) {
         const match = el.textContent.match(/€\s*([\d.,]+)/)
-        if (match) return parseFloat(match[1].replace('.', '').replace(',', '.'))
+        if (match) {
+          const amount = parseFloat(match[1].replace('.', '').replace(',', '.'))
+          console.log('[WS] MediaMarkt extracted amount:', amount)
+          return amount
+        }
       }
     }
 
@@ -1736,6 +1744,7 @@ const thuisbezorgdDetector: CheckoutDetector = {
 }
 
 function getDetector(hostname: string): CheckoutDetector {
+  console.log('[WS] getDetector called with hostname:', hostname)
   if (hostname.includes('xenos.nl')) return xenosDetector
   if (hostname.includes('beterbed.nl')) return beterbedDetector
   if (hostname.includes('dille-kamille.nl')) return dilleKamilleDetector
@@ -1750,7 +1759,10 @@ function getDetector(hostname: string): CheckoutDetector {
   if (hostname.includes('bol.com')) return bolDetector
   if (hostname.includes('nike')) return nikeDetector
   if (hostname.includes('coolblue')) return coolblueDetector
-  if (hostname.includes('mediamarkt')) return mediamarktDetector
+  if (hostname.includes('mediamarkt')) {
+    console.log('[WS] Using MediaMarkt detector')
+    return mediamarktDetector
+  }
   if (hostname.includes('ikea')) return ikeaDetector
   if (hostname.includes('hema')) return hemaDetector
   if (hostname.includes('decathlon')) return decathlonDetector
@@ -1763,6 +1775,7 @@ function getDetector(hostname: string): CheckoutDetector {
   if (hostname.includes('wehkamp')) return wehkampDetector
   if (hostname.includes('rituals')) return ritualsDetector
   if (hostname.includes('thuisbezorgd')) return thuisbezorgdDetector
+  console.log('[WS] Using generic detector')
   return genericDetector
 }
 
@@ -1812,8 +1825,18 @@ function detectCheckout(): CheckoutInfo | null {
     timestamp: Date.now()
   }
   
-  
+  console.log('[WS] Checkout detected:', checkoutInfo)
   return checkoutInfo
+}
+
+// Debug: Log that content script is loaded
+try {
+  console.log('[WS] Content script checkout.ts loaded on:', window.location.href)
+  console.log('[WS] Content script loaded at:', new Date().toISOString())
+  console.log('[WS] Document ready state:', document.readyState)
+  console.log('[WS] Window location:', window.location.href)
+} catch (e) {
+  console.error('[WS] Error in content script initialization:', e)
 }
 
 // Throttle function to prevent excessive calls
@@ -1849,6 +1872,7 @@ const debouncedCheckForCheckout = throttle(() => {
         }
         if (checkoutInfo.total && checkoutInfo.total > 0) {
           if (__wsLastSentTotal !== checkoutInfo.total) {
+            console.log('[WS] Sending CHECKOUT_DETECTED message:', checkoutInfo)
             chrome.runtime.sendMessage({
               type: 'CHECKOUT_DETECTED',
               checkoutInfo
@@ -1866,6 +1890,7 @@ const debouncedCheckForCheckout = throttle(() => {
       if (isVoucherDismissed(window.location.hostname)) return
       if (checkoutInfo.total && checkoutInfo.total > 0) {
         if (__wsLastSentTotal !== checkoutInfo.total) {
+          console.log('[WS] Sending CHECKOUT_DETECTED message (fallback):', checkoutInfo)
           chrome.runtime.sendMessage({ type: 'CHECKOUT_DETECTED', checkoutInfo })
           __wsLastSentTotal = checkoutInfo.total
           __wsClearRetry()

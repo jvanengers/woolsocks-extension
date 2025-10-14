@@ -18,6 +18,10 @@ const EXCLUDED_HOSTS = new Set<string>([
 const COOLDOWN_MS = 10 * 60 * 1000 // 10 minutes cooldown to avoid repeated redirects
 const OC_DEBUG = false // Set to true for debugging
 const ACTIVE_TTL_MS = 10 * 60 * 1000 // 10 minutes active state per domain
+const PENDING_DOMAIN_TTL_MS = 2.5 * 60 * 1000 // 2.5 minutes fallback for domain-scoped pending
+const PENDING_UI_TTL_MS = 10 * 1000 // 10 seconds TTL for pending UI events in session storage
+const MIN_COUNTDOWN_DURATION_MS = 3 * 1000 // Minimum 3 seconds from countdown start to navigation
+const REDIRECT_URL_TIMEOUT_MS = 10 * 1000 // 10 second timeout for redirect URL fetch
 
 type RedirectState = {
   expectedFinalHost: string
@@ -696,7 +700,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       let redir: { url: string; clickId?: string } | null = null
       try {
         const timeoutPromise = new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('Redirect URL request timeout')), 10000)
+          setTimeout(() => reject(new Error('Redirect URL request timeout')), REDIRECT_URL_TIMEOUT_MS)
         )
         redir = await Promise.race([requestRedirectUrl(best.id), timeoutPromise])
         if (OC_DEBUG) console.log('[WS OC] Redirect URL fetched:', redir ? 'success' : 'null')
@@ -808,7 +812,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         try {
           let affiliateHost = ''
           try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
-          const until = Date.now() + 150000
+          const until = Date.now() + PENDING_DOMAIN_TTL_MS
           pendingByDomain.set(clean, { affiliateHost, clickId: redir.clickId, partnerName: partner.name, deal: best, originalUrl: url, until })
           if (OC_DEBUG) console.log('[WS OC] set domain-pending', { key: clean, affiliateHost, until })
         } catch {}
@@ -861,7 +865,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       // Check for pending countdown
       try {
         const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
-        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < 10000) {
+        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < PENDING_UI_TTL_MS) {
           if (OC_DEBUG) console.log(`[WS OC] Found pending countdown for ${clean}, retrying...`)
           const pingOk = await pingContentScript(tabId)
           if (pingOk && __wsOcPendingUi.kind === 'oc_countdown_start') {
@@ -950,7 +954,7 @@ chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
       try {
         // Check for pending countdown
         const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
-        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < 10000) {
+        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < PENDING_UI_TTL_MS) {
           if (__wsOcPendingUi.kind === 'oc_countdown_start') {
             try {
               await chrome.tabs.sendMessage(tabId, {
@@ -998,7 +1002,7 @@ async function handleCountdownComplete(domain: string, dealInfo: any, tabId?: nu
   try {
     const startedAt = Number(pending.startedAt || 0)
     const elapsed = Date.now() - startedAt
-    const MIN_MS = 3000
+    const MIN_MS = MIN_COUNTDOWN_DURATION_MS
     if (!Number.isNaN(elapsed) && elapsed < MIN_MS) {
       await new Promise(resolve => setTimeout(resolve, MIN_MS - elapsed))
     }
@@ -1223,7 +1227,7 @@ async function handleManualActivationDeal(domain: string, dealInfo: any) {
         try {
           let affiliateHost = ''
           try { affiliateHost = cleanHost(new URL(redir.url).hostname) } catch {}
-          const until = Date.now() + 150000
+          const until = Date.now() + PENDING_DOMAIN_TTL_MS
           pendingByDomain.set(domain, { 
             affiliateHost, 
             clickId: redir.clickId, 

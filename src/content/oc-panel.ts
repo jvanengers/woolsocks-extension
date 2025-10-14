@@ -928,7 +928,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
     <div class="countdown-content">
       <div class="countdown-row">
         <div class="countdown-text">
-          <div class="countdown-title" id="ws-countdown-title">Cashback actief in ${countdownSeconds}</div>
+          <div class="countdown-title" id="ws-countdown-title">${translate('ocPanel.countdownTitle', { seconds: countdownSeconds.toString() })}</div>
           
         </div>
         <div class="countdown-actions">
@@ -953,7 +953,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   // Start countdown
   countdownTimer = window.setInterval(() => {
     countdownSeconds--
-    if (titleEl) { titleEl.textContent = `Cashback actief in ${countdownSeconds}` }
+    if (titleEl) { titleEl.textContent = translate('ocPanel.countdownTitle', { seconds: countdownSeconds.toString() }) }
     
     
     if (countdownSeconds <= 0) {

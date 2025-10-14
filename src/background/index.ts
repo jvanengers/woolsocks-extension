@@ -428,6 +428,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true })
     return false
   } else if (message?.type === 'CHECKOUT_DETECTED') {
+    console.log('[WS] CHECKOUT_DETECTED message received:', message.checkoutInfo, 'from tab:', _sender.tab?.id)
     handleCheckoutDetected(message.checkoutInfo, _sender.tab?.id)
     sendResponse({ ok: true })
     return false
@@ -834,8 +835,12 @@ chrome.runtime.onStartup?.addListener(async () => {
 // Removed unused handleShowProfile function
 
 async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
+  console.log('[WS] handleCheckoutDetected ENTRY - checkoutInfo:', checkoutInfo, 'tabId:', tabId)
   await ensureLanguageInitialized()
-  if (!tabId) return
+  if (!tabId) {
+    console.log('[WS] handleCheckoutDetected EXIT - no tabId')
+    return
+  }
   
   // checkoutInfo.merchant is already a hostname (e.g., "zalando.com")
   console.log('[WS] handleCheckoutDetected called with:', checkoutInfo)
@@ -982,30 +987,43 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 }
 
 // Firefox MV2 compatible injection helper: inject voucher UI into MAIN world.
-// Uses chrome.scripting when available; falls back to tabs.executeScript + postMessage bridge.
+// Uses chrome.scripting when available; falls back to tabs.executeScript with bundled popup module
 async function injectVoucherInPage(
   tabId: number,
   partner: any,
   checkoutTotal: number,
   assets: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }
 ) {
+  console.log('[WS] injectVoucherInPage called with:', { tabId, partner: partner.name, checkoutTotal, assets })
+  
+  // Get translations
+  const translations = (t() as any).voucher
+  console.log('[WS] Translations object:', translations)
+  
   // Try scripting API first (MV3/Chromium, and Firefox with limited support)
   const scripting = (chrome as any).scripting
+  console.log('[WS] Scripting API available:', !!scripting, 'executeScript function:', typeof scripting?.executeScript)
+  
   if (scripting && typeof scripting.executeScript === 'function') {
+    console.log('[WS] Using MV3 scripting API path')
     try {
+      // Import the popup module dynamically
+      const { createVoucherPopup } = await import('../shared/voucher-popup')
+      
       await scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        func: (translations: any) => {
-          try { (window as any).__wsTranslations = translations } catch {}
+        func: (createVoucherPopupFunc: any, config: any) => {
+          try {
+            console.log('[WS] MV3 Creating popup with config:', config);
+            const popup = createVoucherPopupFunc(config);
+            document.body.appendChild(popup);
+            console.log('[WS] MV3 Popup created and appended successfully');
+          } catch (e) {
+            console.error('[WS] MV3 Popup creation failed:', e);
+          }
         },
-        args: [{ voucher: (t() as any).voucher }],
-      })
-      await scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        func: (p: any, amount: number, a: any) => (window as any).showVoucherDetailWithUsps?.(p, amount, a),
-        args: [partner, checkoutTotal, assets],
+        args: [createVoucherPopup, { partner, checkoutTotal, assets, translations }],
       })
       return
     } catch (e) {
@@ -1013,38 +1031,85 @@ async function injectVoucherInPage(
     }
   }
 
-  // MV2 fallback: use tabs.executeScript to inject a small bootstrap that defines a page function
+  // MV2 fallback: use <script> tag injection with a Blob URL to bypass inline-CSP
+  console.log('[WS] Using MV2 tabs.executeScript fallback path')
   try {
-    const defineFunc = `
-      (function(){
+    // 0) Probe that tabs.executeScript actually runs in this tab
+    await new Promise<void>((resolve) => {
+      chrome.tabs.executeScript(
+        tabId,
+        { code: "console.log('[WS] MV2 probe: executing in page'); document.documentElement.setAttribute('data-ws-probe','ok');", runAt: 'document_idle' },
+        (results) => {
+          if (chrome.runtime.lastError) {
+            console.error('[WS] MV2 probe failed:', chrome.runtime.lastError)
+          } else {
+            console.log('[WS] MV2 probe executed, results:', results)
+          }
+          resolve()
+        }
+      )
+    })
+
+    const { getVoucherPopupBundle } = await import('../shared/voucher-popup-bundle')
+    const bundleCode = getVoucherPopupBundle()
+
+    // Step 1: inject the bundle via a <script src=blob:...>
+    // Step 2: after load, call window.createVoucherPopup(config)
+    const configJson = JSON.stringify({ partner, checkoutTotal, assets, translations })
+    const injectionScript = `
+      (function () {
         try {
-          window.showVoucherDetailWithUsps = ${showVoucherDetailWithUsps.toString()};
-        } catch (e) { /* noop */ }
+          console.log('[WS] MV2 preparing blob script injection...')
+          const bundleJs = ${JSON.stringify(bundleCode)};
+          const blob = new Blob([bundleJs], { type: 'text/javascript' });
+          const url = URL.createObjectURL(blob);
+          const markerId = 'ws-voucher-popup-loader-marker';
+          const marker = document.createElement('div');
+          marker.id = markerId;
+          marker.setAttribute('data-state', 'created');
+          marker.style.display = 'none';
+          document.documentElement.appendChild(marker);
+
+          const script = document.createElement('script');
+          script.src = url;
+          script.onload = function () {
+            try {
+              marker.setAttribute('data-state', 'loaded');
+              console.log('[WS] MV2 bundle loaded, creating popup...');
+              const cfg = ${configJson};
+              const popup = (window as any).createVoucherPopup(cfg);
+              document.body.appendChild(popup);
+              console.log('[WS] MV2 Popup created and appended successfully');
+            } catch (err) {
+              console.error('[WS] MV2 Popup creation failed after load:', err);
+            } finally {
+              try { URL.revokeObjectURL(url); } catch {}
+            }
+          };
+          script.onerror = function (e) {
+            marker.setAttribute('data-state', 'error');
+            console.error('[WS] MV2 blob script failed to load', e);
+            try { URL.revokeObjectURL(url); } catch {}
+          };
+          document.documentElement.appendChild(script);
+        } catch (outerErr) {
+          console.error('[WS] MV2 blob script injection error:', outerErr);
+        }
       })();
     `
+
     await new Promise<void>((resolve) => {
-      chrome.tabs.executeScript(tabId, { code: defineFunc }, () => resolve())
-    })
-    // Inject translations
-    const setTranslations = `
-      (function(){
-        try { window.__wsTranslations = ${JSON.stringify({ voucher: (t() as any).voucher })} } catch(e){}
-      })();
-    `
-    await new Promise<void>((resolve) => {
-      chrome.tabs.executeScript(tabId, { code: setTranslations }, () => resolve())
-    })
-    // Call the function in page
-    const callFunc = `
-      (function(){
-        try { (window.showVoucherDetailWithUsps||function(){})(${JSON.stringify(partner)}, ${JSON.stringify(checkoutTotal)}, ${JSON.stringify(assets)}); } catch(e){}
-      })();
-    `
-    await new Promise<void>((resolve) => {
-      chrome.tabs.executeScript(tabId, { code: callFunc }, () => resolve())
+      chrome.tabs.executeScript(tabId, { code: injectionScript, runAt: 'document_idle' }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('[WS] MV2 script-tag injection failed:', chrome.runtime.lastError)
+        } else {
+          console.log('[WS] MV2 script-tag injection executed')
+        }
+        resolve()
+      })
     })
   } catch (e) {
-    console.warn('[WS] MV2 tabs.executeScript voucher injection failed:', e)
+    console.warn('[WS] MV2 script-tag voucher injection failed:', e)
   }
 }
 
@@ -1060,882 +1125,4 @@ async function injectVoucherInPage(
 
 // Removed unused showProfileScreen function
 
-function showVoucherDetailWithUsps(partner: any, amount: number, assets?: { uspIconUrl: string; wsLogoUrl: string; externalIconUrl: string; paymentIconUrls: string[] }) {
-  // Always reflect the latest detected amount by re-rendering the prompt
-  const existing = document.getElementById('woolsocks-voucher-prompt')
-  if (existing) {
-    try { existing.remove() } catch {}
-  }
-
-  // Get translations (injected from background script) with safe fallback.
-  // Some builds inject only the voucher object (not wrapped). Normalize shape.
-  const injected = (window as any).__wsTranslations
-  const fallbackVoucher = {
-    title: 'Voucher',
-    purchaseAmount: 'Purchase amount',
-    cashbackText: "You'll get ",
-    cashbackSuffix: ' of cashback',
-    viewDetails: 'View voucher details',
-    usps: {
-      instantDelivery: 'Instant delivery',
-      cashbackOnPurchase: '% cashback on purchase',
-      useOnlineAtCheckout: 'Use online at checkout',
-    },
-    instructions: 'Buy the voucher at Woolsocks.eu and put the vouchercode in the field at checkout.',
-  }
-  // Handle both cases: injected as {voucher: {...}} or injected as voucher object directly
-  const translations = (injected && injected.voucher)
-    ? injected
-    : { voucher: injected || fallbackVoucher }
-
-  function markVoucherDismissed(ms: number) {
-    const host = window.location.hostname
-    const until = Date.now() + ms
-    try {
-      const raw = window.localStorage.getItem('__wsVoucherDismissals')
-      const map = raw ? (JSON.parse(raw) as Record<string, number>) : {}
-      map[host] = until
-      window.localStorage.setItem('__wsVoucherDismissals', JSON.stringify(map))
-    } catch {
-      try { document.documentElement.setAttribute('data-ws-voucher-dismissed-until', String(until)) } catch {}
-    }
-  }
-
-  type VoucherDeal = { name?: string; cashbackRate?: number; imageUrl?: string; url?: string }
-  const collected: VoucherDeal[] = []
-  const normalizeImageUrl = (u?: string) => {
-    if (!u || typeof u !== 'string') return undefined
-    try {
-      // Prefer https to avoid mixed-content blocks
-      const fixed = u.replace(/^http:/i, 'https:')
-      return fixed
-    } catch {
-      return undefined
-    }
-  }
-
-  const voucherCategory = Array.isArray(partner.categories)
-    ? partner.categories.find((c: any) => /voucher/i.test(String(c?.name || '')))
-    : null
-
-  if (voucherCategory && Array.isArray(voucherCategory.deals)) {
-    for (const d of voucherCategory.deals) {
-      collected.push({ name: d?.name, cashbackRate: typeof d?.rate === 'number' ? d.rate : undefined, imageUrl: normalizeImageUrl(d?.imageUrl), url: d?.dealUrl })
-    }
-  } else if (Array.isArray(partner.allVouchers)) {
-    for (const v of partner.allVouchers) collected.push({ name: v.name, cashbackRate: v.cashbackRate, imageUrl: normalizeImageUrl(v.imageUrl), url: v.url })
-  } else if (partner.voucherProductUrl) {
-    collected.push({ name: (partner.name || '') + ' Voucher', cashbackRate: partner.cashbackRate, imageUrl: normalizeImageUrl(partner.merchantImageUrl), url: partner.voucherProductUrl })
-  }
-
-  const validVouchers = collected
-    .filter(v => typeof v.cashbackRate === 'number' && (v.cashbackRate as number) > 0)
-    .sort((a, b) => (b.cashbackRate || 0) - (a.cashbackRate || 0))
-  
-  const best = validVouchers[0]
-  const hasMultipleVouchers = validVouchers.length > 1
-
-  const prompt = document.createElement('div')
-  prompt.id = 'woolsocks-voucher-prompt'
-  prompt.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 380px;
-    max-height: 80vh;
-    overflow-y: auto;
-    border-radius: 16px;
-    border: 4px solid var(--brand, #FDC408);
-    background: var(--brand, #FDC408);
-    box-shadow: -2px 2px 4px rgba(0, 0, 0, 0.08);
-    z-index: 2147483647;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    opacity: 0;
-    transform: translateY(10px) scale(0.95);
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    cursor: move;
-  `
-
-  let selectedVoucherIndex = 0
-  const effectiveRate = typeof (validVouchers[selectedVoucherIndex]?.cashbackRate ?? partner.cashbackRate) === 'number' ? (validVouchers[selectedVoucherIndex]?.cashbackRate ?? partner.cashbackRate) : 0
-  const cashbackAmount = (amount * effectiveRate / 100).toFixed(2)
-
-  // USPs with unified checkmark icon
-  const uspIconUrl = assets?.uspIconUrl || ''
-  const safeUsps = (translations && translations.voucher && translations.voucher.usps) || {
-    instantDelivery: 'Instant delivery',
-    cashbackOnPurchase: '% cashback on purchase',
-    useOnlineAtCheckout: 'Use online at checkout',
-  }
-
-  // Domain-specific messaging adjustments
-  try {
-    const hn = window.location.hostname.toLowerCase()
-    if (hn.includes('dille-kamille')) {
-      // Dille & Kamille vouchers are in-store only
-      safeUsps.useOnlineAtCheckout = 'Voucher only usable in-store (not online)'
-      if (translations && translations.voucher) {
-        (translations.voucher as any).instructions = 'This voucher can only be used in-store at Dille & Kamille (not online).'
-      }
-    }
-  } catch {}
-  const usps: Array<{ text: string }> = [
-    { text: safeUsps.instantDelivery },
-    ...(Number.isFinite(effectiveRate) && effectiveRate > 0 ? [{ text: `${effectiveRate}${safeUsps.cashbackOnPurchase}` }] : []),
-    { text: safeUsps.useOnlineAtCheckout },
-  ]
-
-  let image = normalizeImageUrl(best?.imageUrl || partner.merchantImageUrl) || ''
-  try {
-    const hn = window.location.hostname.toLowerCase()
-    if (!image && hn.includes('prenatal.nl')) {
-      image = 'https://www.prenatal.nl/favicon.ico'
-    }
-  } catch {}
-  const title = best?.name || partner.name || 'Gift Card'
-
-  // Details (optional): omitted here as they are not available in current partner payload
-
-  // Payment methods row (from extension assets)
-  const paymentIconUrls = (assets?.paymentIconUrls || []).filter(Boolean)
-  const paymentIconsHtml = paymentIconUrls.map((src) => `
-    <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0;">
-      <img src="${src}" alt="payment" style="height: 36px; width: auto; display: block; max-width: 100%; object-fit: contain;" />
-    </div>
-  `).join('')
-
-  // Woolsocks logo (brand)
-  const wsLogoUrl = assets?.wsLogoUrl || ''
-  const externalIconUrl = assets?.externalIconUrl || ''
-
-  prompt.innerHTML = `
-    <div style="padding: 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #100B1C;">${partner.name}</h3>
-        <button id="ws-close" style="background: none; border: none; font-size: 28px; cursor: pointer; color: #0F0B1C; line-height: 1;">×</button>
-      </div>
-
-      <div style="border-radius: 16px; background: var(--bg-main, #F5F5F6); padding: 16px;">
-        <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: center;">
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 12px; font-style: normal; font-weight: 400; line-height: 145%; letter-spacing: 0.15px;">${translations.voucher.purchaseAmount}</div>
-          <div style="color: #100B1C; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 700; line-height: 145%;">€${amount.toFixed(2)}</div>
-        </div>
-        ${hasMultipleVouchers ? `
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-          <div id="voucher-carousel" style="display: flex; gap: 8px; overflow-x: hidden; scroll-behavior: smooth; padding: 8px 0;">
-            ${validVouchers.map((voucher, index) => `
-              <div class="voucher-card" data-index="${index}" style="min-width: 259px; background: white; border-radius: 8px; padding: 16px; display: flex; gap: 16px; align-items: flex-start; cursor: pointer; transition: transform 0.2s ease;">
-                <div style="width: 111px; height: 74px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-                  ${voucher.imageUrl ? `<img src="${voucher.imageUrl}" alt="${voucher.name}" referrerpolicy="no-referrer" decoding="async" loading="eager" onerror="console.warn('[WS] Image failed to load:', '${voucher.imageUrl}'); this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: contain;"><div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #F3F4F6; border-radius: 8px; font-size: 12px; color: #666;">Voucher</div>` : `${assets?.wsLogoUrl ? `<img src='${assets.wsLogoUrl}' alt="${voucher.name}" style="width: 100%; height: 100%; object-fit: contain;">` : `<div style=\"font-size: 12px; color: #666;\">Voucher</div>`}`}
-                </div>
-                <div style="flex: 1; min-width: 0;">
-                  <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 4px; background: #ECEBED; font-size: 13px; color: #6B7280; margin-bottom: 2px; width: fit-content;">${voucher.cashbackRate}% cashback</div>
-                  <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${voucher.name}</div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-          <div id="carousel-navigation" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div id="carousel-left-arrow" class="carousel-arrow" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.5;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M15 18L9 12L15 6" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-            <div id="carousel-indicators" style="display: flex; justify-content: center; gap: 4px;">
-              ${validVouchers.map((_, index) => `
-                <div class="carousel-dot" data-index="${index}" style="width: 6px; height: 6px; border-radius: ${index === 0 ? '3px' : '50%'}; background: ${index === 0 ? '#0F0B1C' : '#D1D5DB'}; cursor: pointer; transition: all 0.2s ease;"></div>
-              `).join('')}
-            </div>
-            <div id="carousel-right-arrow" class="carousel-arrow" style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M9 18L15 12L9 6" stroke="#0F0B1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-          </div>
-        </div>
-        ` : `
-        <div style="display: flex; padding: 16px; flex-direction: column; justify-content: center; align-items: flex-start; gap: 16px; border-radius: 8px; background: var(--bg-neutral, #FFF); margin-bottom: 16px;">
-          <div style="display: flex; gap: 12px; align-items: center; width: 100%;">
-            <div style="width: 72px; height: 48px; border-radius: 8px; background: #F3F4F6; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-              ${image ? `<img src="${image}" alt="${title}" referrerpolicy="no-referrer" decoding="async" loading="eager" onerror="console.warn('[WS] Image failed to load:', '${image}'); this.style.display='none'; this.nextElementSibling.style.display='flex';" style="width: 100%; height: 100%; object-fit: contain;"><div style="display: none; width: 100%; height: 100%; align-items: center; justify-content: center; background: #F3F4F6; border-radius: 8px; font-size: 12px; color: #666;">Voucher</div>` : `${assets?.wsLogoUrl ? `<img src='${assets.wsLogoUrl}' alt="${title}" style="width: 100%; height: 100%; object-fit: contain;">` : `<div style=\"font-size: 12px; color: #666;\">Voucher</div>`}`}
-            </div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 4px; background: #ECEBED; font-size: 13px; color: #6B7280; margin-bottom: 2px; width: fit-content;">${effectiveRate}% cashback</div>
-              <div style="font-size: 16px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>
-            </div>
-          </div>
-        </div>
-        `}
-
-        <div style="display: flex; width: 310px; height: 43px; padding: 8px 16px; justify-content: center; align-items: baseline; gap: 4px; margin-bottom: 16px;">
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackText}</span>
-          <span style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">€${cashbackAmount}</span>
-          <span style="color: #8564FF; text-align: center; font-feature-settings: 'liga' off, 'clig' off; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 400; line-height: 145%;">${translations.voucher.cashbackSuffix}</span>
-        </div>
-
-        <div style="display: flex; align-items: center;">
-          <button id="ws-use-voucher" style="display: flex; width: 100%; height: 48px; padding: 0 16px 0 24px; justify-content: center; align-items: center; gap: 16px; border-radius: 4px; background: var(--action-button-fill-bg-default, #211940); color: var(--action-button-fill-content-default, #FFF); border: none; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-style: normal; font-weight: 500; line-height: 140%; text-align: center; font-feature-settings: 'liga' off, 'clig' off; cursor: pointer;">
-            <span>${translations.voucher.viewDetails}</span>
-            ${externalIconUrl ? `<img src="${externalIconUrl}" alt="open" style="width:20px;height:20px;display:block;" />` : ''}
-          </button>
-        </div>
-      </div>
-
-
-      <div style="display: flex; width: 100%; padding: 16px; box-sizing: border-box; flex-direction: column; justify-content: center; align-items: flex-start; gap: 8px; border-radius: 8px; border: 1px solid var(--semantic-green-75, #B0F6D7); background: rgba(255, 255, 255, 0.50); margin: 12px 0;">
-        ${usps.map(u => `
-          <div style=\"display: flex; align-items: center; gap: 8px;\">
-            ${uspIconUrl ? `<img src=\"${uspIconUrl}\" alt=\"check\" style=\"width:16px;height:16px;display:block;\" />` : ''}
-            <span style=\"font-size: 13px; color: #111827;\">${u.text}</span>
-          </div>
-        `).join('')}
-      </div>
-
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0 14px; width: 100%;">
-        ${paymentIconsHtml}
-      </div>
-
-      <div style="font-size: 13px; color: #3A2B00; opacity: 0.9; text-align: center; line-height: 1.4; margin: 6px 0 10px;">
-        ${translations.voucher.instructions}
-      </div>
-
-      ${wsLogoUrl ? `
-        <div style="display:flex; align-items:center; justify-content:center; padding-top: 8px;">
-          <img src="${wsLogoUrl}" alt="Woolsocks" style="height: 36px; width: auto; display: block;" />
-        </div>
-      ` : ''}
-    </div>
-  `
-
-  document.body.appendChild(prompt)
-
-  try {
-    const topRate = Number.isFinite(effectiveRate) ? effectiveRate : undefined
-    window.postMessage({ type: 'WS_VOUCHER_PANEL_SHOWN', partner_name: partner.name, top_rate: topRate }, window.location.origin)
-    // Report initial best voucher view if available
-    try {
-      const pick = best?.url || partner.voucherProductUrl || ''
-      const id = (() => { try { const m = String(pick).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
-      if (id) {
-        window.postMessage({ type: 'WS_VOUCHER_VIEW', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
-      }
-    } catch {}
-  } catch {}
-
-  // If user previously minimized on this domain and the cooldown is still active, show the minimized banner immediately
-  try {
-    const host = window.location.hostname
-    const raw = window.localStorage.getItem('__wsMinimizedBannerMap')
-    const map = raw ? (JSON.parse(raw) as Record<string, { until: number; cashbackAmount?: string; corner?: string }>) : {}
-    const entry = map[host]
-    if (entry && typeof entry.until === 'number' && Date.now() < entry.until) {
-      // Show minimized banner and position to remembered corner
-      showMinimizedBanner()
-      try {
-        const mb = document.getElementById('woolsocks-voucher-minimized') as HTMLElement | null
-        if (mb && entry.corner) {
-          mb.style.top = 'auto'
-          mb.style.bottom = 'auto'
-          mb.style.left = 'auto'
-          mb.style.right = 'auto'
-          const [v, h] = entry.corner.split('-')
-          if (v === 'top') mb.style.top = '20px'; else mb.style.bottom = '20px'
-          if (h === 'left') mb.style.left = '20px'; else mb.style.right = '20px'
-        }
-      } catch {}
-      // Hide full prompt immediately
-      ;(prompt as HTMLElement).style.display = 'none'
-    }
-  } catch {}
-
-  // --- Auto-minimize on inactivity -------------------------------------------
-  let inactivityTimer: number | undefined
-  const INACTIVITY_MS = 30_000
-
-  function scheduleAutoMinimize() {
-    if (inactivityTimer) window.clearTimeout(inactivityTimer)
-    inactivityTimer = window.setTimeout(() => {
-      if (document.body.contains(prompt) && (prompt as HTMLElement).style.display !== 'none') {
-        minimizePrompt()
-      }
-    }, INACTIVITY_MS)
-  }
-
-  function resetInactivity() {
-    scheduleAutoMinimize()
-  }
-
-  // Start inactivity countdown as soon as the widget is shown
-  scheduleAutoMinimize()
-
-  // Any interaction with the prompt should reset the inactivity timer
-  prompt.addEventListener('click', resetInactivity)
-  prompt.addEventListener('pointerdown', resetInactivity)
-  prompt.addEventListener('pointermove', resetInactivity)
-  prompt.addEventListener('wheel', resetInactivity)
-
-  // --- Carousel functionality -------------------------------------------------
-  if (hasMultipleVouchers) {
-    const carousel = document.getElementById('voucher-carousel')
-    const indicators = document.getElementById('carousel-indicators')
-    const leftArrow = document.getElementById('carousel-left-arrow')
-    const rightArrow = document.getElementById('carousel-right-arrow')
-    const cashbackAmountSpan = prompt.querySelector('span[style*="background: #8564FF"]') as HTMLElement
-    
-    if (carousel && indicators && leftArrow && rightArrow && cashbackAmountSpan) {
-      let currentIndex = 0
-      const cardWidth = 259 + 8 // card width + gap
-      const totalCards = validVouchers.length
-      
-      function updateCarousel(index: number) {
-        currentIndex = index
-        
-        // Handle positioning based on number of vouchers
-        if (carousel) {
-          const containerWidth = carousel.offsetWidth
-          let scrollPosition = 0
-          
-          if (totalCards === 2) {
-            // For 2 vouchers: center the selected card
-            const centerOffset = (containerWidth - cardWidth) / 2
-            scrollPosition = (index * cardWidth) - centerOffset
-            scrollPosition = Math.max(0, scrollPosition)
-          } else if (totalCards >= 3) {
-            // For 3+ vouchers: center the selected card with visible edges of adjacent cards
-            const centerOffset = (containerWidth - cardWidth) / 2
-            scrollPosition = (index * cardWidth) - centerOffset
-            scrollPosition = Math.max(0, scrollPosition)
-          }
-          
-          carousel.scrollLeft = scrollPosition
-        }
-      }
-      
-      // Function to detect current position based on scroll position
-      function detectCurrentPosition(): number {
-        if (!carousel) return currentIndex
-        
-        const scrollLeft = carousel.scrollLeft
-        const containerWidth = carousel.offsetWidth
-        
-        if (totalCards === 2) {
-          // For 2 vouchers: determine position based on centered logic (same as 3+)
-          const centerOffset = (containerWidth - cardWidth) / 2
-          const adjustedScroll = scrollLeft + centerOffset
-          const detectedIndex = Math.round(adjustedScroll / cardWidth)
-          const clampedIndex = Math.max(0, Math.min(totalCards - 1, detectedIndex))
-          return clampedIndex
-        } else if (totalCards >= 3) {
-          // For 3+ vouchers: determine position based on centered logic
-          const centerOffset = (containerWidth - cardWidth) / 2
-          const adjustedScroll = scrollLeft + centerOffset
-          const detectedIndex = Math.round(adjustedScroll / cardWidth)
-          const clampedIndex = Math.max(0, Math.min(totalCards - 1, detectedIndex))
-          return clampedIndex
-        }
-        
-        return currentIndex
-      }
-      
-      // Function to sync position indicator with actual scroll position
-      function syncPositionIndicator() {
-        const detectedIndex = detectCurrentPosition()
-        if (detectedIndex !== currentIndex) {
-          currentIndex = detectedIndex
-          
-          // Update indicators with rounded rectangle for selected
-          if (indicators) {
-            const dots = indicators.querySelectorAll('.carousel-dot')
-            dots.forEach((dot, i) => {
-              const dotElement = dot as HTMLElement
-              if (i === currentIndex) {
-                dotElement.style.background = '#0F0B1C'
-                dotElement.style.borderRadius = '3px'
-              } else {
-                dotElement.style.background = '#D1D5DB'
-                dotElement.style.borderRadius = '50%'
-              }
-            })
-          }
-          
-          // Update arrow visibility
-          if (leftArrow) {
-            leftArrow.style.opacity = currentIndex === 0 ? '0.5' : '1'
-            leftArrow.style.pointerEvents = currentIndex === 0 ? 'none' : 'auto'
-          }
-          if (rightArrow) {
-            rightArrow.style.opacity = currentIndex === totalCards - 1 ? '0.5' : '1'
-            rightArrow.style.pointerEvents = currentIndex === totalCards - 1 ? 'none' : 'auto'
-          }
-          
-          // Update cashback amount
-          const selectedVoucher = validVouchers[currentIndex]
-          if (selectedVoucher && cashbackAmountSpan) {
-            const newRate = selectedVoucher.cashbackRate || 0
-            const newAmount = (amount * newRate / 100).toFixed(2)
-            cashbackAmountSpan.textContent = `€${newAmount}`
-          }
-          // Emit voucher_view for the selected voucher
-          try {
-            const selected = validVouchers[currentIndex]
-            const pick = selected?.url || ''
-            const id = (() => { try { const m = String(pick).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
-            if (id) {
-              window.postMessage({ type: 'WS_VOUCHER_VIEW', partner_name: partner.name, provider_reference_id: id, rate: selected?.cashbackRate }, window.location.origin)
-            }
-          } catch {}
-        }
-      }
-      
-      // Touch/swipe handling
-      let startX = 0
-      let startScrollLeft = 0
-      let isDragging = false
-      
-      carousel.addEventListener('touchstart', (e) => {
-        startX = e.touches[0].clientX
-        startScrollLeft = carousel?.scrollLeft || 0
-        isDragging = true
-      })
-      
-      carousel.addEventListener('touchmove', (e) => {
-        if (!isDragging || !carousel) return
-        e.preventDefault()
-        const currentX = e.touches[0].clientX
-        const diff = startX - currentX
-        carousel.scrollLeft = startScrollLeft + diff
-      })
-      
-      carousel.addEventListener('touchend', () => {
-        if (!isDragging || !carousel) return
-        isDragging = false
-        
-        const threshold = cardWidth / 3
-        const diff = startScrollLeft - carousel.scrollLeft
-        
-        if (Math.abs(diff) > threshold) {
-          if (diff > 0 && currentIndex < totalCards - 1) {
-            updateCarousel(currentIndex + 1)
-          } else if (diff < 0 && currentIndex > 0) {
-            updateCarousel(currentIndex - 1)
-          } else {
-            updateCarousel(currentIndex) // Snap back
-          }
-        } else {
-          updateCarousel(currentIndex) // Snap back
-        }
-      })
-      
-      // Add scroll event listener to sync position indicator
-      carousel.addEventListener('scroll', () => {
-        if (!isDragging) {
-          syncPositionIndicator()
-        }
-        scheduleAutoMinimize()
-      })
-      
-      // Handle window resize to maintain position sync
-      window.addEventListener('resize', () => {
-        // Recalculate position after resize
-        setTimeout(() => {
-          syncPositionIndicator()
-        }, 100)
-      })
-      
-      // Mouse drag handling
-      carousel.addEventListener('mousedown', (e) => {
-        startX = e.clientX
-        startScrollLeft = carousel?.scrollLeft || 0
-        isDragging = true
-        if (carousel) carousel.style.cursor = 'grabbing'
-      })
-      
-      carousel.addEventListener('mousemove', (e) => {
-        if (!isDragging || !carousel) return
-        e.preventDefault()
-        const currentX = e.clientX
-        const diff = startX - currentX
-        carousel.scrollLeft = startScrollLeft + diff
-      })
-      
-      carousel.addEventListener('mouseup', () => {
-        if (!isDragging || !carousel) return
-        isDragging = false
-        carousel.style.cursor = 'grab'
-        
-        const threshold = cardWidth / 3
-        const diff = startScrollLeft - carousel.scrollLeft
-        
-        if (Math.abs(diff) > threshold) {
-          if (diff > 0 && currentIndex < totalCards - 1) {
-            updateCarousel(currentIndex + 1)
-          } else if (diff < 0 && currentIndex > 0) {
-            updateCarousel(currentIndex - 1)
-          } else {
-            updateCarousel(currentIndex) // Snap back
-          }
-        } else {
-          updateCarousel(currentIndex) // Snap back
-        }
-      })
-      
-      carousel.addEventListener('mouseleave', () => {
-        if (isDragging && carousel) {
-          isDragging = false
-          carousel.style.cursor = 'grab'
-          updateCarousel(currentIndex) // Snap back
-        }
-      })
-      
-      // Arrow click handling
-      leftArrow.addEventListener('click', () => {
-        if (currentIndex > 0) {
-          updateCarousel(currentIndex - 1)
-        }
-      })
-      
-      rightArrow.addEventListener('click', () => {
-        if (currentIndex < totalCards - 1) {
-          updateCarousel(currentIndex + 1)
-        }
-      })
-      
-      // Indicator click handling
-      indicators.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement
-        if (target.classList.contains('carousel-dot')) {
-          const index = parseInt(target.dataset.index || '0')
-          updateCarousel(index)
-        }
-      })
-      
-      // Voucher card click handling
-      carousel.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement
-        const card = target.closest('.voucher-card') as HTMLElement
-        if (card && !isDragging) {
-          const index = parseInt(card.dataset.index || '0')
-          updateCarousel(index)
-        }
-      })
-    }
-  }
-
-  // --- Minimize/Expand helpers -------------------------------------------------
-  let minimizedBanner: HTMLElement | null = null
-
-  function showMinimizedBanner() {
-    if (minimizedBanner && document.body.contains(minimizedBanner)) return
-
-    const hostForLabel = ((): string => {
-      try { 
-        const hostname = window.location.hostname
-        return hostname.startsWith('www.') ? hostname.substring(4) : hostname
-      } catch { return 'this site' }
-    })()
-
-    minimizedBanner = document.createElement('div')
-    minimizedBanner.id = 'woolsocks-voucher-minimized'
-    minimizedBanner.style.cssText = [
-      'position: fixed',
-      'top: 20px',
-      'right: 20px',
-      'z-index: 2147483647',
-      'display: flex',
-      'min-width: 200px',
-      'max-width: 80vw',
-      'max-height: 775px',
-      'padding: 4px 8px',
-      'flex-direction: column',
-      'align-items: center',
-      'border-radius: 8px',
-      'background: var(--brand, #FDC408)',
-      'box-shadow: -2px 2px 4px 0 rgba(0, 0, 0, 0.08)',
-      'cursor: pointer',
-      'color: #0F0B1C',
-      'box-sizing: border-box'
-    ].join(';') + ';'
-
-    minimizedBanner.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; padding-left: 0; padding-right: 8px; padding-top: 0; padding-bottom: 0; width: 100%; height: 32px;">
-        <div style="display: flex; gap: 4px; align-items: center; padding: 0 2px;">
-          <div style="display: flex; padding: 2px 4px; justify-content: center; align-items: center; gap: 8px; border-radius: 6px; background: #8564FF; color: #FFF; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 16px; font-weight: 400; line-height: 1.45; white-space: nowrap;">€${cashbackAmount}</div>
-          <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 14px; font-weight: 400; line-height: 1.45; color: #100B1C; letter-spacing: 0.1px; white-space: nowrap;">Savings available at ${hostForLabel}</div>
-        </div>
-        <div aria-hidden="true" style="display:flex; align-items:center; justify-content:center; width: 32px; height: 32px;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M11.9999 13.5858L17.2928 8.29289L18.707 9.70711L12.707 15.7071C12.3165 16.0976 11.6833 16.0976 11.2928 15.7071L5.29282 9.70711L6.70703 8.29289L11.9999 13.5858Z" fill="#0F0B1C"/>
-          </svg>
-        </div>
-      </div>
-    `
-
-    // Drag & snap for minimized banner
-    let bannerDragging = false
-    let bStartX = 0
-    let bStartY = 0
-    let bInitialX = 0
-    let bInitialY = 0
-    let moved = false
-
-    minimizedBanner.addEventListener('mousedown', (e: MouseEvent) => {
-      bannerDragging = true
-      moved = false
-      bStartX = e.clientX
-      bStartY = e.clientY
-      const rect = minimizedBanner!.getBoundingClientRect()
-      bInitialX = rect.left
-      bInitialY = rect.top
-      minimizedBanner!.style.cursor = 'grabbing'
-    })
-
-    document.addEventListener('mousemove', (e: MouseEvent) => {
-      if (!bannerDragging) return
-      const deltaX = e.clientX - bStartX
-      const deltaY = e.clientY - bStartY
-      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) moved = true
-      const newX = bInitialX + deltaX
-      const newY = bInitialY + deltaY
-      minimizedBanner!.style.top = 'auto'
-      minimizedBanner!.style.bottom = 'auto'
-      minimizedBanner!.style.left = 'auto'
-      minimizedBanner!.style.right = 'auto'
-      minimizedBanner!.style.left = newX + 'px'
-      minimizedBanner!.style.top = newY + 'px'
-    })
-
-    document.addEventListener('mouseup', () => {
-      if (!bannerDragging) return
-      bannerDragging = false
-      minimizedBanner!.style.cursor = 'pointer'
-
-      const rect = minimizedBanner!.getBoundingClientRect()
-      const centerX = rect.left + rect.width / 2
-      const centerY = rect.top + rect.height / 2
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      const isLeft = centerX < viewportWidth / 2
-      const isTop = centerY < viewportHeight / 2
-
-      minimizedBanner!.style.transition = 'top 0.2s ease, bottom 0.2s ease, left 0.2s ease, right 0.2s ease'
-      minimizedBanner!.style.top = 'auto'
-      minimizedBanner!.style.bottom = 'auto'
-      minimizedBanner!.style.left = 'auto'
-      minimizedBanner!.style.right = 'auto'
-      if (isTop) minimizedBanner!.style.top = '20px'; else minimizedBanner!.style.bottom = '20px'
-      if (isLeft) minimizedBanner!.style.left = '20px'; else minimizedBanner!.style.right = '20px'
-      setTimeout(() => { minimizedBanner && (minimizedBanner.style.transition = '') }, 250)
-    })
-
-    minimizedBanner.addEventListener('click', () => {
-      if (moved) return // treat as drag end, not expand
-      
-      // Capture banner position before removing it
-      const bannerRect = minimizedBanner!.getBoundingClientRect()
-      const centerX = bannerRect.left + bannerRect.width / 2
-      const centerY = bannerRect.top + bannerRect.height / 2
-      const isLeft = centerX < window.innerWidth / 2
-      const isTop = centerY < window.innerHeight / 2
-      
-      try {
-        // Remove banner
-        if (minimizedBanner && minimizedBanner.parentNode) minimizedBanner.parentNode.removeChild(minimizedBanner)
-      } finally {
-        minimizedBanner = null
-      }
-
-      // Restore main prompt in same corner as banner was
-      prompt.style.display = 'block'
-      prompt.style.top = 'auto'
-      prompt.style.left = 'auto'
-      prompt.style.right = 'auto'
-      prompt.style.bottom = 'auto'
-      if (isTop) { prompt.style.top = '20px' } else { prompt.style.bottom = '20px' }
-      if (isLeft) { prompt.style.left = '20px' } else { prompt.style.right = '20px' }
-      prompt.style.opacity = '0'
-      prompt.style.transform = 'translateY(10px) scale(0.95)'
-      requestAnimationFrame(() => {
-        prompt.style.opacity = '1'
-        prompt.style.transform = 'translateY(0) scale(1)'
-      })
-    })
-
-    document.body.appendChild(minimizedBanner)
-  }
-
-  function minimizePrompt() {
-    // Mark as dismissed for a short while, but keep a minimized reminder visible
-    const ttl = 5 * 60 * 1000
-    markVoucherDismissed(ttl)
-    // Persist a light-weight minimized state so the banner can reappear on any page of the same domain
-    try {
-      const host = window.location.hostname
-      const until = Date.now() + ttl
-      const raw = window.localStorage.getItem('__wsMinimizedBannerMap')
-      const map = raw ? (JSON.parse(raw) as Record<string, any>) : {}
-      map[host] = {
-        until,
-        cashbackAmount: typeof cashbackAmount === 'string' ? cashbackAmount : String(cashbackAmount),
-        // best-effort remember corner based on current prompt position
-        corner: (() => {
-          try {
-            const rect = prompt.getBoundingClientRect()
-            const centerX = rect.left + rect.width / 2
-            const centerY = rect.top + rect.height / 2
-            const isLeft = centerX < window.innerWidth / 2
-            const isTop = centerY < window.innerHeight / 2
-            return `${isTop ? 'top' : 'bottom'}-${isLeft ? 'left' : 'right'}`
-          } catch { return 'top-right' }
-        })()
-      }
-      window.localStorage.setItem('__wsMinimizedBannerMap', JSON.stringify(map))
-    } catch {}
-
-    // Animate out and then hide the full panel
-    ;(prompt as HTMLElement).style.opacity = '0'
-    ;(prompt as HTMLElement).style.transform = 'translateY(10px) scale(0.95)'
-    setTimeout(() => {
-      // Determine current corner of the prompt to position minimized banner there
-      const rect = prompt.getBoundingClientRect()
-      const centerX = rect.left + rect.width / 2
-      const centerY = rect.top + rect.height / 2
-      const isLeft = centerX < window.innerWidth / 2
-      const isTop = centerY < window.innerHeight / 2
-
-      ;(prompt as HTMLElement).style.display = 'none'
-      showMinimizedBanner()
-      // After creation, snap banner to same corner
-      if (minimizedBanner) {
-        minimizedBanner.style.top = 'auto'
-        minimizedBanner.style.bottom = 'auto'
-        minimizedBanner.style.left = 'auto'
-        minimizedBanner.style.right = 'auto'
-        if (isTop) minimizedBanner.style.top = '20px'; else minimizedBanner.style.bottom = '20px'
-        if (isLeft) minimizedBanner.style.left = '20px'; else minimizedBanner.style.right = '20px'
-      }
-    }, 300)
-  }
-
-  // Drag and snap functionality
-  let isDragging = false
-  let startX = 0
-  let startY = 0
-  let initialX = 0
-  let initialY = 0
-
-  prompt.addEventListener('mousedown', (e: MouseEvent) => {
-    // Don't drag if clicking on buttons
-    const target = e.target as HTMLElement
-    if (target.tagName === 'BUTTON' || target.closest('button')) return
-
-    isDragging = true
-    startX = e.clientX
-    startY = e.clientY
-
-    const rect = prompt.getBoundingClientRect()
-    initialX = rect.left
-    initialY = rect.top
-
-    prompt.style.transition = 'opacity 0.3s ease'
-    prompt.style.cursor = 'grabbing'
-  })
-
-  document.addEventListener('mousemove', (e: MouseEvent) => {
-    if (!isDragging) return
-
-    const deltaX = e.clientX - startX
-    const deltaY = e.clientY - startY
-
-    const newX = initialX + deltaX
-    const newY = initialY + deltaY
-
-    // Clear all positioning
-    prompt.style.top = 'auto'
-    prompt.style.bottom = 'auto'
-    prompt.style.left = 'auto'
-    prompt.style.right = 'auto'
-
-    // Set absolute position
-    prompt.style.left = newX + 'px'
-    prompt.style.top = newY + 'px'
-  })
-
-  document.addEventListener('mouseup', () => {
-    if (!isDragging) return
-    isDragging = false
-    prompt.style.cursor = 'move'
-
-    // Calculate final position
-    const rect = prompt.getBoundingClientRect()
-    const centerX = rect.left + rect.width / 2
-    const centerY = rect.top + rect.height / 2
-
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
-
-    // Determine which corner is closest
-    const isLeft = centerX < viewportWidth / 2
-    const isTop = centerY < viewportHeight / 2
-
-    // Snap to corner with smooth transition
-    prompt.style.transition = 'top 0.3s ease, bottom 0.3s ease, left 0.3s ease, right 0.3s ease, opacity 0.3s ease, transform 0.3s ease'
-
-    prompt.style.top = 'auto'
-    prompt.style.bottom = 'auto'
-    prompt.style.left = 'auto'
-    prompt.style.right = 'auto'
-
-    if (isTop) {
-      prompt.style.top = '20px'
-    } else {
-      prompt.style.bottom = '20px'
-    }
-
-    if (isLeft) {
-      prompt.style.left = '20px'
-    } else {
-      prompt.style.right = '20px'
-    }
-  })
-
-  setTimeout(() => {
-    (prompt as HTMLElement).style.opacity = '1'
-    ;(prompt as HTMLElement).style.transform = 'translateY(0) scale(1)'
-  }, 100)
-  
-  // Reset inactivity on drag interactions
-  document.addEventListener('mousemove', () => scheduleAutoMinimize(), { passive: true })
-  document.addEventListener('mouseup', () => scheduleAutoMinimize(), { passive: true })
-
-  document.getElementById('ws-close')?.addEventListener('click', () => {
-    minimizePrompt()
-  })
-
-  const cta = document.getElementById('ws-use-voucher')
-  cta?.addEventListener('click', () => {
-    const voucherUrl = best?.url || partner.voucherProductUrl
-    if (!voucherUrl) return
-    let dealUrl = voucherUrl
-    if (dealUrl.includes('/products/') && !dealUrl.includes('amount=')) {
-      const amountInCents = Math.round(amount * 100)
-      const separator = dealUrl.includes('?') ? '&' : '?'
-      dealUrl = `${dealUrl}${separator}amount=${amountInCents}`
-    }
-    try {
-      const id = ((): string => { try { const m = String(dealUrl).match(/products\/(.+?)(?:[/?#]|$)/i); return m ? m[1] : '' } catch { return '' } })()
-      window.postMessage({ type: 'WS_VOUCHER_CLICK', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
-      // Treat click → used for web flow
-      window.postMessage({ type: 'WS_VOUCHER_USED', partner_name: partner.name, provider_reference_id: id, rate: best?.cashbackRate || partner.cashbackRate }, window.location.origin)
-    } catch {}
-    try {
-      // In MAIN world, chrome.runtime is not available. Use page → content bridge.
-      window.postMessage({ type: 'WS_OPEN_URL', url: dealUrl }, window.location.origin)
-    } catch {}
-    markVoucherDismissed(5 * 60 * 1000)
-    prompt.remove()
-  })
-
-  // Removed fixed 30s minimize; replaced by inactivity timer above
-}
-
-
+// Removed showVoucherDetailWithUsps function - replaced with simplified inline script injection
