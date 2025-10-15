@@ -90,10 +90,12 @@ function setIcon(state: IconState, tabId?: number) {
     
     console.log(`[WS Icon] Setting icon to ${state} for tab ${tabId || 'all'}`)
     
+    // Resolve action API across browsers
+    const actionApi: any = (chrome as any).action || (chrome as any).browserAction
     // Firefox MV2 browserAction.setIcon() returns a Promise, not a callback
     // Chrome action.setIcon() supports both callback and Promise
     try {
-      const result = chrome.action.setIcon({ path: path as any, tabId })
+      const result = actionApi.setIcon({ path: path as any, tabId })
       if (result && typeof result.then === 'function') {
         // Promise-based (Firefox)
         result.then(() => {
@@ -110,7 +112,7 @@ function setIcon(state: IconState, tabId?: number) {
     }
     
     try {
-      chrome.action.setTitle({ title: titleMap[state], tabId })
+      actionApi.setTitle({ title: titleMap[state], tabId })
     } catch (err) {
       console.error(`[WS Icon] Exception calling setTitle:`, err)
     }
@@ -333,7 +335,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 // No cleanup needed - content scripts are managed by manifest
 
-chrome.action.onClicked.addListener(async (tab) => {
+;(chrome as any).action?.onClicked?.addListener(async (tab: any) => {
   if (!tab.id || !tab.url) return
   
   try {
@@ -376,7 +378,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     
     if (activeActivation) {
       // Already active, show popup with status
-      chrome.action.openPopup()
+      ;(chrome as any).action?.openPopup?.()
     } else {
       // Activate cashback
       const newActivation: ActivationRecord = {

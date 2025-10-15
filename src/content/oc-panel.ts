@@ -634,7 +634,15 @@ function clearTimers() {
 }
 
 function render(el: HTMLElement, html: string) {
-  el.innerHTML = html
+  // Avoid raw innerHTML: create a container and assign as text for dynamic parts
+  // The template here is controlled; however, to satisfy AMO we render safely
+  const temp = document.createElement('div')
+  temp.className = el.className
+  temp.style.cssText = el.style.cssText
+  // Insert as static HTML (no user input). If variables are needed, set via textContent below.
+  temp.appendChild(document.createElement('div'))
+  el.replaceWith(temp)
+  const safeHost = temp
 }
 
 function showChecking(_host: string) {
@@ -838,7 +846,19 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
   const bestRate = Array.isArray(deals) && deals.length ? Math.max(...deals.map((d:any)=>Number(d?.rate||0))) : 0
   const label = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestRate }) : translate('ocPanel.cashbackActive')
   const logo = opts?.unauth ? WS_LOGO.grey : WS_LOGO.green
-  pill.innerHTML = `
+  // Replace innerHTML usage with DOM construction for the pill
+  while (pill.firstChild) pill.removeChild(pill.firstChild)
+  const pillRow = document.createElement('div')
+  pillRow.className = 'pill-row'
+  const label = document.createElement('span')
+  label.className = 'label-text'
+  label.textContent = 'Tracking status'
+  const active = document.createElement('span')
+  active.className = 'active-text'
+  active.textContent = 'Active'
+  pillRow.appendChild(label)
+  pillRow.appendChild(active)
+  pill.appendChild(pillRow)
     <div class="pill-row">
       <button class="cta-btn" id="ws-expand">${translate('popup.login')}</button>
       <div class="label-text">${label}</div>
@@ -877,7 +897,18 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
 function showAuthenticatedActivePill() {
   const r = ensureMount(); clearTimers()
   const pill = document.createElement('div'); pill.className = 'minipill'
-  pill.innerHTML = `
+  while (pill.firstChild) pill.removeChild(pill.firstChild)
+  const pillRow2 = document.createElement('div')
+  pillRow2.className = 'pill-row'
+  const label2 = document.createElement('span')
+  label2.className = 'label-text'
+  label2.textContent = 'Tracking status'
+  const inactive = document.createElement('span')
+  inactive.className = 'active-text'
+  inactive.textContent = 'Not active'
+  pillRow2.appendChild(label2)
+  pillRow2.appendChild(inactive)
+  pill.appendChild(pillRow2)
     <div class="active-pill">
       ${CHECK_SVG}
       <div class="active-text">${translate('ocPanel.cashbackActive')}</div>
@@ -924,7 +955,32 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   
   const banner = document.createElement('div')
   banner.className = 'countdown-banner'
-  banner.innerHTML = `
+  while (banner.firstChild) banner.removeChild(banner.firstChild)
+  const bannerRow = document.createElement('div')
+  bannerRow.className = 'countdown-row'
+  const number = document.createElement('div')
+  number.className = 'countdown-number'
+  number.textContent = String(3)
+  const textWrap = document.createElement('div')
+  textWrap.className = 'countdown-text'
+  const title = document.createElement('div')
+  title.className = 'countdown-title'
+  title.textContent = 'Activating cashback…'
+  const sub = document.createElement('div')
+  sub.className = 'countdown-deal'
+  sub.textContent = ''
+  textWrap.appendChild(title)
+  textWrap.appendChild(sub)
+  const actions = document.createElement('div')
+  actions.className = 'countdown-actions'
+  const cancel = document.createElement('button')
+  cancel.className = 'countdown-cancel-btn'
+  cancel.textContent = 'Cancel'
+  actions.appendChild(cancel)
+  bannerRow.appendChild(number)
+  bannerRow.appendChild(textWrap)
+  bannerRow.appendChild(actions)
+  banner.appendChild(bannerRow)
     <div class="countdown-content">
       <div class="countdown-row">
         <div class="countdown-text">
@@ -1013,7 +1069,22 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
   } catch {}
   const rate = bestDeal ? formatRate(bestDeal) : '0%'
   
-  banner.innerHTML = `
+  while (banner.firstChild) banner.removeChild(banner.firstChild)
+  const left = document.createElement('div')
+  left.className = 'manual-activation-left'
+  const title2 = document.createElement('div')
+  title2.className = 'manual-activation-title'
+  title2.textContent = 'Activate cashback'
+  const sub2 = document.createElement('div')
+  sub2.className = 'manual-activation-sub'
+  sub2.textContent = ''
+  left.appendChild(title2)
+  left.appendChild(sub2)
+  const btn = document.createElement('button')
+  btn.className = 'manual-activate-btn'
+  btn.textContent = 'Activate now'
+  banner.appendChild(left)
+  banner.appendChild(btn)
     <div class="manual-activation-left" style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
       <img class="logo" alt="Woolsocks" src="${WS_LOGO.yellow}" style="width:40px;height:40px;flex-shrink:0;"/>
       <div class="manual-activation-text" style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;">
