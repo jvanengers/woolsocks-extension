@@ -202,6 +202,7 @@ class RelayTabManager {
   private tabId: number | null = null
   private requestQueue: Array<() => Promise<void>> = []
   private isProcessing: boolean = false
+  private tabCreationPromise: Promise<number> | null = null
 
   private constructor() {}
 
@@ -213,6 +214,12 @@ class RelayTabManager {
   }
 
   async ensureTab(): Promise<number> {
+    // If a tab creation is already in progress, wait for it
+    if (this.tabCreationPromise) {
+      console.log('[RelayTabManager] Tab creation already in progress, waiting...')
+      return await this.tabCreationPromise
+    }
+
     // Check if existing tab is still valid
     if (this.tabId) {
       try {
@@ -220,18 +227,34 @@ class RelayTabManager {
         if (tab && tab.id) {
           // Tab exists, verify it's ready
           if (await this.ping(this.tabId)) {
+            console.log('[RelayTabManager] Reusing existing tab:', this.tabId)
             return this.tabId
           }
         }
       } catch {
         // Tab no longer exists
+        console.log('[RelayTabManager] Existing tab no longer valid')
         this.tabId = null
       }
     }
 
+    // Start tab creation and store the promise to prevent concurrent creations
+    this.tabCreationPromise = this.createTab()
+    
+    try {
+      const tabId = await this.tabCreationPromise
+      return tabId
+    } finally {
+      // Clear the promise once done (success or failure)
+      this.tabCreationPromise = null
+    }
+  }
+
+  private async createTab(): Promise<number> {
     // Check if a woolsocks.eu tab already exists
     const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
     if (tabs && tabs.length > 0 && tabs[0]?.id) {
+      console.log('[RelayTabManager] Found existing woolsocks.eu tab:', tabs[0].id)
       this.tabId = tabs[0].id
       // Wait for content script readiness
       await this.waitForReady(this.tabId)
@@ -250,6 +273,7 @@ class RelayTabManager {
     // Wait for content script readiness
     await this.waitForReady(this.tabId)
     
+    console.log('[RelayTabManager] New tab created and ready:', this.tabId)
     return this.tabId
   }
 
