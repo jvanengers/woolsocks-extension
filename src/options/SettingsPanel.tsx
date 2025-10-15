@@ -5,15 +5,19 @@ import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 type WsProfile = any
 type WsTransaction = any
 
-async function getAnonId(): Promise<string> {
+/* async function getAnonId(): Promise<string> {
   const stored = await chrome.storage.local.get('wsAnonId')
   if (stored?.wsAnonId) return stored.wsAnonId as string
   const id = crypto.randomUUID()
   await chrome.storage.local.set({ wsAnonId: id })
   return id
-}
+} */
 
-async function fetchUserInfo(): Promise<WsProfile | null> {
+// These direct fetch functions don't work in Firefox MV2 due to cookie access restrictions
+// All data fetching now goes through background script with tab relay fallback
+// Keeping them commented for reference but they should not be used
+
+/* async function fetchUserInfo(): Promise<WsProfile | null> {
   try {
     const anonId = await getAnonId()
     const resp = await fetch('https://woolsocks.eu/api/wsProxy/user-info/api/v0', {
@@ -102,7 +106,7 @@ async function fetchTransactions(): Promise<WsTransaction[]> {
   } catch {
     return []
   }
-}
+} */
 
 export default function SettingsPanel({ variant = 'options', onBalance }: { variant?: 'popup' | 'options'; onBalance?: (balance: number) => void }) {
   const [session, setSession] = useState<boolean | null>(null)
@@ -153,54 +157,73 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
   }
 
   async function loadProfile() {
-    const p = await fetchUserInfo()
-    setProfile(p)
+    try {
+      // Use background script's cached user profile
+      const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_USER_DATA' })
+      if (resp && resp.profile) {
+        setProfile(resp.profile)
+      }
+    } catch (error) {
+      console.warn('[SettingsPanel] Error loading profile:', error)
+      // Don't fall back to direct fetch in Firefox MV2 - it will fail with 403
+    }
   }
 
   async function loadWalletData() {
     try {
-      // Use cached data for instant loading
-      const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
-      if (resp && typeof resp.balance === 'number') {
-        const mockWalletData = { data: { balance: { totalAmount: resp.balance } } }
+      // First try cached data for instant loading
+      const cachedResp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
+      if (cachedResp && typeof cachedResp.balance === 'number' && cachedResp.balance > 0) {
+        const mockWalletData = { data: { balance: { totalAmount: cachedResp.balance } } }
         setWalletData(mockWalletData)
         if (onBalance) {
-          onBalance(resp.balance)
+          onBalance(cachedResp.balance)
         }
+        return // Success, no need to fetch fresh
       }
       
-      // Trigger background refresh for next time
-      try {
-        await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
-      } catch {}
-    } catch (error) {
-      console.warn('Error loading cached wallet data:', error)
-      // Fallback to direct fetch
-      const w = await fetchWalletData()
-      setWalletData(w)
-      if (onBalance && w?.data?.balance?.totalAmount) {
-        onBalance(w.data.balance.totalAmount)
+      // If no cached data or balance is 0, fetch fresh data via background script
+      console.log('[SettingsPanel] No cached balance, fetching fresh data via background...')
+      await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+      
+      // Wait a bit for the background to fetch, then check cache again
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      const freshResp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
+      if (freshResp && typeof freshResp.balance === 'number') {
+        const mockWalletData = { data: { balance: { totalAmount: freshResp.balance } } }
+        setWalletData(mockWalletData)
+        if (onBalance) {
+          onBalance(freshResp.balance)
+        }
       }
+    } catch (error) {
+      console.warn('[SettingsPanel] Error loading wallet data:', error)
+      // Don't fall back to direct fetch in Firefox MV2 - it will fail with 403
     }
   }
 
   async function loadTransactions() {
     try {
-      // Use cached data for instant loading
-      const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_TRANSACTIONS' })
-      if (resp && Array.isArray(resp.transactions)) {
-        setTransactions(resp.transactions)
+      // First try cached data for instant loading
+      const cachedResp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_TRANSACTIONS' })
+      if (cachedResp && Array.isArray(cachedResp.transactions) && cachedResp.transactions.length > 0) {
+        setTransactions(cachedResp.transactions)
+        return // Success, no need to fetch fresh
       }
       
-      // Trigger background refresh for next time
-      try {
-        await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
-      } catch {}
+      // If no cached data, fetch fresh data via background script
+      console.log('[SettingsPanel] No cached transactions, fetching fresh data via background...')
+      await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+      
+      // Wait a bit for the background to fetch, then check cache again
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      const freshResp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_TRANSACTIONS' })
+      if (freshResp && Array.isArray(freshResp.transactions)) {
+        setTransactions(freshResp.transactions)
+      }
     } catch (error) {
-      console.warn('Error loading cached transactions:', error)
-      // Fallback to direct fetch
-      const tx = await fetchTransactions()
-      setTransactions(tx)
+      console.warn('[SettingsPanel] Error loading transactions:', error)
+      // Don't fall back to direct fetch in Firefox MV2 - it will fail with 403
     }
   }
 

@@ -194,7 +194,7 @@ async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): 
   } catch { try { track('relay_offscreen_fail', { reason: 'exception', endpoint }) } catch {} ; return { data: null, status: 0 } }
 }
 
-async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
   const headers = await getHeaders()
 
   async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {

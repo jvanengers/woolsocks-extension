@@ -778,6 +778,81 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: true, message: 'Preload disabled to prevent unnecessary API calls' })
     })()
     return true
+  } else if (message?.type === 'FETCH_WALLET_DATA') {
+    ;(async () => {
+      try {
+        const { relayFetchViaTab } = await import('./api')
+        const result = await relayFetchViaTab<any>('/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true', { method: 'GET' })
+        sendResponse({ data: result.data, status: result.status })
+      } catch (error) {
+        console.warn('[Background] Error fetching wallet data:', error)
+        sendResponse({ data: null, status: 0, error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'FETCH_TRANSACTIONS') {
+    ;(async () => {
+      try {
+        const { relayFetchViaTab } = await import('./api')
+        const result = await relayFetchViaTab<any>('/wallets/api/v0/transactions?excludeAutoRewards=false&direction=forward&limit=20&supportsJsonNote=true', { method: 'GET' })
+        
+        // Normalize transaction data structure
+        const json = result.data
+        let list: any[] = []
+        if (Array.isArray(json?.data?.transactions)) list = json.data.transactions
+        else if (Array.isArray(json?.transactions)) list = json.transactions
+        else if (Array.isArray(json?.data)) list = json.data
+        else if (Array.isArray(json)) list = json
+        else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
+        
+        // Normalize transaction data to match UI expectations
+        const normalized = list.map((t) => {
+          const merchant = t?.merchant || t?.merchantInfo || {}
+          const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
+          const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
+          const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
+
+          const rawAmount =
+            typeof t?.amount === 'number' ? t.amount :
+            typeof t?.amount?.amount === 'number' ? t.amount.amount :
+            typeof t?.amount?.value === 'number' ? t.amount.value :
+            typeof t?.amountCents === 'number' ? t.amountCents / 100 :
+            undefined
+          const amount = typeof rawAmount === 'number' ? rawAmount : 0
+
+          return {
+            id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
+            amount,
+            currency: t?.currencyCode || t?.currency || 'EUR',
+            merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
+            logo,
+            state: state || 'unknown',
+            recordType: t?.recordType || t?.type || 'Unknown',
+            createdAt: createdAt || new Date().toISOString(),
+          }
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5) // Limit to max 5 transactions
+        
+        sendResponse({ data: normalized, status: result.status })
+      } catch (error) {
+        console.warn('[Background] Error fetching transactions:', error)
+        sendResponse({ data: [], status: 0, error: (error as Error)?.message })
+      }
+    })()
+    return true
+  } else if (message?.type === 'FETCH_USER_PROFILE') {
+    ;(async () => {
+      try {
+        const { relayFetchViaTab } = await import('./api')
+        const result = await relayFetchViaTab<any>('/user-info/api/v0', { method: 'GET' })
+        sendResponse({ data: result.data, status: result.status })
+      } catch (error) {
+        console.warn('[Background] Error fetching user profile:', error)
+        sendResponse({ data: null, status: 0, error: (error as Error)?.message })
+      }
+    })()
+    return true
   }
 })
 
