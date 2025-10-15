@@ -1031,85 +1031,23 @@ async function injectVoucherInPage(
     }
   }
 
-  // MV2 fallback: use <script> tag injection with a Blob URL to bypass inline-CSP
+  // MV2 fallback: delegate injection to content script via messaging
   console.log('[WS] Using MV2 tabs.executeScript fallback path')
   try {
-    // 0) Probe that tabs.executeScript actually runs in this tab
+    const config = { partner, checkoutTotal, assets, translations }
+    console.log('[WS] Sending ws/inject-voucher-popup message')
     await new Promise<void>((resolve) => {
-      chrome.tabs.executeScript(
-        tabId,
-        { code: "console.log('[WS] MV2 probe: executing in page'); document.documentElement.setAttribute('data-ws-probe','ok');", runAt: 'document_idle' },
-        (results) => {
-          if (chrome.runtime.lastError) {
-            console.error('[WS] MV2 probe failed:', chrome.runtime.lastError)
-          } else {
-            console.log('[WS] MV2 probe executed, results:', results)
-          }
-          resolve()
-        }
-      )
-    })
-
-    const { getVoucherPopupBundle } = await import('../shared/voucher-popup-bundle')
-    const bundleCode = getVoucherPopupBundle()
-
-    // Step 1: inject the bundle via a <script src=blob:...>
-    // Step 2: after load, call window.createVoucherPopup(config)
-    const configJson = JSON.stringify({ partner, checkoutTotal, assets, translations })
-    const injectionScript = `
-      (function () {
-        try {
-          console.log('[WS] MV2 preparing blob script injection...')
-          const bundleJs = ${JSON.stringify(bundleCode)};
-          const blob = new Blob([bundleJs], { type: 'text/javascript' });
-          const url = URL.createObjectURL(blob);
-          const markerId = 'ws-voucher-popup-loader-marker';
-          const marker = document.createElement('div');
-          marker.id = markerId;
-          marker.setAttribute('data-state', 'created');
-          marker.style.display = 'none';
-          document.documentElement.appendChild(marker);
-
-          const script = document.createElement('script');
-          script.src = url;
-          script.onload = function () {
-            try {
-              marker.setAttribute('data-state', 'loaded');
-              console.log('[WS] MV2 bundle loaded, creating popup...');
-              const cfg = ${configJson};
-              const popup = (window as any).createVoucherPopup(cfg);
-              document.body.appendChild(popup);
-              console.log('[WS] MV2 Popup created and appended successfully');
-            } catch (err) {
-              console.error('[WS] MV2 Popup creation failed after load:', err);
-            } finally {
-              try { URL.revokeObjectURL(url); } catch {}
-            }
-          };
-          script.onerror = function (e) {
-            marker.setAttribute('data-state', 'error');
-            console.error('[WS] MV2 blob script failed to load', e);
-            try { URL.revokeObjectURL(url); } catch {}
-          };
-          document.documentElement.appendChild(script);
-        } catch (outerErr) {
-          console.error('[WS] MV2 blob script injection error:', outerErr);
-        }
-      })();
-    `
-
-    await new Promise<void>((resolve) => {
-      chrome.tabs.executeScript(tabId, { code: injectionScript, runAt: 'document_idle' }, () => {
+      chrome.tabs.sendMessage(tabId, { type: 'ws/inject-voucher-popup', config }, () => {
         if (chrome.runtime.lastError) {
-          console.error('[WS] MV2 script-tag injection failed:', chrome.runtime.lastError)
+          console.error('[WS] MV2 sendMessage failed:', chrome.runtime.lastError)
         } else {
-          console.log('[WS] MV2 script-tag injection executed')
+          console.log('[WS] MV2 sendMessage dispatched')
         }
         resolve()
       })
     })
   } catch (e) {
-    console.warn('[WS] MV2 script-tag voucher injection failed:', e)
+    console.warn('[WS] MV2 message-based injection failed:', e)
   }
 }
 

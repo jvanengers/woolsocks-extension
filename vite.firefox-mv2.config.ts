@@ -90,6 +90,17 @@ const manifest = {
       js: ['content/relay.js'],
       run_at: 'document_start'
     },
+    {
+      matches: ['<all_urls>'],
+      js: ['content/injector.js'],
+      run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*',
+      ]
+    },
   ],
   
   // MV2 web_accessible_resources format
@@ -106,7 +117,8 @@ const manifest = {
     'assets/entrance-*.js',
     'assets/i18n-*.js',
     'assets/ocpanel-*.js',
-    'assets/relay-*.js'
+    'assets/relay-*.js',
+    'assets/voucher-popup-page.js'
   ],
   
   content_security_policy: "script-src 'self'; object-src 'self'; connect-src 'self' https:;"
@@ -348,8 +360,11 @@ ${content}
           let content = readFileSync(scriptPath, 'utf-8')
           
           // Only wrap if it uses CommonJS (has "use strict" or require/exports)
-          if (content.includes('"use strict"') || content.includes('require(') || content.includes('exports.')) {
-            const filename = scriptPath.split('/').pop() || ''
+          // BUT exclude voucher-popup-page.js as it needs to work in page context
+          const filename = scriptPath.split('/').pop() || ''
+          const isVoucherPopupPage = filename.includes('voucher-popup-page')
+          
+          if (!isVoucherPopupPage && (content.includes('"use strict"') || content.includes('require(') || content.includes('exports.'))) {
             const isOnboardingComponent = filename.includes('OnboardingComponent')
             const isI18n = filename.includes('i18n')
             const isPlatform = filename.includes('platform')
@@ -446,6 +461,22 @@ ${content}
             writeFileSync(scriptPath, wrappedContent)
             console.log(`✅ Wrapped ${scriptPath} with CommonJS shims`)
           }
+
+          // SPECIAL CASE: Wrap voucher-popup-page.js in a safe IIFE with local exports
+          if (isVoucherPopupPage) {
+            const safeWrapped = `(function(){
+  // Isolate all declarations to avoid leaking globals or colliding with site scripts
+  // Provide a benign local 'exports' so module boilerplate doesn't crash
+  var exports = {};
+  try {
+${content}
+  } catch (e) {
+    try { console.error('[WS Page Script] initialization failed:', e); } catch(_) {}
+  }
+})();`
+            writeFileSync(scriptPath, safeWrapped)
+            console.log(`✅ Safely wrapped ${scriptPath} in isolated IIFE`)
+          }
         }
       })
       
@@ -532,6 +563,8 @@ export default defineConfig({
         entrance: 'src/content/entrance.ts',    // Will be bundled as content/entrance.js
         ocpanel: 'src/content/oc-panel.ts',     // Will be bundled as content/oc-panel.js
         relay: 'src/content/relay.ts',          // Will be bundled as content/relay.js
+        injector: 'src/content/injector.ts',    // Content injector for voucher popup
+        'voucher-popup-page': 'src/shared/voucher-popup-page.ts',
         // Note: no offscreen for MV2
       },
       output: {
@@ -553,10 +586,24 @@ export default defineConfig({
           if (chunkInfo.name === 'relay') {
             return 'content/relay.js'
           }
+          if (chunkInfo.name === 'injector') {
+            return 'content/injector.js'
+          }
+          if (chunkInfo.name === 'voucher-popup-page') {
+            return 'assets/voucher-popup-page.js'
+          }
           return 'assets/[name]-[hash].js'
         },
         // Manual chunking to prevent code-splitting for content scripts
         manualChunks: (id, { getModuleInfo }) => {
+          // Force voucher-popup-page to bundle everything inline (no external chunks)
+          if (id.includes('/shared/voucher-popup-page.ts') || 
+              id.includes('/shared/voucher-popup.ts') || 
+              id.includes('/shared/voucher-popup-styles.ts') ||
+              id.includes('/shared/voucher-popup-types.ts')) {
+            return 'voucher-popup-page' // Bundle all popup-related code together
+          }
+          
           // If this is i18n/platform/analytics and it's imported by a content script,
           // don't split it - let it bundle with the content script
           if (id.includes('/shared/i18n.ts') || id.includes('/shared/platform.ts')) {
