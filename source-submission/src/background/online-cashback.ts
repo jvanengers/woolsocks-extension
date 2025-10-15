@@ -799,24 +799,9 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
           })
         }
         
-        if (platform === 'chrome') {
-          try {
-            await chrome.tabs.sendMessage(tabId, {
-              __wsOcUi: true,
-              kind: 'oc_countdown_start',
-              host: clean,
-              dealInfo: best,
-              countdown: 3
-            })
-            console.log(`[WS OC Debug] Sent single-shot countdown for ${clean} on Chrome`)
-          } catch (e) {
-            console.warn(`[WS OC Debug] Failed single-shot countdown send on Chrome for ${clean}:`, e)
-          }
-        } else {
-          sendCountdownWithRetry().catch(e => {
-            console.error(`[WS OC Debug] Error in countdown retry logic:`, e)
-          })
-        }
+        sendCountdownWithRetry().catch(e => {
+          console.error(`[WS OC Debug] Error in countdown retry logic:`, e)
+        })
         
         // Store redirect state for when countdown completes
         const enrich: any = { expectedFinalHost: clean, partnerName: partner.name, deal: best, originalUrl: url, startedAt: Date.now() }
@@ -877,29 +862,25 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       
       if (OC_DEBUG) console.log(`[WS OC] DOMContentLoaded for ${clean}, checking for pending UI...`)
       
-      // Check for pending countdown (skip for Chrome to avoid double countdowns)
+      // Check for pending countdown
       try {
-        let plat = 'unknown'
-        try { plat = getPlatform() } catch {}
-        if (plat !== 'chrome') {
-          const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
-          if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < PENDING_UI_TTL_MS) {
-            if (OC_DEBUG) console.log(`[WS OC] Found pending countdown for ${clean}, retrying...`)
-            const pingOk = await pingContentScript(tabId)
-            if (pingOk && __wsOcPendingUi.kind === 'oc_countdown_start') {
-              try {
-                await chrome.tabs.sendMessage(tabId, {
-                  __wsOcUi: true,
-                  kind: 'oc_countdown_start',
-                  host: clean,
-                  dealInfo: __wsOcPendingUi.dealInfo,
-                  countdown: __wsOcPendingUi.countdown || 3
-                })
-                console.log(`[WS OC] Successfully retried countdown on DOMContentLoaded for ${clean}`)
-                await chrome.storage.session.remove('__wsOcPendingUi')
-              } catch (e) {
-                console.warn(`[WS OC] Failed to retry countdown on DOMContentLoaded:`, e)
-              }
+        const { __wsOcPendingUi } = await chrome.storage.session.get('__wsOcPendingUi')
+        if (__wsOcPendingUi && __wsOcPendingUi.host === clean && Date.now() - __wsOcPendingUi.ts < PENDING_UI_TTL_MS) {
+          if (OC_DEBUG) console.log(`[WS OC] Found pending countdown for ${clean}, retrying...`)
+          const pingOk = await pingContentScript(tabId)
+          if (pingOk && __wsOcPendingUi.kind === 'oc_countdown_start') {
+            try {
+              await chrome.tabs.sendMessage(tabId, {
+                __wsOcUi: true,
+                kind: 'oc_countdown_start',
+                host: clean,
+                dealInfo: __wsOcPendingUi.dealInfo,
+                countdown: __wsOcPendingUi.countdown || 3
+              })
+              console.log(`[WS OC] Successfully retried countdown on DOMContentLoaded for ${clean}`)
+              await chrome.storage.session.remove('__wsOcPendingUi')
+            } catch (e) {
+              console.warn(`[WS OC] Failed to retry countdown on DOMContentLoaded:`, e)
             }
           }
         }
@@ -1049,13 +1030,6 @@ async function handleCountdownComplete(domain: string, dealInfo: any, tabId?: nu
     try {
       await chrome.tabs.update(tabId, { url: redirUrl })
       track('oc_redirect_navigated', { domain, deal_id: dealInfo.id, click_id: pending.deal.clickId })
-      // Chrome-only: set cooldown right after issuing redirect to avoid double countdowns on quick landings
-      try {
-        const plat = getPlatform()
-        if (plat === 'chrome') {
-          await setCooldown(domain)
-        }
-      } catch {}
     } catch (e) {
       // Fallback: open in new tab if updating current tab is blocked
       try {

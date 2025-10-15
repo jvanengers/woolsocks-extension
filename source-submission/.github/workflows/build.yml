@@ -1,0 +1,79 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build-chrome:
+    runs-on: ubuntu-latest
+    name: Build Chrome Extension
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build Chrome extension
+      run: npm run build:chrome
+    
+    - name: Upload Chrome build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: chrome-extension
+        path: dist/
+        retention-days: 7
+
+  build-firefox:
+    runs-on: ubuntu-latest
+    name: Build Firefox Extension
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build Firefox extension
+      run: npm run build:firefox
+    
+    - name: Upload Firefox build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: firefox-extension
+        path: dist-firefox/
+        retention-days: 7
+
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint Code
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run ESLint
+      run: npm run lint

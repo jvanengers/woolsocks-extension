@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Woolsocks Offscreen Relay</title>
+    <style>
+      html, body { margin: 0; padding: 0; }
+      iframe { position: fixed; width: 0; height: 0; border: 0; opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <iframe id="wsRelayFrame" src="https://woolsocks.eu/nl" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+    <script type="module" src="./relay.ts"></script>
+  </body>
+  </html>
+

@@ -1,0 +1,25 @@
+Target: Firefox MV2 (dist-firefox-mv2)
+
+Build command:
+  npm ci && npm run build:firefox
+
+Environment:
+  - Ubuntu 24.04 LTS (ARM64) or macOS 14/15
+  - Node 22.x LTS, npm 10.x
+  - Lockfile included (package-lock.json)
+
+Tooling disclosure:
+  - Vite 7 (Rollup), esbuild minify (size-only), TypeScript 5
+  - TailwindCSS 4, PostCSS + Autoprefixer
+  - Custom Vite plugins in vite.firefox-mv2.config.ts write manifest.json, wrap JS for MV2, and adjust HTML
+  - No obfuscators
+
+Reproduction scripts:
+  - scripts/build-firefox-mv2.sh (deterministic build + BUILD_INFO + checksums)
+  - scripts/verify-dist-match.sh (optional checksum diff vs submitted XPI)
+
+Notes:
+  - The build is driven by vite.firefox-mv2.config.ts and emits CommonJS output tailored for MV2.
+  - Resulting dist-firefox-mv2 should match the submitted add-on exactly.
+
+

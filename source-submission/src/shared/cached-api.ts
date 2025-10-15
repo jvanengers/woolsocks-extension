@@ -1,0 +1,259 @@
+// Cached API functions for user data (balance, transactions, profile)
+// Uses the cache manager to provide instant loading with background refresh
+
+import { get, set, cachedFetch, CACHE_NAMESPACES } from './cache'
+
+// Helper to get anonymous user ID
+async function getAnonId(): Promise<string> {
+  const stored = await chrome.storage.local.get('wsAnonId')
+  let anonId: string = stored?.wsAnonId || crypto.randomUUID()
+  if (!stored?.wsAnonId) {
+    await chrome.storage.local.set({ wsAnonId: anonId })
+  }
+  return anonId
+}
+
+// Helper to get user ID from background script
+async function getUserId(): Promise<string | null> {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_USER_ID' })
+    return response?.userId || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Fetch wallet data with caching
+ * Returns cached data immediately, triggers background refresh if stale
+ */
+export async function fetchWalletDataCached(): Promise<any> {
+  const userId = await getUserId()
+  const anonId = await getAnonId()
+  const cacheKey = userId || anonId
+  
+  return cachedFetch(
+    CACHE_NAMESPACES.WALLET,
+    cacheKey,
+    async () => {
+      const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (!resp.ok) {
+        throw new Error(`Wallet API failed: ${resp.status}`)
+      }
+      
+      return await resp.json()
+    },
+    {
+      ttl: 15 * 60 * 1000, // 15 minutes
+      refreshOnAccess: true,
+    }
+  )
+}
+
+/**
+ * Fetch transactions with caching
+ * Returns cached data immediately, triggers background refresh if stale
+ */
+export async function fetchTransactionsCached(): Promise<any[]> {
+  const userId = await getUserId()
+  const anonId = await getAnonId()
+  const cacheKey = userId || anonId
+  
+  return cachedFetch(
+    CACHE_NAMESPACES.TRANSACTIONS,
+    cacheKey,
+    async () => {
+      const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v0/transactions?excludeAutoRewards=false&direction=forward&limit=20&supportsJsonNote=true'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (!resp.ok) {
+        throw new Error(`Transactions API failed: ${resp.status}`)
+      }
+      
+      const json = await resp.json()
+      
+      // Normalize transaction data structure
+      let list: any[] = []
+      if (Array.isArray(json?.data?.transactions)) list = json.data.transactions
+      else if (Array.isArray(json?.transactions)) list = json.transactions
+      else if (Array.isArray(json?.data)) list = json.data
+      else if (Array.isArray(json)) list = json
+      else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
+      
+      // Normalize transaction data to match UI expectations
+      return list.map((t) => {
+        const merchant = t?.merchant || t?.merchantInfo || {}
+        const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
+        const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
+        const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
+
+        const rawAmount =
+          typeof t?.amount === 'number' ? t.amount :
+          typeof t?.amount?.amount === 'number' ? t.amount.amount :
+          typeof t?.amount?.value === 'number' ? t.amount.value :
+          typeof t?.amountCents === 'number' ? t.amountCents / 100 :
+          undefined
+        const amount = typeof rawAmount === 'number' ? rawAmount : 0
+
+        return {
+          id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
+          amount,
+          currency: t?.currencyCode || t?.currency || 'EUR',
+          merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
+          logo,
+          state: state || 'unknown',
+          recordType: t?.recordType || t?.type || 'Unknown',
+          createdAt: createdAt || new Date().toISOString(),
+        }
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5) // Limit to max 5 transactions
+    },
+    {
+      ttl: 10 * 60 * 1000, // 10 minutes
+      refreshOnAccess: true,
+    }
+  )
+}
+
+/**
+ * Fetch user profile with caching
+ * Returns cached data immediately, triggers background refresh if stale
+ */
+export async function fetchUserProfileCached(): Promise<any> {
+  const userId = await getUserId()
+  const anonId = await getAnonId()
+  const cacheKey = userId || anonId
+  
+  return cachedFetch(
+    CACHE_NAMESPACES.USER_PROFILE,
+    cacheKey,
+    async () => {
+      const url = 'https://woolsocks.eu/api/wsProxy/user-info/api/v0'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (resp.status === 304) {
+        // No new content; return previously cached value instead of parsing empty body
+        try {
+          const prev = await get(CACHE_NAMESPACES.USER_PROFILE, cacheKey)
+          if (prev) return prev
+        } catch {}
+        // Fallthrough to error to force a refresh on next access
+        throw new Error('User profile 304 with no cached value')
+      }
+      
+      if (!resp.ok) {
+        throw new Error(`User profile API failed: ${resp.status}`)
+      }
+      
+      // Some proxies may return 200 with empty body when using caches; guard json parsing
+      try {
+        const j = await resp.json()
+        return j
+      } catch {
+        const prev = await get(CACHE_NAMESPACES.USER_PROFILE, cacheKey)
+        if (prev) return prev
+        throw new Error('User profile response had no JSON body')
+      }
+    },
+    {
+      ttl: 30 * 60 * 1000, // 30 minutes
+      storageType: 'persistent',
+    }
+  )
+}
+
+/**
+ * Get cached balance from wallet data
+ * Returns 0 if no cached data available
+ */
+export async function getCachedBalance(): Promise<number> {
+  try {
+    const walletData = await get(CACHE_NAMESPACES.WALLET, await getAnonId()) as any
+    if (walletData?.data?.balance?.totalAmount) {
+      return walletData.data.balance.totalAmount
+    }
+  } catch (error) {
+    console.warn('[CachedAPI] Error getting cached balance:', error)
+  }
+  return 0
+}
+
+/**
+ * Get cached transactions
+ * Returns empty array if no cached data available
+ */
+export async function getCachedTransactions(): Promise<any[]> {
+  try {
+    const transactions = await get(CACHE_NAMESPACES.TRANSACTIONS, await getAnonId()) as any[]
+    return transactions || []
+  } catch (error) {
+    console.warn('[CachedAPI] Error getting cached transactions:', error)
+    return []
+  }
+}
+
+/**
+ * Get cached user profile
+ * Returns null if no cached data available
+ */
+export async function getCachedUserProfile(): Promise<any> {
+  try {
+    const profile = await get(CACHE_NAMESPACES.USER_PROFILE, await getAnonId())
+    return profile || null
+  } catch (error) {
+    console.warn('[CachedAPI] Error getting cached user profile:', error)
+    return null
+  }
+}
+
+/**
+ * Invalidate user data cache (called when user logs in/out)
+ */
+export async function invalidateUserDataCache(): Promise<void> {
+  const anonId = await getAnonId()
+  
+  // Invalidate all user-specific caches
+  await Promise.all([
+    set(CACHE_NAMESPACES.WALLET, anonId, null),
+    set(CACHE_NAMESPACES.TRANSACTIONS, anonId, null),
+    set(CACHE_NAMESPACES.USER_PROFILE, anonId, null),
+  ])
+}
+
+/**
+ * Check if cached data is stale (older than 5 minutes)
+ */
+export async function isUserDataStale(): Promise<boolean> {
+  try {
+    const anonId = await getAnonId()
+    const walletData = await get(CACHE_NAMESPACES.WALLET, anonId) as any
+    
+    if (!walletData) return true
+    
+    const age = Date.now() - walletData.timestamp
+    return age > 5 * 60 * 1000 // 5 minutes
+  } catch {
+    return true
+  }
+}
