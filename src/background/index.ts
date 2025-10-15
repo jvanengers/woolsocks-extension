@@ -676,48 +676,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message?.type === 'REFRESH_USER_DATA') {
     ;(async () => {
       try {
-        // Debounce: check if a refresh is already in progress
-        const now = Date.now()
-        const stored = await chrome.storage.local.get(['__wsRefreshInProgress', '__wsLastRefresh'])
-        const inProgress = stored.__wsRefreshInProgress === true
-        const lastRefresh = stored.__wsLastRefresh || 0
-        const timeSinceLastRefresh = now - lastRefresh
-        
-        // If refresh in progress or refreshed within last 2 seconds, skip
-        if (inProgress) {
-          console.log('[Background] REFRESH_USER_DATA: Already in progress, skipping')
-          sendResponse({ ok: true, skipped: true, reason: 'in_progress' })
-          return
-        }
-        
-        if (timeSinceLastRefresh < 2000) {
-          console.log('[Background] REFRESH_USER_DATA: Recently refreshed, skipping')
-          sendResponse({ ok: true, skipped: true, reason: 'recent_refresh' })
-          return
-        }
-        
-        // Mark refresh as in progress
-        await chrome.storage.local.set({ __wsRefreshInProgress: true })
-        console.log('[Background] REFRESH_USER_DATA: Starting refresh')
-        
         // Refresh user data in background
         await Promise.all([
           fetchWalletDataCached(),
           fetchTransactionsCached(),
           fetchUserProfileCached(),
         ])
-        
-        // Mark refresh as complete
-        await chrome.storage.local.set({ 
-          __wsRefreshInProgress: false,
-          __wsLastRefresh: Date.now()
-        })
-        console.log('[Background] REFRESH_USER_DATA: Completed successfully')
         sendResponse({ ok: true })
       } catch (error) {
-        console.error('[Background] Error refreshing user data:', error)
-        // Clear in-progress flag on error
-        await chrome.storage.local.set({ __wsRefreshInProgress: false })
+        console.warn('[Background] Error refreshing user data:', error)
         sendResponse({ ok: false, error: (error as Error)?.message })
       }
     })()
@@ -789,6 +756,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
     })()
     return true
+  } else if (message?.type === 'REFRESH_USER_DATA_PROFILE_ONLY') {
+    ;(async () => {
+      try {
+        const { fetchUserProfileCached } = await import('../shared/cached-api')
+        const profile = await fetchUserProfileCached()
+        sendResponse({ profile })
+      } catch (error) {
+        console.warn('[Background] Error refreshing user profile:', error)
+        sendResponse({ profile: null, error: (error as Error)?.message })
+      }
+    })()
+    return true
   } else if (message?.type === 'GET_CACHED_USER_DATA') {
     ;(async () => {
       try {
@@ -809,84 +788,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     // Cache preload removed - causes unnecessary API calls
     ;(async () => {
       sendResponse({ success: true, message: 'Preload disabled to prevent unnecessary API calls' })
-    })()
-    return true
-  } else if (message?.type === 'FETCH_WALLET_DATA') {
-    ;(async () => {
-      try {
-        console.log('[Background] FETCH_WALLET_DATA request received')
-        const { relayFetchViaTab } = await import('./api')
-        console.log('[Background] Calling relayFetchViaTab for wallet data...')
-        const result = await relayFetchViaTab<any>('/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true', { method: 'GET' })
-        console.log('[Background] Wallet data result:', result.status, !!result.data)
-        sendResponse({ data: result.data, status: result.status })
-      } catch (error) {
-        console.error('[Background] Error fetching wallet data:', error)
-        sendResponse({ data: null, status: 0, error: (error as Error)?.message })
-      }
-    })()
-    return true
-  } else if (message?.type === 'FETCH_TRANSACTIONS') {
-    ;(async () => {
-      try {
-        const { relayFetchViaTab } = await import('./api')
-        const result = await relayFetchViaTab<any>('/wallets/api/v0/transactions?excludeAutoRewards=false&direction=forward&limit=20&supportsJsonNote=true', { method: 'GET' })
-        
-        // Normalize transaction data structure
-        const json = result.data
-        let list: any[] = []
-        if (Array.isArray(json?.data?.transactions)) list = json.data.transactions
-        else if (Array.isArray(json?.transactions)) list = json.transactions
-        else if (Array.isArray(json?.data)) list = json.data
-        else if (Array.isArray(json)) list = json
-        else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
-        
-        // Normalize transaction data to match UI expectations
-        const normalized = list.map((t) => {
-          const merchant = t?.merchant || t?.merchantInfo || {}
-          const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
-          const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
-          const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
-
-          const rawAmount =
-            typeof t?.amount === 'number' ? t.amount :
-            typeof t?.amount?.amount === 'number' ? t.amount.amount :
-            typeof t?.amount?.value === 'number' ? t.amount.value :
-            typeof t?.amountCents === 'number' ? t.amountCents / 100 :
-            undefined
-          const amount = typeof rawAmount === 'number' ? rawAmount : 0
-
-          return {
-            id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
-            amount,
-            currency: t?.currencyCode || t?.currency || 'EUR',
-            merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
-            logo,
-            state: state || 'unknown',
-            recordType: t?.recordType || t?.type || 'Unknown',
-            createdAt: createdAt || new Date().toISOString(),
-          }
-        })
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5) // Limit to max 5 transactions
-        
-        sendResponse({ data: normalized, status: result.status })
-      } catch (error) {
-        console.warn('[Background] Error fetching transactions:', error)
-        sendResponse({ data: [], status: 0, error: (error as Error)?.message })
-      }
-    })()
-    return true
-  } else if (message?.type === 'FETCH_USER_PROFILE') {
-    ;(async () => {
-      try {
-        const { relayFetchViaTab } = await import('./api')
-        const result = await relayFetchViaTab<any>('/user-info/api/v0', { method: 'GET' })
-        sendResponse({ data: result.data, status: result.status })
-      } catch (error) {
-        console.warn('[Background] Error fetching user profile:', error)
-        sendResponse({ data: null, status: 0, error: (error as Error)?.message })
-      }
     })()
     return true
   }

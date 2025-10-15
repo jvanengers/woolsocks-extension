@@ -1,3 +1,23 @@
+// Simple runtime helpers to detect Firefox-like environments and MV2 limitations
+export function isFirefoxLike(): boolean {
+  try {
+    // Chrome MV3 has getBrowserInfo only on Firefox
+    // @ts-ignore
+    if (typeof (chrome as any)?.runtime?.getBrowserInfo === 'function') return true
+  } catch {}
+  try {
+    const ua = navigator.userAgent || ''
+    return /Firefox\//i.test(ua)
+  } catch {
+    return false
+  }
+}
+
+export function isFirefoxMv2(): boolean {
+  // Our Firefox build is MV2; for Chrome it's MV3
+  return isFirefoxLike()
+}
+
 // Platform detection utility for browser-specific behavior
 // Used to implement platform-specific consent flows and auto-activation rules
 

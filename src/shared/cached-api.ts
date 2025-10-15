@@ -36,19 +36,20 @@ export async function fetchWalletDataCached(): Promise<any> {
     CACHE_NAMESPACES.WALLET,
     cacheKey,
     async () => {
-      // Use background script's fetch with tab relay fallback (works in Firefox MV2)
-      try {
-        const response = await chrome.runtime.sendMessage({ 
-          type: 'FETCH_WALLET_DATA'
-        })
-        if (response && response.data) {
-          return response.data
-        }
-        throw new Error('Wallet API failed: no data returned')
-      } catch (error) {
-        console.warn('[CachedAPI] fetchWalletDataCached error:', error)
-        throw error
+      const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (!resp.ok) {
+        throw new Error(`Wallet API failed: ${resp.status}`)
       }
+      
+      return await resp.json()
     },
     {
       ttl: 15 * 60 * 1000, // 15 minutes
@@ -70,19 +71,57 @@ export async function fetchTransactionsCached(): Promise<any[]> {
     CACHE_NAMESPACES.TRANSACTIONS,
     cacheKey,
     async () => {
-      // Use background script's fetch with tab relay fallback (works in Firefox MV2)
-      try {
-        const response = await chrome.runtime.sendMessage({ 
-          type: 'FETCH_TRANSACTIONS'
-        })
-        if (response && Array.isArray(response.data)) {
-          return response.data
-        }
-        throw new Error('Transactions API failed: no data returned')
-      } catch (error) {
-        console.warn('[CachedAPI] fetchTransactionsCached error:', error)
-        throw error
+      const url = 'https://woolsocks.eu/api/wsProxy/wallets/api/v0/transactions?excludeAutoRewards=false&direction=forward&limit=20&supportsJsonNote=true'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (!resp.ok) {
+        throw new Error(`Transactions API failed: ${resp.status}`)
       }
+      
+      const json = await resp.json()
+      
+      // Normalize transaction data structure
+      let list: any[] = []
+      if (Array.isArray(json?.data?.transactions)) list = json.data.transactions
+      else if (Array.isArray(json?.transactions)) list = json.transactions
+      else if (Array.isArray(json?.data)) list = json.data
+      else if (Array.isArray(json)) list = json
+      else if (json?.data?.transactions?.data && Array.isArray(json.data.transactions.data)) list = json.data.transactions.data
+      
+      // Normalize transaction data to match UI expectations
+      return list.map((t) => {
+        const merchant = t?.merchant || t?.merchantInfo || {}
+        const logo: string | undefined = merchant?.logoUrl || merchant?.logoURI || merchant?.logoUri || merchant?.logo || undefined
+        const createdAt: string | undefined = t?.createdAt || t?.created_at || t?.date || t?.eventDate || t?.timestamp
+        const state: string | undefined = t?.recordState || t?.recordstate || t?.status || t?.state
+
+        const rawAmount =
+          typeof t?.amount === 'number' ? t.amount :
+          typeof t?.amount?.amount === 'number' ? t.amount.amount :
+          typeof t?.amount?.value === 'number' ? t.amount.value :
+          typeof t?.amountCents === 'number' ? t.amountCents / 100 :
+          undefined
+        const amount = typeof rawAmount === 'number' ? rawAmount : 0
+
+        return {
+          id: t?.id || t?.transactionId || `${merchant?.name || 'txn'}-${createdAt || Math.random()}`,
+          amount,
+          currency: t?.currencyCode || t?.currency || 'EUR',
+          merchantName: merchant?.name || merchant?.merchantName || 'Unknown',
+          logo,
+          state: state || 'unknown',
+          recordType: t?.recordType || t?.type || 'Unknown',
+          createdAt: createdAt || new Date().toISOString(),
+        }
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5) // Limit to max 5 transactions
     },
     {
       ttl: 10 * 60 * 1000, // 10 minutes
@@ -104,18 +143,37 @@ export async function fetchUserProfileCached(): Promise<any> {
     CACHE_NAMESPACES.USER_PROFILE,
     cacheKey,
     async () => {
-      // Use background script's fetch with tab relay fallback (works in Firefox MV2)
+      const url = 'https://woolsocks.eu/api/wsProxy/user-info/api/v0'
+      const resp = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'x-application-name': 'WOOLSOCKS_WEB',
+          'x-user-id': userId || anonId,
+        },
+      })
+      
+      if (resp.status === 304) {
+        // No new content; return previously cached value instead of parsing empty body
+        try {
+          const prev = await get(CACHE_NAMESPACES.USER_PROFILE, cacheKey)
+          if (prev) return prev
+        } catch {}
+        // Fallthrough to error to force a refresh on next access
+        throw new Error('User profile 304 with no cached value')
+      }
+      
+      if (!resp.ok) {
+        throw new Error(`User profile API failed: ${resp.status}`)
+      }
+      
+      // Some proxies may return 200 with empty body when using caches; guard json parsing
       try {
-        const response = await chrome.runtime.sendMessage({ 
-          type: 'FETCH_USER_PROFILE'
-        })
-        if (response && response.data) {
-          return response.data
-        }
-        throw new Error('User profile API failed: no data returned')
-      } catch (error) {
-        console.warn('[CachedAPI] fetchUserProfileCached error:', error)
-        throw error
+        const j = await resp.json()
+        return j
+      } catch {
+        const prev = await get(CACHE_NAMESPACES.USER_PROFILE, cacheKey)
+        if (prev) return prev
+        throw new Error('User profile response had no JSON body')
       }
     },
     {

@@ -6,6 +6,7 @@ import { track } from '../background/analytics'
 import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
 import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
+import { isFirefoxLike } from '../shared/platform'
 
 interface Deal {
   name: string
@@ -24,6 +25,7 @@ function App() {
   const [onlineCashbackDeals, setOnlineCashbackDeals] = useState<Deal[]>([])
   const [vouchers, setVouchers] = useState<Deal[]>([])
   const [isTrackingActive, setIsTrackingActive] = useState<boolean>(false)
+  const [firstName, setFirstName] = useState<string>('')
   // Global reminders toggle (gates both cashback prompts and voucher reminders)
   const [showReminders, setShowReminders] = useState<boolean>(true)
   const [currentDomain, setCurrentDomain] = useState<string>('')
@@ -234,17 +236,30 @@ function App() {
     }
     ;(async () => {
       try {
-        // Use cached balance data for instant loading
-        const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
-             if (resp && typeof resp.balance === 'number') {
-               setBalance(resp.balance)
-               const el = document.getElementById('__ws_balance')
-               if (el) el.textContent = `€${resp.balance.toFixed(2)}`
-             }
+        // On Firefox we hide balance; fetch profile instead to greet user
+        if (isFirefoxLike()) {
+          // Ask background to refresh/fetch profile only (no relay tab creation)
+          let cached = await chrome.runtime.sendMessage({ type: 'GET_CACHED_USER_DATA' })
+          if (!cached || !cached.profile) {
+            try { cached = await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA_PROFILE_ONLY' }) } catch {}
+          }
+          const fn = cached?.profile?.data?.firstName || cached?.profile?.firstName || cached?.profile?.user?.firstName || ''
+          if (fn) setFirstName(fn)
+        } else {
+          // Use cached balance data for instant loading
+          const resp = await chrome.runtime.sendMessage({ type: 'GET_CACHED_BALANCE' })
+          if (resp && typeof resp.balance === 'number') {
+            setBalance(resp.balance)
+            const el = document.getElementById('__ws_balance')
+            if (el) el.textContent = `€${resp.balance.toFixed(2)}`
+          }
+        }
         
         // Trigger background refresh for next time
         try {
-          await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+          if (!isFirefoxLike()) {
+            await chrome.runtime.sendMessage({ type: 'REFRESH_USER_DATA' })
+          }
         } catch {}
       } catch {}
     })()
@@ -579,9 +594,10 @@ function App() {
         ) : (
           session === true ? (
             <>
-              {/* Left: balance button */}
-              <button
-                onClick={() => setView('transactions')}
+              {/* Left: on Chrome show balance button; on Firefox show greeting */}
+              {!isFirefoxLike() ? (
+                <button
+                  onClick={() => setView('transactions')}
                 style={{ 
                   background: 'rgba(0,0,0,0.05)', 
                   color: '#100B1C', 
@@ -598,12 +614,28 @@ function App() {
                   minHeight: 32
                 }}
                 id="__ws_balance_chip_home"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span id="__ws_balance">€{balance.toFixed(2)}</span>
-              </button>
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M14.1755 4.22225C14.1766 2.99445 11.6731 2 8.58832 2C5.50357 2 3.00224 2.99557 3 4.22225M3 4.22225C3 5.45004 5.50133 6.44449 8.58832 6.44449C11.6753 6.44449 14.1766 5.45004 14.1766 4.22225L14.1766 12.8445M3 4.22225V17.5556C3.00112 18.7834 5.50245 19.7779 8.58832 19.7779C10.0849 19.7779 11.4361 19.5412 12.4387 19.1601M3.00112 8.66672C3.00112 9.89451 5.50245 10.889 8.58944 10.889C11.6764 10.889 14.1778 9.89451 14.1778 8.66672M12.5057 14.6946C11.4976 15.0891 10.115 15.3335 8.58832 15.3335C5.50245 15.3335 3.00112 14.3391 3.00112 13.1113M20.5272 13.4646C22.4909 15.4169 22.4909 18.5836 20.5272 20.5358C18.5635 22.4881 15.3781 22.4881 13.4144 20.5358C11.4507 18.5836 11.4507 15.4169 13.4144 13.4646Z" stroke="#0F0B1C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span id="__ws_balance">€{balance.toFixed(2)}</span>
+                </button>
+              ) : (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    fontFamily: getWoolsocksFontFamily(),
+                    fontSize: 14,
+                    color: '#100B1C',
+                    background: 'rgba(0,0,0,0.05)'
+                  }}
+                >
+                  {`Hi ${firstName || 'there'},`}
+                </div>
+              )}
 
               {/* Right: settings icon */}
               <button
@@ -662,7 +694,8 @@ function App() {
           />
         </div>
       ) : view === 'transactions' ? (
-        session === true ? (
+        // Block transactions view entirely on Firefox
+        (!isFirefoxLike() && session === true) ? (
           <SettingsPanel
             variant="popup"
             onBalance={(b) => {

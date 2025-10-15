@@ -14,25 +14,7 @@ const DIAG = false
 
 const SITE_BASE = 'https://woolsocks.eu'
 
-function canCreateRelayTab(): boolean {
-  // Allow programmatic relay tab creation on:
-  // - Chrome with offscreen support (preferred)
-  // - Firefox (MV2) without offscreen but with regular tab creation
-  try {
-    // Chrome with offscreen
-    if ((chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function') {
-      return true
-    }
-    // Firefox or other browsers - allow relay via regular tabs
-    // Check if we're in Firefox by looking for browser global or MV2 manifest
-    if (typeof (globalThis as any).browser !== 'undefined' || chrome.runtime.getManifest().manifest_version === 2) {
-      return true
-    }
-    return false
-  } catch { 
-    return false 
-  }
-}
+// canCreateRelayTab removed for passive checks: we no longer create tabs implicitly
 
 async function getHeaders(): Promise<HeadersInit> {
   const userId = await getUserId()
@@ -194,90 +176,18 @@ async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): 
   } catch { try { track('relay_offscreen_fail', { reason: 'exception', endpoint }) } catch {} ; return { data: null, status: 0 } }
 }
 
-/**
- * Singleton manager for relay tab to prevent multiple tabs from being created
- */
-class RelayTabManager {
-  private static instance: RelayTabManager | null = null
-  private tabId: number | null = null
-  private requestQueue: Array<() => Promise<void>> = []
-  private isProcessing: boolean = false
-  private tabCreationPromise: Promise<number> | null = null
+async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+  const headers = await getHeaders()
 
-  private constructor() {}
-
-  static getInstance(): RelayTabManager {
-    if (!RelayTabManager.instance) {
-      RelayTabManager.instance = new RelayTabManager()
-    }
-    return RelayTabManager.instance
-  }
-
-  async ensureTab(): Promise<number> {
-    // If a tab creation is already in progress, wait for it
-    if (this.tabCreationPromise) {
-      console.log('[RelayTabManager] Tab creation already in progress, waiting...')
-      return await this.tabCreationPromise
-    }
-
-    // Check if existing tab is still valid
-    if (this.tabId) {
-      try {
-        const tab = await chrome.tabs.get(this.tabId)
-        if (tab && tab.id) {
-          // Tab exists, verify it's ready
-          if (await this.ping(this.tabId)) {
-            console.log('[RelayTabManager] Reusing existing tab:', this.tabId)
-            return this.tabId
-          }
-        }
-      } catch {
-        // Tab no longer exists
-        console.log('[RelayTabManager] Existing tab no longer valid')
-        this.tabId = null
-      }
-    }
-
-    // Start tab creation and store the promise to prevent concurrent creations
-    this.tabCreationPromise = this.createTab()
-    
-    try {
-      const tabId = await this.tabCreationPromise
-      return tabId
-    } finally {
-      // Clear the promise once done (success or failure)
-      this.tabCreationPromise = null
-    }
-  }
-
-  private async createTab(): Promise<number> {
-    // Check if a woolsocks.eu tab already exists
+  async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
+    // Passive checks must NOT create tabs in Firefox MV2. Only use an existing tab.
     const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
-    if (tabs && tabs.length > 0 && tabs[0]?.id) {
-      console.log('[RelayTabManager] Found existing woolsocks.eu tab:', tabs[0].id)
-      this.tabId = tabs[0].id
-      // Wait for content script readiness
-      await this.waitForReady(this.tabId)
-      return this.tabId
-    }
-
-    // Create new tab
-    if (!canCreateRelayTab()) {
-      throw new Error('Relay tab creation disabled on this platform')
-    }
-
-    console.log('[RelayTabManager] Creating new relay tab')
-    const tab = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
-    this.tabId = tab.id!
-
-    // Wait for content script readiness
-    await this.waitForReady(this.tabId)
-    
-    console.log('[RelayTabManager] New tab created and ready:', this.tabId)
-    return this.tabId
+    if (tabs && tabs.length > 0 && tabs[0]?.id) return { tabId: tabs[0].id, created: false }
+    // If no existing tab is available, abort relay instead of creating a new tab
+    throw new Error('No existing relay tab available')
   }
 
-  private async ping(tabId: number): Promise<boolean> {
+  async function ping(tabId: number): Promise<boolean> {
     return new Promise((resolve) => {
       try {
         chrome.tabs.sendMessage(tabId, { type: 'WS_PING' }, () => {
@@ -287,46 +197,7 @@ class RelayTabManager {
     })
   }
 
-  private async waitForReady(tabId: number): Promise<void> {
-    let ready = await this.ping(tabId)
-    let tries = 0
-    while (!ready && tries < 10) {
-      await new Promise(r => setTimeout(r, 300))
-      ready = await this.ping(tabId)
-      tries++
-    }
-    if (!ready) {
-      console.warn('[RelayTabManager] Tab not ready after 10 attempts')
-    }
-  }
-
-  async executeRequest<T>(
-    endpoint: string,
-    init: RequestInit | undefined,
-    headers: HeadersInit
-  ): Promise<{ data: T | null; status: number }> {
-    // Add request to queue and process
-    return new Promise((resolve) => {
-      this.requestQueue.push(async () => {
-        try {
-          const tabId = await this.ensureTab()
-          const result = await this.sendRequest<T>(tabId, endpoint, init, headers)
-          resolve(result)
-        } catch (error) {
-          console.error('[RelayTabManager] Request failed:', error)
-          resolve({ data: null, status: 0 })
-        }
-      })
-      this.processQueue()
-    })
-  }
-
-  private async sendRequest<T>(
-    tabId: number,
-    endpoint: string,
-    init: RequestInit | undefined,
-    headers: HeadersInit
-  ): Promise<{ data: T | null; status: number }> {
+  async function send(tabId: number): Promise<{ data: T | null; status: number }> {
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(
         tabId,
@@ -352,50 +223,33 @@ class RelayTabManager {
     })
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.isProcessing || this.requestQueue.length === 0) return
-
-    this.isProcessing = true
-    while (this.requestQueue.length > 0) {
-      const request = this.requestQueue.shift()
-      if (request) {
-        await request()
-      }
-    }
-    this.isProcessing = false
-  }
-
-  cleanup(): void {
-    if (this.tabId) {
-      try {
-        chrome.tabs.remove(this.tabId).catch(() => {})
-      } catch {}
-      this.tabId = null
-    }
-  }
-}
-
-export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
-  const t0 = Date.now()
-  const headers = await getHeaders()
-  
+  let created = false
+  let tabId = 0
   try {
-    const manager = RelayTabManager.getInstance()
-    const result = await manager.executeRequest<T>(endpoint, init, headers)
-    try { track('relay_tab_result', { endpoint, status: Number(result?.status || 0), duration_ms: Date.now()-t0 }) } catch {}
+    const t0 = Date.now()
+    const got = await ensureRelayTab()
+    tabId = got.tabId
+    created = got.created
+    // Wait for content script readiness
+    let ready = await ping(tabId)
+    let tries = 0
+    while (!ready && tries < 6) {
+      await new Promise(r => setTimeout(r, 250))
+      ready = await ping(tabId)
+      tries++
+    }
+    const result = await send(tabId)
+    try { track('relay_tab_result', { endpoint, created, status: Number(result?.status || 0), duration_ms: Date.now()-t0 }) } catch {}
     return result
-  } catch (error) {
-    console.error('[WS API] relayFetchViaTab error:', error)
-    try { track('relay_tab_result', { endpoint, status: 0, duration_ms: 0, error: true }) } catch {}
+  } catch {
+    try { track('relay_tab_result', { endpoint, created, status: 0, duration_ms: 0, error: true }) } catch {}
     return { data: null, status: 0 }
+  } finally {
+    // Close ephemeral tab if we created it
+    if (created && tabId) {
+      try { await chrome.tabs.remove(tabId) } catch {}
+    }
   }
-}
-
-// Cleanup relay tab on extension unload
-if (typeof chrome !== 'undefined' && chrome.runtime) {
-  chrome.runtime.onSuspend?.addListener(() => {
-    RelayTabManager.getInstance().cleanup()
-  })
 }
 
 async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {

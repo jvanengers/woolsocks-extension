@@ -883,6 +883,14 @@ Status: Backlog (triage weekly)
 - Popup/options: Ensure language fallback uses browser locale when not logged in (done; monitor)
 - Asset usage: Use correct illustration `Chillin girl.png` in activation card (done)
 - Lokalise: Spanish (es) translation upload fails with 403 permission error (investigate Lokalise permissions; translations work correctly in extension builds)
+- Firefox popup: First name greeting not shown (shows "Hi there,")
+  - Context: On Firefox MV2 we hide balance; header should show "Hi {firstName},". API sometimes returns 304 from `user-info` via site proxy; cached profile not surfaced to popup, leaving empty firstName.
+  - Likely cause: Cached profile retrieval race and 304 handling between background cached-api and popup request; missing refresh/write before read.
+  - Fix proposal:
+    - Ensure background `fetchUserProfileCached()` writes cache on 200 and returns existing cache on 304/empty body (implemented), then expose `GET_CACHED_USER_DATA.profile` consistently.
+    - In popup, call `GET_CACHED_USER_DATA` first; if no `profile`, await `REFRESH_USER_DATA_PROFILE_ONLY` and retry read once with short delay.
+    - Add debug logs + unit test for 304 fallback path in `cached-api.ts`.
+  - Success criteria: On Firefox, header reliably shows "Hi {firstName}," within 1s when logged in; no relay tabs created; no regressions on Chrome.
 
 Success criteria
 - All onboarding screens render consistently in popup dimensions
