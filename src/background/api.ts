@@ -100,8 +100,19 @@ async function getUserId(): Promise<string | null> {
       }
     }
 
-    // No tab relay fallback - avoid creating visible tabs when not authenticated
-    // If both direct fetch and offscreen fail, just return null gracefully
+    // 3) Fallback to tab relay (works in Firefox MV2)
+    if (!json) {
+      console.log('[WS API] getUserId trying tab relay...')
+      try {
+        const tab = await relayFetchViaTab<any>('/user-info/api/v0', { method: 'GET' })
+        console.log('[WS API] getUserId tab relay result:', tab?.status, !!tab?.data)
+        json = tab?.data || null
+      } catch (e) {
+        console.log('[WS API] getUserId tab relay error:', e)
+      }
+    }
+
+    // If all methods fail, return null gracefully
     if (!json) {
       console.log('[WS API] getUserId failed - no valid response (not authenticated or cookies unavailable)')
       cachedUserId = null
