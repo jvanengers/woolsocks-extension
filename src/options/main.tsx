@@ -141,11 +141,20 @@ function Options() {
 
   async function checkSession(): Promise<boolean> {
     try {
-      // Firefox requires url parameter instead of domain
-      const site = await chrome.cookies.getAll({ url: 'https://woolsocks.eu' })
-      const api = await chrome.cookies.getAll({ url: 'https://api.woolsocks.eu' })
-      const all = [...site, ...api]
-      return all.some(c => c.name === 'ws-session' || /session/i.test(c.name))
+      // Use background script's hasActiveSession (works in Firefox MV2)
+      const resp = await chrome.runtime.sendMessage({ type: 'CHECK_ACTIVE_SESSION' })
+      if (resp && typeof resp.active === 'boolean') {
+        return resp.active
+      }
+      
+      // Fallback: check storage for cached session state
+      const stored = await chrome.storage.local.get(['__wsSessionActive', '__wsSessionCheckedAt'])
+      const age = stored.__wsSessionCheckedAt ? Date.now() - stored.__wsSessionCheckedAt : Infinity
+      if (typeof stored.__wsSessionActive === 'boolean' && age < 30000) {
+        return stored.__wsSessionActive
+      }
+      
+      return false
     } catch {
       return false
     }
