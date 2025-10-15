@@ -676,15 +676,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message?.type === 'REFRESH_USER_DATA') {
     ;(async () => {
       try {
+        // Debounce: check if a refresh is already in progress
+        const now = Date.now()
+        const stored = await chrome.storage.local.get(['__wsRefreshInProgress', '__wsLastRefresh'])
+        const inProgress = stored.__wsRefreshInProgress === true
+        const lastRefresh = stored.__wsLastRefresh || 0
+        const timeSinceLastRefresh = now - lastRefresh
+        
+        // If refresh in progress or refreshed within last 2 seconds, skip
+        if (inProgress) {
+          console.log('[Background] REFRESH_USER_DATA: Already in progress, skipping')
+          sendResponse({ ok: true, skipped: true, reason: 'in_progress' })
+          return
+        }
+        
+        if (timeSinceLastRefresh < 2000) {
+          console.log('[Background] REFRESH_USER_DATA: Recently refreshed, skipping')
+          sendResponse({ ok: true, skipped: true, reason: 'recent_refresh' })
+          return
+        }
+        
+        // Mark refresh as in progress
+        await chrome.storage.local.set({ __wsRefreshInProgress: true })
+        console.log('[Background] REFRESH_USER_DATA: Starting refresh')
+        
         // Refresh user data in background
         await Promise.all([
           fetchWalletDataCached(),
           fetchTransactionsCached(),
           fetchUserProfileCached(),
         ])
+        
+        // Mark refresh as complete
+        await chrome.storage.local.set({ 
+          __wsRefreshInProgress: false,
+          __wsLastRefresh: Date.now()
+        })
+        console.log('[Background] REFRESH_USER_DATA: Completed successfully')
         sendResponse({ ok: true })
       } catch (error) {
-        console.warn('[Background] Error refreshing user data:', error)
+        console.error('[Background] Error refreshing user data:', error)
+        // Clear in-progress flag on error
+        await chrome.storage.local.set({ __wsRefreshInProgress: false })
         sendResponse({ ok: false, error: (error as Error)?.message })
       }
     })()
@@ -781,11 +814,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   } else if (message?.type === 'FETCH_WALLET_DATA') {
     ;(async () => {
       try {
+        console.log('[Background] FETCH_WALLET_DATA request received')
         const { relayFetchViaTab } = await import('./api')
+        console.log('[Background] Calling relayFetchViaTab for wallet data...')
         const result = await relayFetchViaTab<any>('/wallets/api/v1/wallets/default?transactionsLimit=10&supportsJsonNote=true', { method: 'GET' })
+        console.log('[Background] Wallet data result:', result.status, !!result.data)
         sendResponse({ data: result.data, status: result.status })
       } catch (error) {
-        console.warn('[Background] Error fetching wallet data:', error)
+        console.error('[Background] Error fetching wallet data:', error)
         sendResponse({ data: null, status: 0, error: (error as Error)?.message })
       }
     })()

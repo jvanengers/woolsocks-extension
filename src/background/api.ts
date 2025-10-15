@@ -194,21 +194,66 @@ async function relayFetchViaOffscreen<T>(endpoint: string, init?: RequestInit): 
   } catch { try { track('relay_offscreen_fail', { reason: 'exception', endpoint }) } catch {} ; return { data: null, status: 0 } }
 }
 
-export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
-  const headers = await getHeaders()
+/**
+ * Singleton manager for relay tab to prevent multiple tabs from being created
+ */
+class RelayTabManager {
+  private static instance: RelayTabManager | null = null
+  private tabId: number | null = null
+  private requestQueue: Array<() => Promise<void>> = []
+  private isProcessing: boolean = false
 
-  async function ensureRelayTab(): Promise<{ tabId: number; created: boolean }> {
-    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
-    if (tabs && tabs.length > 0 && tabs[0]?.id) return { tabId: tabs[0].id, created: false }
-    if (!canCreateRelayTab()) {
-      // Do not create a visible tab on platforms without offscreen support
-      throw new Error('Relay tab creation disabled on this platform')
+  private constructor() {}
+
+  static getInstance(): RelayTabManager {
+    if (!RelayTabManager.instance) {
+      RelayTabManager.instance = new RelayTabManager()
     }
-    const t = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
-    return { tabId: t.id!, created: true }
+    return RelayTabManager.instance
   }
 
-  async function ping(tabId: number): Promise<boolean> {
+  async ensureTab(): Promise<number> {
+    // Check if existing tab is still valid
+    if (this.tabId) {
+      try {
+        const tab = await chrome.tabs.get(this.tabId)
+        if (tab && tab.id) {
+          // Tab exists, verify it's ready
+          if (await this.ping(this.tabId)) {
+            return this.tabId
+          }
+        }
+      } catch {
+        // Tab no longer exists
+        this.tabId = null
+      }
+    }
+
+    // Check if a woolsocks.eu tab already exists
+    const tabs = await chrome.tabs.query({ url: [`${SITE_BASE}/*`, `${SITE_BASE.replace('https://', 'https://www.')}/*`] })
+    if (tabs && tabs.length > 0 && tabs[0]?.id) {
+      this.tabId = tabs[0].id
+      // Wait for content script readiness
+      await this.waitForReady(this.tabId)
+      return this.tabId
+    }
+
+    // Create new tab
+    if (!canCreateRelayTab()) {
+      throw new Error('Relay tab creation disabled on this platform')
+    }
+
+    console.log('[RelayTabManager] Creating new relay tab')
+    const tab = await chrome.tabs.create({ url: `${SITE_BASE}/nl`, active: false })
+    this.tabId = tab.id!
+
+    // Wait for content script readiness
+    await this.waitForReady(this.tabId)
+    
+    return this.tabId
+  }
+
+  private async ping(tabId: number): Promise<boolean> {
     return new Promise((resolve) => {
       try {
         chrome.tabs.sendMessage(tabId, { type: 'WS_PING' }, () => {
@@ -218,7 +263,46 @@ export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit):
     })
   }
 
-  async function send(tabId: number): Promise<{ data: T | null; status: number }> {
+  private async waitForReady(tabId: number): Promise<void> {
+    let ready = await this.ping(tabId)
+    let tries = 0
+    while (!ready && tries < 10) {
+      await new Promise(r => setTimeout(r, 300))
+      ready = await this.ping(tabId)
+      tries++
+    }
+    if (!ready) {
+      console.warn('[RelayTabManager] Tab not ready after 10 attempts')
+    }
+  }
+
+  async executeRequest<T>(
+    endpoint: string,
+    init: RequestInit | undefined,
+    headers: HeadersInit
+  ): Promise<{ data: T | null; status: number }> {
+    // Add request to queue and process
+    return new Promise((resolve) => {
+      this.requestQueue.push(async () => {
+        try {
+          const tabId = await this.ensureTab()
+          const result = await this.sendRequest<T>(tabId, endpoint, init, headers)
+          resolve(result)
+        } catch (error) {
+          console.error('[RelayTabManager] Request failed:', error)
+          resolve({ data: null, status: 0 })
+        }
+      })
+      this.processQueue()
+    })
+  }
+
+  private async sendRequest<T>(
+    tabId: number,
+    endpoint: string,
+    init: RequestInit | undefined,
+    headers: HeadersInit
+  ): Promise<{ data: T | null; status: number }> {
     return new Promise((resolve) => {
       chrome.tabs.sendMessage(
         tabId,
@@ -244,33 +328,50 @@ export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit):
     })
   }
 
-  let created = false
-  let tabId = 0
-  try {
-    const t0 = Date.now()
-    const got = await ensureRelayTab()
-    tabId = got.tabId
-    created = got.created
-    // Wait for content script readiness
-    let ready = await ping(tabId)
-    let tries = 0
-    while (!ready && tries < 6) {
-      await new Promise(r => setTimeout(r, 250))
-      ready = await ping(tabId)
-      tries++
+  private async processQueue(): Promise<void> {
+    if (this.isProcessing || this.requestQueue.length === 0) return
+
+    this.isProcessing = true
+    while (this.requestQueue.length > 0) {
+      const request = this.requestQueue.shift()
+      if (request) {
+        await request()
+      }
     }
-    const result = await send(tabId)
-    try { track('relay_tab_result', { endpoint, created, status: Number(result?.status || 0), duration_ms: Date.now()-t0 }) } catch {}
-    return result
-  } catch {
-    try { track('relay_tab_result', { endpoint, created, status: 0, duration_ms: 0, error: true }) } catch {}
-    return { data: null, status: 0 }
-  } finally {
-    // Close ephemeral tab if we created it
-    if (created && tabId) {
-      try { await chrome.tabs.remove(tabId) } catch {}
+    this.isProcessing = false
+  }
+
+  cleanup(): void {
+    if (this.tabId) {
+      try {
+        chrome.tabs.remove(this.tabId).catch(() => {})
+      } catch {}
+      this.tabId = null
     }
   }
+}
+
+export async function relayFetchViaTab<T>(endpoint: string, init?: RequestInit): Promise<{ data: T | null; status: number }> {
+  const t0 = Date.now()
+  const headers = await getHeaders()
+  
+  try {
+    const manager = RelayTabManager.getInstance()
+    const result = await manager.executeRequest<T>(endpoint, init, headers)
+    try { track('relay_tab_result', { endpoint, status: Number(result?.status || 0), duration_ms: Date.now()-t0 }) } catch {}
+    return result
+  } catch (error) {
+    console.error('[WS API] relayFetchViaTab error:', error)
+    try { track('relay_tab_result', { endpoint, status: 0, duration_ms: 0, error: true }) } catch {}
+    return { data: null, status: 0 }
+  }
+}
+
+// Cleanup relay tab on extension unload
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  chrome.runtime.onSuspend?.addListener(() => {
+    RelayTabManager.getInstance().cleanup()
+  })
 }
 
 async function fetchViaSiteProxy<T>(endpoint: string, init?: RequestInit, retryCount = 0): Promise<{ data: T | null; status: number }> {
