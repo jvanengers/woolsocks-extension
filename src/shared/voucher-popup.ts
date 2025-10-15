@@ -630,13 +630,185 @@ function minimizePopup(popup: HTMLElement, config: VoucherPopupConfig): void {
 
   // Apply minimized styles
   applyStyles(popup, popupStyles.minimized)
-  popup.innerHTML = `
-    <div style="width: 40px; height: 40px; background: #211940; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: bold;">W</div>
+  
+  // Create improved minimized content
+  const minimizedContent = document.createElement('div')
+  minimizedContent.style.cssText = `
+    width: 50px; 
+    height: 50px; 
+    background: linear-gradient(135deg, #211940 0%, #8564FF 100%); 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    color: white; 
+    font-size: 16px; 
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    position: relative;
+    overflow: hidden;
   `
+  
+  // Add hover effect
+  minimizedContent.addEventListener('mouseenter', () => {
+    minimizedContent.style.transform = 'scale(1.1)'
+    minimizedContent.style.boxShadow = '0 4px 12px rgba(0,0,0,0.25)'
+  })
+  
+  minimizedContent.addEventListener('mouseleave', () => {
+    minimizedContent.style.transform = 'scale(1)'
+    minimizedContent.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'
+  })
+  
+  // Add tooltip
+  minimizedContent.title = 'Click to view voucher details'
+  minimizedContent.setAttribute('aria-label', 'Minimized voucher popup - click to expand')
+  minimizedContent.setAttribute('role', 'button')
+  minimizedContent.setAttribute('tabindex', '0')
+  
+  // Add Woolsocks logo or icon
+  const icon = document.createElement('div')
+  icon.textContent = 'W'
+  icon.style.cssText = `
+    font-size: 18px;
+    font-weight: 700;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  `
+  
+  minimizedContent.appendChild(icon)
+  
+  // Add notification badge if vouchers are available
+  const vouchers = collectVouchers(config.partner)
+  if (vouchers.length > 0) {
+    const badge = document.createElement('div')
+    badge.style.cssText = `
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 12px;
+      height: 12px;
+      background: #FDC408;
+      border: 2px solid white;
+      border-radius: 50%;
+      font-size: 8px;
+      font-weight: bold;
+      color: #211940;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    `
+    badge.textContent = vouchers.length > 9 ? '9+' : vouchers.length.toString()
+    minimizedContent.appendChild(badge)
+  }
+  popup.innerHTML = ''
+  popup.appendChild(minimizedContent)
 
   // Add click to expand
-  popup.addEventListener('click', () => {
+  const expandHandler = () => {
     expandPopup(popup, config)
+  }
+  
+  // Add double-click to dismiss
+  let clickTimeout: number | null = null
+  const handleClick = () => {
+    if (clickTimeout) {
+      // Double click - dismiss popup
+      clearTimeout(clickTimeout)
+      clickTimeout = null
+      popup.remove()
+      return
+    }
+    
+    // Single click - expand after delay
+    clickTimeout = window.setTimeout(() => {
+      expandHandler()
+      clickTimeout = null
+    }, 300)
+  }
+  
+  minimizedContent.addEventListener('click', handleClick)
+  minimizedContent.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      expandHandler()
+    } else if (e.key === 'Escape') {
+      // Escape key dismisses popup
+      popup.remove()
+    }
+  })
+  
+  // Add right-click context menu
+  minimizedContent.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
+    
+    // Create context menu
+    const contextMenu = document.createElement('div')
+    contextMenu.style.cssText = `
+      position: fixed;
+      top: ${e.clientY}px;
+      left: ${e.clientX}px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 2147483648;
+      padding: 8px 0;
+      min-width: 120px;
+    `
+    
+    const expandOption = document.createElement('div')
+    expandOption.textContent = 'Expand popup'
+    expandOption.style.cssText = `
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #333;
+    `
+    expandOption.addEventListener('mouseenter', () => {
+      expandOption.style.background = '#f5f5f5'
+    })
+    expandOption.addEventListener('mouseleave', () => {
+      expandOption.style.background = 'transparent'
+    })
+    expandOption.addEventListener('click', () => {
+      expandHandler()
+      contextMenu.remove()
+    })
+    
+    const dismissOption = document.createElement('div')
+    dismissOption.textContent = 'Dismiss popup'
+    dismissOption.style.cssText = `
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #666;
+    `
+    dismissOption.addEventListener('mouseenter', () => {
+      dismissOption.style.background = '#f5f5f5'
+    })
+    dismissOption.addEventListener('mouseleave', () => {
+      dismissOption.style.background = 'transparent'
+    })
+    dismissOption.addEventListener('click', () => {
+      popup.remove()
+      contextMenu.remove()
+    })
+    
+    contextMenu.appendChild(expandOption)
+    contextMenu.appendChild(dismissOption)
+    document.body.appendChild(contextMenu)
+    
+    // Remove context menu when clicking elsewhere
+    const removeContextMenu = () => {
+      contextMenu.remove()
+      document.removeEventListener('click', removeContextMenu)
+    }
+    setTimeout(() => {
+      document.addEventListener('click', removeContextMenu)
+    }, 100)
   })
 }
 
@@ -649,7 +821,10 @@ function expandPopup(popup: HTMLElement, config: VoucherPopupConfig): void {
   currentPopupState.isMinimized = false
   popup.dataset.minimized = 'false'
 
-  // Remove click listener (we'll re-add it after recreating content)
+  // Add expand animation
+  popup.style.transition = 'all 0.3s ease'
+  popup.style.transform = 'scale(0.8)'
+  popup.style.opacity = '0.7'
 
   // Recreate the popup content
   const vouchers = collectVouchers(config.partner)
@@ -688,6 +863,12 @@ function expandPopup(popup: HTMLElement, config: VoucherPopupConfig): void {
   if (hasMultipleVouchers) {
     updateCarouselPosition(popup, currentPopupState.selectedVoucherIndex, vouchers, config)
   }
+
+  // Animate in
+  setTimeout(() => {
+    popup.style.transform = 'translateY(0) scale(1)'
+    popup.style.opacity = '1'
+  }, 50)
 }
 
 function attachCarouselBehavior(
@@ -707,9 +888,37 @@ function attachCarouselBehavior(
   if (!carousel || !leftArrow || !rightArrow) return
 
   const maxIndex = vouchers.length - 1
+  let isTransitioning = false
+  let touchStartX = 0
+  let touchCurrentX = 0
+  let isDragging = false
 
-  const updateCarousel = () => {
-    const translateX = -currentPopupState.selectedVoucherIndex * 267 // 259px card + 8px gap
+  // Calculate card width dynamically
+  const getCardWidth = () => {
+    const firstCard = cards[0] as HTMLElement
+    if (firstCard) {
+      const rect = firstCard.getBoundingClientRect()
+      return rect.width + 8 // card width + gap
+    }
+    return 267 // fallback to original value
+  }
+
+  const updateCarousel = (smooth = true) => {
+    if (isTransitioning) return
+    
+    const cardWidth = getCardWidth()
+    const translateX = -currentPopupState.selectedVoucherIndex * cardWidth
+    
+    if (smooth) {
+      carousel.style.transition = 'transform 0.3s ease-out'
+      isTransitioning = true
+      setTimeout(() => {
+        isTransitioning = false
+      }, 300)
+    } else {
+      carousel.style.transition = 'none'
+    }
+    
     carousel.style.transform = `translateX(${translateX}px)`
 
     // Update dots
@@ -735,31 +944,142 @@ function attachCarouselBehavior(
     }
   }
 
+  // Touch/swipe support
+  const handleTouchStart = (e: TouchEvent) => {
+    if (isTransitioning) return
+    
+    touchStartX = e.touches[0].clientX
+    touchCurrentX = touchStartX
+    isDragging = true
+    
+    carousel.style.transition = 'none'
+  }
+
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!isDragging || isTransitioning) return
+    
+    touchCurrentX = e.touches[0].clientX
+    const deltaX = touchCurrentX - touchStartX
+    const cardWidth = getCardWidth()
+    
+    // Apply drag offset to current position
+    const baseTranslateX = -currentPopupState.selectedVoucherIndex * cardWidth
+    const currentTranslateX = baseTranslateX + deltaX
+    
+    carousel.style.transform = `translateX(${currentTranslateX}px)`
+  }
+
+  const handleTouchEnd = () => {
+    if (!isDragging || isTransitioning) return
+    
+    isDragging = false
+    const deltaX = touchCurrentX - touchStartX
+    const cardWidth = getCardWidth()
+    const threshold = cardWidth * 0.3 // 30% of card width to trigger swipe
+    
+    let newIndex = currentPopupState.selectedVoucherIndex
+    
+    if (Math.abs(deltaX) > threshold) {
+      if (deltaX > 0 && currentPopupState.selectedVoucherIndex > 0) {
+        // Swipe right - go to previous
+        newIndex = currentPopupState.selectedVoucherIndex - 1
+      } else if (deltaX < 0 && currentPopupState.selectedVoucherIndex < maxIndex) {
+        // Swipe left - go to next
+        newIndex = currentPopupState.selectedVoucherIndex + 1
+      }
+    }
+    
+    currentPopupState.selectedVoucherIndex = newIndex
+    updateCarousel(true)
+  }
+
+  // Mouse drag support for desktop
+  const handleMouseDown = (e: MouseEvent) => {
+    if (isTransitioning) return
+    
+    touchStartX = e.clientX
+    touchCurrentX = touchStartX
+    isDragging = true
+    
+    carousel.style.transition = 'none'
+    e.preventDefault()
+  }
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging || isTransitioning) return
+    
+    touchCurrentX = e.clientX
+    const deltaX = touchCurrentX - touchStartX
+    const cardWidth = getCardWidth()
+    
+    // Apply drag offset to current position
+    const baseTranslateX = -currentPopupState.selectedVoucherIndex * cardWidth
+    const currentTranslateX = baseTranslateX + deltaX
+    
+    carousel.style.transform = `translateX(${currentTranslateX}px)`
+  }
+
+  const handleMouseUp = () => {
+    if (!isDragging || isTransitioning) return
+    
+    isDragging = false
+    const deltaX = touchCurrentX - touchStartX
+    const cardWidth = getCardWidth()
+    const threshold = cardWidth * 0.3
+    
+    let newIndex = currentPopupState.selectedVoucherIndex
+    
+    if (Math.abs(deltaX) > threshold) {
+      if (deltaX > 0 && currentPopupState.selectedVoucherIndex > 0) {
+        newIndex = currentPopupState.selectedVoucherIndex - 1
+      } else if (deltaX < 0 && currentPopupState.selectedVoucherIndex < maxIndex) {
+        newIndex = currentPopupState.selectedVoucherIndex + 1
+      }
+    }
+    
+    currentPopupState.selectedVoucherIndex = newIndex
+    updateCarousel(true)
+  }
+
+  // Add event listeners
+  carousel.addEventListener('touchstart', handleTouchStart, { passive: false })
+  carousel.addEventListener('touchmove', handleTouchMove, { passive: false })
+  carousel.addEventListener('touchend', handleTouchEnd, { passive: false })
+  
+  carousel.addEventListener('mousedown', handleMouseDown)
+  document.addEventListener('mousemove', handleMouseMove)
+  document.addEventListener('mouseup', handleMouseUp)
+
   leftArrow.addEventListener('click', () => {
-    if (currentPopupState.selectedVoucherIndex > 0) {
+    if (currentPopupState.selectedVoucherIndex > 0 && !isTransitioning) {
       currentPopupState.selectedVoucherIndex--
-      updateCarousel()
+      updateCarousel(true)
     }
   })
 
   rightArrow.addEventListener('click', () => {
-    if (currentPopupState.selectedVoucherIndex < maxIndex) {
+    if (currentPopupState.selectedVoucherIndex < maxIndex && !isTransitioning) {
       currentPopupState.selectedVoucherIndex++
-      updateCarousel()
+      updateCarousel(true)
     }
   })
 
   dots.forEach((dot, index) => {
     dot.addEventListener('click', () => {
-      currentPopupState.selectedVoucherIndex = index
-      updateCarousel()
+      if (!isTransitioning) {
+        currentPopupState.selectedVoucherIndex = index
+        updateCarousel(true)
+      }
     })
   })
 
   cards.forEach((card, index) => {
     card.addEventListener('click', () => {
-      currentPopupState.selectedVoucherIndex = index
-      updateCarousel()
+      // Only handle click if not dragging
+      if (!isDragging && !isTransitioning) {
+        currentPopupState.selectedVoucherIndex = index
+        updateCarousel(true)
+      }
     })
   })
 }
@@ -774,10 +1094,22 @@ function updateCarouselPosition(
   const dots = popup.querySelectorAll('.carousel-dot')
   const leftArrow = popup.querySelector('#carousel-left-arrow') as HTMLElement
   const rightArrow = popup.querySelector('#carousel-right-arrow') as HTMLElement
+  const cards = popup.querySelectorAll('.voucher-card')
 
   if (!carousel) return
 
-  const translateX = -index * 267
+  // Calculate card width dynamically
+  const getCardWidth = () => {
+    const firstCard = cards[0] as HTMLElement
+    if (firstCard) {
+      const rect = firstCard.getBoundingClientRect()
+      return rect.width + 8 // card width + gap
+    }
+    return 267 // fallback to original value
+  }
+
+  const cardWidth = getCardWidth()
+  const translateX = -index * cardWidth
   carousel.style.transform = `translateX(${translateX}px)`
 
   // Update dots

@@ -45,7 +45,10 @@ export const popupStyles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    zIndex: '2147483647'
   } as StyleObject,
 
   header: {
@@ -111,7 +114,8 @@ export const popupStyles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    marginBottom: '16px'
+    marginBottom: '16px',
+    position: 'relative'
   } as StyleObject,
 
   carouselContainer: {
@@ -119,7 +123,12 @@ export const popupStyles = {
     gap: '8px',
     overflowX: 'hidden',
     scrollBehavior: 'smooth',
-    padding: '8px 0'
+    padding: '8px 0',
+    touchAction: 'pan-y pinch-zoom',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    MozUserSelect: 'none',
+    msUserSelect: 'none'
   } as StyleObject,
 
   voucherCard: {
@@ -131,7 +140,12 @@ export const popupStyles = {
     gap: '16px',
     alignItems: 'flex-start',
     cursor: 'pointer',
-    transition: 'transform 0.2s ease'
+    transition: 'transform 0.2s ease',
+    touchAction: 'manipulation',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    MozUserSelect: 'none',
+    msUserSelect: 'none'
   } as StyleObject,
 
   voucherImage: {
