@@ -133,8 +133,9 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
 
   async function checkSession(): Promise<boolean> {
     try {
-      const site = await chrome.cookies.getAll({ domain: 'woolsocks.eu' })
-      const api = await chrome.cookies.getAll({ domain: 'api.woolsocks.eu' })
+      // Firefox requires url parameter instead of domain
+      const site = await chrome.cookies.getAll({ url: 'https://woolsocks.eu' })
+      const api = await chrome.cookies.getAll({ url: 'https://api.woolsocks.eu' })
       const all = [...site, ...api]
       return all.some(c => c.name === 'ws-session' || /session/i.test(c.name))
     } catch {
