@@ -14,13 +14,7 @@ const manifest = {
   // MV2 uses browser_specific_settings instead of applications
   browser_specific_settings: {
     gecko: {
-      id: 'woolsocks@woolsocks.eu',
-      // AMO data collection consent metadata
-      data_collection: {
-        policy: { url: 'https://woolsocks.eu/privacy' },
-        legal: { url: 'https://woolsocks.eu/terms' },
-        privacy_notice: { url: 'https://woolsocks.eu/privacy' }
-      }
+      id: 'woolsocks@woolsocks.eu'
     }
   },
   

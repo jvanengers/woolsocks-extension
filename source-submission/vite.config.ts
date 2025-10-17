@@ -1,6 +1,8 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { crx } from '@crxjs/vite-plugin'
+import { writeFileSync, existsSync, readFileSync } from 'fs'
+import { join } from 'path'
 
 // Minimal MV3 manifest injected by CRXJS during build
 const manifest = {
@@ -89,7 +91,7 @@ const manifest = {
   ],
   web_accessible_resources: [
     {
-      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf'],
+      resources: ['content/*.css', 'content/*.js', 'assets/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf'],
       matches: ['<all_urls>'],
     },
   ],
@@ -98,9 +100,34 @@ const manifest = {
   },
 }
 
+// Plugin to wrap voucher-popup-page.js in IIFE to prevent variable conflicts
+function wrapVoucherPopupPagePlugin(): Plugin {
+  return {
+    name: 'wrap-voucher-popup-page',
+    writeBundle() {
+      const voucherPopupPath = join('dist', 'assets', 'voucher-popup-page.js')
+      if (existsSync(voucherPopupPath)) {
+        const content = readFileSync(voucherPopupPath, 'utf8')
+        const wrappedContent = `(function(){
+  // Isolate all declarations to avoid leaking globals or colliding with site scripts
+  // Provide a benign local 'exports' so module boilerplate doesn't crash
+  var exports = {};
+  try {
+${content}
+  } catch (e) {
+    try { console.error('[WS Page Script] initialization failed:', e); } catch(_) {}
+  }
+})();`
+        writeFileSync(voucherPopupPath, wrappedContent)
+        console.log('✅ Wrapped voucher-popup-page.js in IIFE')
+      }
+    }
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), crx({ manifest })],
+  plugins: [react(), crx({ manifest }), wrapVoucherPopupPagePlugin()],
   build: {
     rollupOptions: {
       input: {
@@ -112,7 +139,16 @@ export default defineConfig({
         ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
         offscreen: 'src/offscreen/relay.html',
+        'voucher-popup-page': 'src/shared/voucher-popup-page.ts',
       },
+      output: {
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'voucher-popup-page') {
+            return 'assets/voucher-popup-page.js'
+          }
+          return 'assets/[name]-[hash].js'
+        }
+      }
     },
   },
 })
