@@ -10,7 +10,7 @@ import { track } from './analytics'
 import { cachedFetch, CACHE_NAMESPACES } from '../shared/cache'
 import { getCountryForDomain } from './partners-config'
 
-const DIAG = false
+const DIAG = true
 
 const SITE_BASE = 'https://woolsocks.eu'
 
@@ -627,7 +627,9 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
       const merchantWebUrl = cbRes?.data?.data?.merchant?.webUrl || ''
       const webDomain = cleanDomain(merchantWebUrl)
       const hostDomain = cleanDomain(expectedHostDomain || name)
-      if (webDomain && hostDomain && !domainsMatch(hostDomain, webDomain)) {
+      const match = webDomain && hostDomain && domainsMatch(hostDomain, webDomain)
+      if (DIAG) try { console.debug('[WS API] Domain check', { hostDomain, webDomain, match, candidate }) } catch {}
+      if (webDomain && hostDomain && !match) {
         console.log('[WS API] Skipping merchant due to domain mismatch', { hostDomain, webDomain, candidate })
         continue
       }
@@ -674,6 +676,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
           const m = String(item.dealUrl).match(/products\/([A-Za-z0-9-]{8,})/)
           productId = m ? m[1] : null
         }
+        if (DIAG) try { console.debug('[WS API] Voucher candidate productId', { productId, hasExplicitId: !!explicitId, title: item.name }) } catch {}
         if (productId) {
           voucherCandidates.push({ id: productId, item })
         }
@@ -715,14 +718,16 @@ async function filterVoucherCandidatesOnlineOnly(cands: Array<{ id: string; item
           const usageType = (product?.usageType || '').toString().toUpperCase()
           const normalized = usageType.replace(/[^A-Z]/g, '')
           const include = normalized === 'ALL' || normalized.includes('ONLINE')
+          const dealCountry = String((product?.countryCode || product?.country || '').toString()).toUpperCase()
+          if (DIAG) try { console.debug('[WS API] Giftcard product', { id: c.id, usageType, include, dealCountry }) } catch {}
           if (!include) return null
           // Enrich with voucherCountry (from product country if present) and defer URL building
           try {
-            const dealCountry = String((product?.countryCode || product?.country || '').toString()).toUpperCase()
             if (dealCountry) (c.item as any).voucherCountry = dealCountry
           } catch {}
           return c.item
-        } catch {
+        } catch (err) {
+          if (DIAG) try { console.debug('[WS API] Giftcard product fetch failed', { id: c.id, err: String(err) }) } catch {}
           return null
         }
       }))
@@ -744,6 +749,8 @@ async function filterVoucherCandidatesOnlineOnly(cands: Array<{ id: string; item
       categories.push({ name: 'Vouchers', deals: vouchers, maxRate: max })
       voucherAvailable = true
       cashbackRate = Math.max(cashbackRate, max)
+    } else {
+      if (DIAG) try { console.debug('[WS API] No vouchers after filtering', { voucherCandidates: voucherCandidates.length }) } catch {}
     }
     const ocDeals = rewardsDeals.length ? rewardsDeals : cashback
     if (ocDeals.length) {

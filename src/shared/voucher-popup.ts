@@ -207,6 +207,9 @@ function createCarouselSection(vouchers: Voucher[], assets: PopupAssets): HTMLEl
 
   const carousel = document.createElement('div')
   carousel.id = 'voucher-carousel'
+  // Wrap a viewport that clips the track while translating
+  const viewport = document.createElement('div')
+  applyStyles(viewport, popupStyles.carouselViewport)
   applyStyles(carousel, popupStyles.carouselContainer)
 
   vouchers.forEach((voucher, index) => {
@@ -216,7 +219,8 @@ function createCarouselSection(vouchers: Voucher[], assets: PopupAssets): HTMLEl
 
   const navigation = createCarouselNavigation(vouchers.length)
   
-  section.appendChild(carousel)
+  viewport.appendChild(carousel)
+  section.appendChild(viewport)
   section.appendChild(navigation)
   return section
 }
@@ -708,8 +712,48 @@ function attachCarouselBehavior(
 
   const maxIndex = vouchers.length - 1
 
+  // Function to compute step width dynamically
+  const getStepWidth = () => {
+    const firstCard = popup.querySelector('.voucher-card') as HTMLElement | null
+    if (!firstCard) return 267 // fallback
+    const width = firstCard.getBoundingClientRect().width
+    const s = getComputedStyle(carousel)
+    const gap = parseFloat(((s as any).columnGap || (s as any).gap || '0').toString()) || 0
+    return width + gap
+  }
+
+  // Compute viewport width of the carousel (visible area)
+  const getViewportWidth = () => {
+    const viewportEl = (carousel.parentElement as HTMLElement) || carousel
+    return viewportEl.getBoundingClientRect().width
+  }
+
+  // Translate so:
+  // - index 0 is left aligned (no leading space)
+  // - last index is right aligned (no trailing space)
+  // - middle indices are centered (show partial neighbors)
+  const computeTranslateX = (index: number) => {
+    const step = getStepWidth()
+    const viewport = getViewportWidth()
+    // total track width approximated as step * count
+    const track = step * vouchers.length
+    const centered = -(index * step) + (viewport - step) / 2
+    const leftAligned = 0
+    const rightAligned = -(track - viewport)
+    // First card: force left align
+    if (index <= 0) return leftAligned
+    // Last card: force right align
+    if (index >= maxIndex) return rightAligned
+    // Middle: center, but clamp within bounds
+    return Math.min(leftAligned, Math.max(rightAligned, centered))
+  }
+
   const updateCarousel = () => {
-    const translateX = -currentPopupState.selectedVoucherIndex * 267 // 259px card + 8px gap
+    const translateX = computeTranslateX(currentPopupState.selectedVoucherIndex)
+    // Force composite layer to avoid Firefox transform glitches
+    ;(carousel as any).style.willChange = 'transform'
+    // Read to force reflow before applying transform
+    void (carousel as any).offsetWidth
     carousel.style.transform = `translateX(${translateX}px)`
 
     // Update dots
@@ -757,11 +801,77 @@ function attachCarouselBehavior(
   })
 
   cards.forEach((card, index) => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', (e) => {
+      // If a drag just occurred, suppress the click to avoid snapping back
+      if ((carousel as any).__dragMoved) {
+        e.preventDefault()
+        e.stopPropagation()
+        ;(carousel as any).__dragMoved = false
+        return
+      }
       currentPopupState.selectedVoucherIndex = index
       updateCarousel()
     })
   })
+
+  // Pointer swipe (cross-browser)
+  let isDragging = false
+  let dragStartX = 0
+  let dragDeltaX = 0
+  let baseIndex = 0
+  let dragMoved = false
+
+  const onPointerDown = (e: PointerEvent) => {
+    isDragging = true
+    dragStartX = e.clientX
+    dragDeltaX = 0
+    baseIndex = currentPopupState.selectedVoucherIndex
+    dragMoved = false
+    try { (carousel as any).setPointerCapture?.(e.pointerId) } catch {}
+    ;(carousel as any).style.transition = 'none'
+    e.preventDefault()
+  }
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (!isDragging) return
+    dragDeltaX = e.clientX - dragStartX
+    if (Math.abs(dragDeltaX) > 5) { dragMoved = true; (carousel as any).__dragMoved = true }
+    // While dragging, offset from the computed position of the base index
+    const baseTranslate = computeTranslateX(baseIndex)
+    const offset = baseTranslate + dragDeltaX
+    ;(carousel as any).style.transform = `translateX(${offset}px)`
+    e.preventDefault()
+  }
+
+  const onPointerUp = (e: PointerEvent) => {
+    if (!isDragging) return
+    isDragging = false
+    try { (carousel as any).releasePointerCapture?.(e.pointerId) } catch {}
+    const step = getStepWidth()
+    const threshold = Math.max(40, (step * 0.15))
+    let nextIndex = baseIndex
+    if (dragDeltaX > threshold && baseIndex > 0) nextIndex = baseIndex - 1
+    if (dragDeltaX < -threshold && baseIndex < maxIndex) nextIndex = baseIndex + 1
+    currentPopupState.selectedVoucherIndex = nextIndex
+    ;(carousel as any).style.transition = ''
+    updateCarousel()
+    dragDeltaX = 0
+    // Clear drag flag after the click phase
+    setTimeout(() => { dragMoved = false; (carousel as any).__dragMoved = false }, 0)
+  }
+
+  carousel.addEventListener('pointerdown', onPointerDown as any)
+  carousel.addEventListener('pointermove', onPointerMove as any, { passive: false } as any)
+  carousel.addEventListener('pointerup', onPointerUp as any)
+  carousel.addEventListener('pointercancel', onPointerUp as any)
+  carousel.addEventListener('pointerleave', onPointerUp as any)
+  // Suppress clicks bubbling from children after a drag
+  carousel.addEventListener('click', (e) => {
+    if (dragMoved || (carousel as any).__dragMoved) {
+      e.preventDefault(); e.stopPropagation();
+      dragMoved = false; (carousel as any).__dragMoved = false
+    }
+  }, true)
 }
 
 function updateCarouselPosition(
@@ -777,7 +887,14 @@ function updateCarouselPosition(
 
   if (!carousel) return
 
-  const translateX = -index * 267
+  // Recompute dynamic step to avoid hardcoded values
+  const firstCard = popup.querySelector('.voucher-card') as HTMLElement | null
+  const width = firstCard ? firstCard.getBoundingClientRect().width : 259
+  const s = carousel ? getComputedStyle(carousel) : ({} as CSSStyleDeclaration)
+  const gap = parseFloat(((s as any).columnGap || (s as any).gap || '0').toString()) || 0
+  const translateX = -index * (width + gap)
+  ;(carousel as any).style.willChange = 'transform'
+  void (carousel as any).offsetWidth
   carousel.style.transform = `translateX(${translateX}px)`
 
   // Update dots

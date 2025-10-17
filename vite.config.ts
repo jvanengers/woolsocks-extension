@@ -46,6 +46,18 @@ const manifest = {
       ]
     },
     {
+      // Injector listens for background message and injects page script popup
+      matches: ['<all_urls>'],
+      js: ['src/content/injector.ts'],
+      run_at: 'document_end',
+      exclude_matches: [
+        'https://woolsocks.eu/*',
+        'https://*.woolsocks.eu/*',
+        'http://woolsocks.eu/*',
+        'http://*.woolsocks.eu/*',
+      ]
+    },
+    {
       matches: ['<all_urls>'],
       js: ['src/content/entrance.ts'],
       run_at: 'document_end',
@@ -77,7 +89,7 @@ const manifest = {
   ],
   web_accessible_resources: [
     {
-      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf'],
+      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf', 'assets/voucher-popup-page.js'],
       matches: ['<all_urls>'],
     },
   ],
@@ -99,6 +111,7 @@ export default defineConfig({
         entrance: 'src/content/entrance.ts',
         ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
+        voucherPopupPage: 'src/shared/voucher-popup-page.ts',
         offscreen: 'src/offscreen/relay.html',
       },
     },

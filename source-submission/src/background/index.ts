@@ -999,7 +999,7 @@ async function handleCheckoutDetected(checkoutInfo: any, tabId?: number) {
 }
 
 // Firefox MV2 compatible injection helper: inject voucher UI into MAIN world.
-// Uses chrome.scripting when available; falls back to tabs.executeScript with bundled popup module
+// Uses content script messaging for Chrome MV3 (reliable) and Firefox MV2 fallback
 async function injectVoucherInPage(
   tabId: number,
   partner: any,
@@ -1012,54 +1012,24 @@ async function injectVoucherInPage(
   const translations = (t() as any).voucher
   console.log('[WS] Translations object:', translations)
   
-  // Try scripting API first (MV3/Chromium, and Firefox with limited support)
-  const scripting = (chrome as any).scripting
-  console.log('[WS] Scripting API available:', !!scripting, 'executeScript function:', typeof scripting?.executeScript)
-  
-  if (scripting && typeof scripting.executeScript === 'function') {
-    console.log('[WS] Using MV3 scripting API path')
-    try {
-      // Import the popup module dynamically
-      const { createVoucherPopup } = await import('../shared/voucher-popup')
-      
-      await scripting.executeScript({
-        target: { tabId },
-        world: 'MAIN',
-        func: (createVoucherPopupFunc: any, config: any) => {
-          try {
-            console.log('[WS] MV3 Creating popup with config:', config);
-            const popup = createVoucherPopupFunc(config);
-            document.body.appendChild(popup);
-            console.log('[WS] MV3 Popup created and appended successfully');
-          } catch (e) {
-            console.error('[WS] MV3 Popup creation failed:', e);
-          }
-        },
-        args: [createVoucherPopup, { partner, checkoutTotal, assets, translations }],
-      })
-      return
-    } catch (e) {
-      console.warn('[WS] scripting.executeScript failed, falling back for MV2:', e)
-    }
-  }
-
-  // MV2 fallback: delegate injection to content script via messaging
-  console.log('[WS] Using MV2 tabs.executeScript fallback path')
+  // Use content script messaging approach for Chrome MV3 (reliable)
+  // Skip the problematic direct MV3 injection
+  console.log('[WS] Using content script messaging approach (reliable)')
   try {
     const config = { partner, checkoutTotal, assets, translations }
     console.log('[WS] Sending ws/inject-voucher-popup message')
     await new Promise<void>((resolve) => {
       chrome.tabs.sendMessage(tabId, { type: 'ws/inject-voucher-popup', config }, () => {
         if (chrome.runtime.lastError) {
-          console.error('[WS] MV2 sendMessage failed:', chrome.runtime.lastError)
+          console.error('[WS] sendMessage failed:', chrome.runtime.lastError)
         } else {
-          console.log('[WS] MV2 sendMessage dispatched')
+          console.log('[WS] sendMessage dispatched successfully')
         }
         resolve()
       })
     })
   } catch (e) {
-    console.warn('[WS] MV2 message-based injection failed:', e)
+    console.warn('[WS] message-based injection failed:', e)
   }
 }
 

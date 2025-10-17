@@ -651,6 +651,11 @@ Status: Backlog (triage weekly)
     - Add debug logs + unit test for 304 fallback path in `cached-api.ts`.
   - Success criteria: On Firefox, header reliably shows "Hi {firstName}," within 1s when logged in; no relay tabs created; no regressions on Chrome.
 
+- Firefox: Voucher carousel swipe/render issues with multiple vouchers
+  - Symptoms: Cards misalign or disappear when navigating via arrows/dots; swipe not working.
+  - Fix: Compute dynamic step width (card width + gap), update styles (`touch-action: pan-y`, `user-select: none`, `overscroll-behavior-x: contain`), and add pointer-event swipe with snap.
+  - Success: Cards render correctly and navigate via arrows/dots/swipe on Firefox and Chrome.
+
 ### Firefox AMO automated review follow‑ups
 
 Status: Backlog (AMO compliance)

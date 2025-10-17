@@ -114,16 +114,30 @@ export const popupStyles = {
     marginBottom: '16px'
   } as StyleObject,
 
+  carouselViewport: {
+    width: '100%',
+    overflow: 'hidden',
+    position: 'relative'
+  } as StyleObject,
+
   carouselContainer: {
     display: 'flex',
     gap: '8px',
-    overflowX: 'hidden',
+    flexWrap: 'nowrap',
+    flex: 'none',
+    // overflow handled by viewport wrapper
     scrollBehavior: 'smooth',
-    padding: '8px 0'
+    padding: '8px 0',
+    touchAction: 'pan-y',
+    userSelect: 'none',
+    overscrollBehaviorX: 'contain'
   } as StyleObject,
 
   voucherCard: {
     minWidth: '259px',
+    width: '259px',
+    flex: '0 0 259px',
+    boxSizing: 'border-box',
     background: 'white',
     borderRadius: '8px',
     padding: '16px',
@@ -168,9 +182,9 @@ export const popupStyles = {
     fontSize: '16px',
     fontWeight: '700',
     color: '#111827',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis'
+    whiteSpace: 'normal',
+    overflow: 'visible',
+    textOverflow: 'clip'
   } as StyleObject,
 
   singleVoucher: {
