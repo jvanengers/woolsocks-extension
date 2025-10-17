@@ -1,18 +1,35 @@
-## Woolsocks Extension Roadmap
+# Woolsocks Extension Roadmap
 
 This roadmap outlines planned enhancements across browsers and mobile companions. It will be maintained in Git and updated as scope clarifies.
 
-### Guiding principles
-- Privacy-first, minimal data collection; clear user consent.
-- Operate gracefully without a logged-in session; unlock more when signed in.
-- Consistent UX across Chrome, Safari (desktop/mobile), Firefox, and Android companion.
-- Resilient affiliate tracking with idempotency and explicit user feedback.
 
----
+### Prioritized backlog (RICE)
 
-## 1) Realtime blacklists and alternative UX
+Estimated RICE scores (Reach × Impact × Confidence ÷ Effort in person‑weeks). Higher score = higher priority. Estimates are directional and should be refined during planning.
 
-Status: Blocked, Waiting for Firebase setup
+| Rank | Item | R | I | C | Effort (w) | RICE |
+|---|---|---:|---:|---:|---:|---:|
+| 1 | 16) Post‑installation landing page | 100 | 1.5 | 0.9 | 1 | 135 |
+| 2 | 22) Order success detection + orderId capture | 60 | 3.0 | 0.7 | 2 | 63 |
+| 3 | 1) Realtime blacklists | 80 | 2.0 | 0.8 | 3 | 42.7 |
+| 4 | 21) Migrate to Firebase Analytics | 100 | 1.0 | 0.8 | 2 | 40 |
+| 5 | 10) Competitor suggestions when no cashback | 70 | 1.5 | 0.6 | 3 | 21 |
+| 6 | 19) In‑extension merchant search | 50 | 1.5 | 0.8 | 3 | 20 |
+| 7 | 4) Anonymous clickouts | 60 | 2.0 | 0.6 | 4 | 18 |
+| 8 | 18) Autoreward detection & guidance | 25 | 1.5 | 0.6 | 4 | 5.6 |
+| 9 | 17) Grocery deals | 40 | 1.0 | 0.6 | 6 | 4 |
+| 10 | 5) Safari Extensions (macOS & iOS) | 20 | 2.0 | 0.7 | 8 | 3.5 |
+| 11 | 7) Android companion app | 30 | 2.0 | 0.5 | 10 | 3 |
+| 12 | 20) AI‑powered price comparison | 40 | 2.0 | 0.4 | 12 | 2.7 |
+| 13 | 6b) Firefox support (Mobile) | 10 | 1.0 | 0.8 | 4 | 2 |
+
+Notes:
+- Assumes consented users and supported locales. Reach approximates quarterly user/event exposure.
+- Effort reflects engineering weeks for extension work (excludes backend where noted); cross‑team dependencies may adjust.
+- Re‑score after discovery spikes; especially for items 20 and 7 where uncertainty is higher.
+
+## 1) Realtime blacklists
+Status: Ready to refine
 
 Goal: Support realtime blacklists for two flows and provide a fallback experience that avoids proactive reminders while still allowing usage.
 
@@ -24,52 +41,28 @@ Goal: Support realtime blacklists for two flows and provide a fallback experienc
   - Cache with short TTL; fail-open with last-known good and versioning.
 - Behavior
   - When blacklisted, suppress proactive reminders and redirects for the matching flow.
-  - Show alternative UI: inline, unobtrusive “Try cashback” or “See vouchers” affordance the user can pull, without auto prompts.
-  - Log reasons (e.g., domain rule, partner rule, policy) for audit.
 - Analytics
   - Emit `*_blocked` with `reason`, `policy_version`, and `flow`.
 - Success criteria
   - Config propagates within 5 minutes; zero proactive prompts on blacklisted sites; manual affordance available and functional.
-
 ---
 
-## 2) Voucher analytics and BI integration
+## 4) Anonymous clickouts (no verification required)
 
-Status: Blocked, Waiting for BI integratiom details
+Status: Ready to refine
+Goal: Allow users to generate tracked clickouts without any account. The extension would be fully functional, and cashback is associated to a temporary "extensionid"? Later the user can signup to claim the cashback.
 
-Goal: Deliver BI export and reporting for voucher funnel metrics using a data warehouse (e.g., BigQuery) and dashboards.
-
-- Data export
-  - Define export path (GA4 → BigQuery export or server-side relay).
-  - Confirm schemas, retention, PII policy, and event sampling constraints.
-- Reporting
-  - Build dashboards for impressions → clicks → usage; define KPIs and filters by domain/partner/country.
-- Validation
-  - Reconcile event counts between GA and warehouse; document known gaps and sampling.
-
----
-
-## 4) Email-only accounts for clickouts (no verification required)
-
-Status: Ready for implementation
-
-Goal: Allow users to enter an email address to create a lightweight account (no email verification required) and immediately generate tracked clickouts associated to that account.
-
-- Prerequisite (email capture)
-  - Collect user email in extension UI (popup/panel) with explicit consent.
-  - Create user record server-side using email only; return stable `userId`.
-  - Store `userId` and email locally with timestamp; provide clear delete option.
-- Clickout flow (authenticated-by-email-only)
-  - Use the returned `userId` in click/session creation; no anonymous clickouts.
-  - Redirect through affiliate with user-linked click id (or via relay endpoint as required).
+- Clickout flow (anonymous)
+  - Anonymous clickouts.
+  - Redirect through affiliate with extensionid-linked click id
   - Persist recent clickouts locally for UX/diagnostics.
 - Optional later verification (enhancement)
-  - If/when user later verifies email or logs into full account, nothing to reconcile: clickouts are already associated.
+  - If/when user later verifies email or logs into full account, clicks need to move to this acocunt.
 - Fraud/abuse controls
   - Include domain, IP coarse hash, and UA fingerprint hash (privacy-preserving) for dedupe/risk.
-  - Rate limit email-only account creations and clickouts.
+  - Rate limit anonymoys clickouts.
 - Success criteria
-  - Users can provide email and perform tracked clickouts immediately; clickouts appear under the created account without further action.
+  - Users can perform tracked clickouts immediately; clickouts appear under a created account if users signs up later, without further action.
 
 ---
 
@@ -79,20 +72,21 @@ Status: In progress. See branch feature/safari-ios-extension
 
 ### iOS/iPadOS (Mobile Safari)
 
-Goal: Bundle a Safari Web Extension inside the Woolsocks app with app group storage and deep links to in-app voucher checkout.
+Goal: Bundle a Safari Web Extension inside the Woolsocks app with app group storage and support deep links to in-app voucher checkout.
 
 - App group
-  - Share settings/session signals via `App Group` between host app and extension.
+  - Share settings/session signals via `App Group` between host app and extension. Extension is authomatically authenticated
 - Deep linking
   - From extension UI, open app to voucher checkout via universal link; pass context (partner, product, rate).
 - Build & distribution
   - Xcode workspace with extension target; align entitlements and provisioning; TestFlight.
+- Update the UX for mobile screens / safari browser
 - Success criteria
   - Extension runs on iOS Safari; deep link opens app at voucher checkout; settings sync via app group.
 
 ### macOS (Desktop Safari)
 
-Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder UI, voucher panel, and manual cashback activation (no auto-redirects without a user gesture per Apple policy).
+Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder UI, voucher panel, and reminders to manual cashback activation (no auto-redirects without a user gesture per Apple policy).
 
 - Packaging
   - macOS app container with a Safari Web Extension target; signed and notarized via Developer ID; distributed via Mac App Store or direct (if applicable).
@@ -104,50 +98,24 @@ Goal: Ship a Safari Web Extension for macOS with parity for detection, reminder 
   - Validate on latest macOS/Safari versions; cover permission prompts, content injection, and gesture-gated redirects.
 - Success criteria
   - Extension installs and runs on Desktop Safari; partner detection, reminders, voucher panel work; activation adheres to Apple review guidelines.
+  
+### 8)Safari (macOS & iOS) — automatic redirects not allowed
+
+- Policy
+  - Apple reviewers reject automatic redirects that are not triggered by explicit user action at that moment.
+  - Prior consent does not suffice; each redirect must be user-initiated (click/tap).
+- UX pattern
+  - Always present an explicit action: “Activate cashback” button in popup, page action, or inline panel.
+  - No background auto-redirects; show state after user taps: “Cashback activated for {domain}”.
+- Implementation
+  - Ensure redirect occurs strictly from a user gesture handler.
+  - Keep settings to remember preference for showing prompts, but never bypass the click requirement.
+- Success criteria
+  - All activations require a user gesture; passes App Store/Safari Extension review.
 
 ---
 
-## 6) Firefox support (desktop and mobile)
-
-Status: Ready for implementation
-
-Goal: Port MV3 functionality to Firefox variants with full feature parity and AMO distribution.
-
-### Desktop Firefox
-
-**API Compatibility Assessment:**
-- ✅ **Storage API**: Full compatibility with `chrome.storage.local` and `chrome.storage.sync`
-- ✅ **Tabs API**: Full compatibility with `chrome.tabs` for tab management and URL updates
-- ✅ **WebNavigation API**: Full compatibility for navigation event detection
-- ✅ **Cookies API**: Full compatibility for session cookie observation
-- ✅ **Scripting API**: Full compatibility for content script injection
-- ✅ **Notifications API**: Full compatibility for user feedback
-- ❌ **Offscreen API**: Not supported in Firefox; use tab-based relay fallback
-- ✅ **Background Scripts**: Service worker support available (MV3 compatible)
-
-**Implementation Requirements:**
-- **Manifest adjustments**: Remove `offscreen` permission, ensure MV3 compatibility
-- **Relay system**: Use existing tab-based relay (already implemented with platform guards)
-- **Platform detection**: Leverage existing `getPlatform()` function (already detects Firefox)
-- **Auto-activation**: Firefox supports auto-redirects with user consent (already configured)
-- **Build system**: Use existing `webextension-polyfill` dependency for cross-browser compatibility
-
-**Technical Implementation:**
-```typescript
-// Platform guards already implemented in src/shared/platform.ts
-export function getPlatform(): Platform {
-  if (userAgent.includes('firefox')) return 'firefox'
-  // ... other platforms
-}
-
-// API compatibility already handled in src/background/api.ts
-function canCreateRelayTab(): boolean {
-  // Chrome only - Firefox uses tab-based relay
-  try { return !!(chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function' } catch { return false }
-}
-```
-
-### Android Firefox (Mobile)
+## 6b) Firefox support (Mobile)
 
 **API Limitations:**
 - ✅ **Core APIs**: Storage, tabs, webNavigation, cookies, scripting all supported
@@ -177,25 +145,6 @@ function canCreateRelayTab(): boolean {
 - Package as `.xpi` file for AMO submission
 - Test on Firefox Developer Edition and stable releases
 
-### Implementation Plan
-
-**Phase 1: Desktop Firefox (2-3 weeks)**
-1. **Week 1**: 
-   - Create Firefox-specific build configuration
-   - Remove `offscreen` permission from Firefox manifest
-   - Test all core functionality (detection, reminders, voucher panel, cashback activation)
-   - Verify platform guards work correctly
-
-2. **Week 2**:
-   - Comprehensive testing on Firefox Developer Edition
-   - Performance testing and optimization
-   - Fix any Firefox-specific issues
-   - Prepare AMO submission package
-
-3. **Week 3**:
-   - Submit to AMO for review
-   - Address any review feedback
-   - Prepare documentation and support materials
 
 **Phase 2: Mobile Firefox (1-2 weeks)**
 1. **Week 1**:
@@ -208,15 +157,6 @@ function canCreateRelayTab(): boolean {
    - Performance optimization for mobile constraints
    - Final testing and bug fixes
    - Prepare mobile-specific documentation
-
-### Success Criteria
-
-**Desktop Firefox:**
-- ✅ Feature parity with Chrome: detection, reminders, voucher panel, cashback activation
-- ✅ No user-visible tab flashing (uses tab-based relay instead of offscreen)
-- ✅ Passes AMO review and gets published
-- ✅ All existing platform guards work correctly
-- ✅ Performance comparable to Chrome version
 
 **Mobile Firefox:**
 - ✅ Core flows work: detection, voucher panel, manual activation
@@ -257,7 +197,6 @@ export default defineConfig({
   ]
 })
 ```
-
 **Risk Mitigation:**
 - Low risk: Most functionality already Firefox-compatible
 - Existing platform guards prevent Chrome-specific code from running on Firefox
@@ -280,61 +219,6 @@ Goal: Provide cross-browser reminders on Android using a local VPN service to ob
   - On-device only; explicit opt-in; clear pause/disable and data deletion.
 - Success criteria
   - Works across all Android browsers; low battery impact; no content inspection; user can deep link to web/app flows.
-
-## 8) Disable auto-activation on Safari
-
-Status: Ready for refinement
-
-Goal: Define platform-specific rules for auto-activating cashback via redirects, with explicit consent where allowed and compliant fallbacks where not.
-
-### COMPLETED: Chrome Web Store (Google) — upfront consent + countdown notification with opt out
-We should adapt the automatic redirection pattern so it follows these guidelines:
-	1.	During onboarding, ask explicitly:
-“Do you want Woolsocks to auto-activate cashback (redirect via affiliate link) when you visit partner stores?”
-→ Options: Enable auto mode / Ask me each time
-	2.	If user enables auto mode, you remember their preference, but you do not silently redirect.
-	3.	At each partner store load, show a small but obvious UI element (banner, toast, modal) saying:
-“Auto-activating cashback in 3…2…1 — click here to cancel”
-Or
-“Activate cashback now → [button]”
-	4.	If needed, you can implement a countdown (3→2→1) before redirect, as long as the countdown is visible, counts down in the UI, and the user can cancel or see that it’s happening.
-	5.	Always let the user opt-out later (in settings or toggle) and make the auto behavior reversible.
-	6.	In your extension listing/privacy docs, clearly disclose the affiliate monetization and redirection behavior.
-Don’t do background tabs that user doesn’t see. Don’t silently override cookies. Everything must be traceable and visible.
-	3.	Respect existing affiliate attribution
-Don’t override someone’s affiliate tags or tracking codes already present (unless you’re absolutely sure it’s expired or invalid).
-	5.	Always let user opt out or revoke
-User can disable auto activation. All activity should be transparent.
-
-### TO DO: Safari (macOS & iOS) — automatic redirects not allowed
-
-- Policy
-  - Apple reviewers reject automatic redirects that are not triggered by explicit user action at that moment.
-  - Prior consent does not suffice; each redirect must be user-initiated (click/tap).
-- UX pattern
-  - Always present an explicit action: “Activate cashback” button in popup, page action, or inline panel.
-  - No background auto-redirects; show state after user taps: “Cashback activated for {domain}”.
-- Implementation
-  - Ensure redirect occurs strictly from a user gesture handler.
-  - Keep settings to remember preference for showing prompts, but never bypass the click requirement.
-- Success criteria
-  - All activations require a user gesture; passes App Store/Safari Extension review.
-
-### TO DO: Android / Play Store — allowed for native apps (not Chrome extensions)
-
-- Policy
-  - Native apps may perform auto-activation if clearly explained during onboarding and togglable later.
-  - Chrome-based extensions follow Chrome Web Store rules (see Chrome section).
-- Recommended UX (native app)
-  - Onboarding prompt:
-    - “Enable automatic cashback activation when you open partner stores?”
-    - [Yes, activate automatically] / [No, remind me first]
-- Implementation
-  - Store consent in app settings; provide toggle to change later.
-  - Show notification/toast upon activation for transparency.
-- Success criteria
-  - Clear opt-in, revocable; transparent activation feedback; compliant with Play policies.
-
 ---
 
 ## 10) Competitor suggestions when no cashback is available
@@ -363,156 +247,6 @@ Goal: When a user visits a site without an available Woolsocks cashback/voucher 
   - Meaningful CTR without elevated dismiss/complaint rates; measurable lift in total cashback activations; compliant with platform policies.
 
 ---
-
-## 11) Enforce country-scoped deals (vouchers and online cashback)
-
-Status: Completed — 2025-10-13 (see Completed items)
-
-Problem: Deals from outside the visited site's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
-
-- Goal
-  - Apply country-scoping rules aligned with product constraints:
-    - Vouchers: restricted by the visited domain’s country.
-    - Online cashback: restricted by the user account’s country (service rule).
-- Country source of truth (runtime)
-  - Vouchers (per-visit): derive country from the visited URL/domain using domain/locale parsing (e.g., TLD `.nl`, path `/nl/`, brand-specific patterns).
-  - Online cashback (per-user): use signed-in profile country as the authoritative source; fall back to language-derived default only when user country is unknown.
-  - Persist last derived values in storage for diagnostics; allow override via Settings for debugging.
-- Filtering and matching
-  - Vouchers (`GIFTCARD`): include only when the voucher's canonical product URL locale segment matches the visited domain country (e.g., product URL path `/nl-NL/giftcards-shop/...` → NL). Do not rely on a query parameter; country is conveyed via the locale path segment.
-  - Online cashback (`CASHBACK` with `usageType ONLINE`): include only when the deal's `country` matches the user's account country.
-  - Maintain and use a domain→country/locale map (per partner) for voucher scoping to avoid cross-locale hostnames (e.g., `.com` vs `.nl`) and to correctly interpret path-based locales (e.g., `nike.com/nl/en`).
-- UX
-  - If a site is detected but only cross-country deals exist, show a neutral message: "No deals available for your country." Optionally offer a country switch entry point.
-  - Respect real-time blacklist to suppress prompts on sensitive sites.
-- Analytics
-  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `visited_country` (voucher) or `user_country` (online cashback), `flow` (voucher/oc).
-- Success criteria
-  - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
-
----
-
-## 12) Local email storage for session recovery and verification
-
-Goal: Store user email locally after login to enable direct verification email triggers from the extension, eliminating the need for redirects to `woolsocks.eu` for session recovery.
-
-- Email storage
-  - Store email address in extension storage (encrypted) after successful login detection.
-  - Include timestamp and session metadata for validation.
-  - Clear on explicit logout or after extended inactivity.
-- Verification flow
-  - When session is lost, show "Resend verification" option in popup/settings.
-  - Call verification API directly from extension background script with stored email.
-  - Provide clear feedback: "Verification email sent to {email}" with resend cooldown.
-- Security & privacy
-  - Encrypt stored email using extension storage encryption or browser keyring.
-  - Add "forget me" button for email storage in settings.
-  - Audit log email access and verification attempts.
-- Fallback
-  - If email storage fails or is disabled, fall back to current `woolsocks.eu` redirect flow.
-- Analytics
-  - Track `session_recovery_email_stored`, `verification_email_triggered`, `verification_email_success|fail`.
-- Success criteria
-  - Users can recover sessions without leaving current tab; reduced `woolsocks.eu` redirects; >90% verification email delivery rate.
-
----
-
-## 13) Anonymous API calls to reduce tab flashing
-
-Goal: Use anonymous/unauthenticated API calls wherever possible to fetch deal and voucher details, further reducing the need for authenticated relay tabs and minimizing background tab flashing.
-
-- Anonymous endpoints
-  - Identify which deal/voucher APIs can work without authentication (public deals, partner info, basic eligibility).
-  - Create anonymous API client that bypasses cookie-based authentication entirely.
-  - Use anonymous calls for initial deal detection, partner lookup, and basic voucher information.
-- Authentication fallback
-  - Only use authenticated calls when absolutely necessary (user-specific deals, personalized rates, account-specific vouchers).
-  - Implement graceful degradation: show anonymous deals first, then enhance with authenticated data when available.
-- Implementation
-  - Add anonymous API client alongside existing authenticated client.
-  - Route calls based on data requirements: anonymous for public data, authenticated for user-specific data.
-  - Cache anonymous responses with appropriate TTL to reduce API load.
-- Benefits
-  - Eliminates most background tab opens for deal detection and basic voucher info.
-  - Faster initial load times for popup and content scripts.
-  - Reduced user-visible tab flashing during normal browsing.
-- Analytics
-  - Track `api_call_anonymous`, `api_call_authenticated`, `api_call_fallback` with endpoint and success/failure.
-- Success criteria
-  - >80% of deal/voucher API calls use anonymous endpoints; <5% of user sessions trigger authenticated relay tabs; faster popup load times.
-
----
-
-## 14) Comprehensive caching for performance optimization
-
-Goal: Implement intelligent caching for cashback balance, transactions, deal information, and other frequently accessed data to reduce API calls and improve perceived loading speed.
-
-- Cache targets
-  - Cashback balance and recent transactions (user-specific, TTL: 5-15 minutes).
-  - Deal information per merchant/domain (public data, TTL: 30-60 minutes).
-  - Partner configuration and eligibility rules (rarely changing, TTL: 24 hours).
-  - User preferences and settings (local storage, persistent).
-- Cache strategy
-  - Multi-tier caching: memory cache (fastest), extension storage (persistent), background refresh.
-  - Cache invalidation: time-based TTL, event-based (user actions, session changes), manual refresh.
-  - Cache warming: preload popular merchants and user's frequent sites.
-- Implementation
-  - Add cache layer to API client with configurable TTL per endpoint.
-  - Implement cache-first strategy with background refresh for stale data.
-  - Add cache status indicators in UI (fresh/stale/loading states).
-- Performance benefits
-  - Instant popup loading for cached data (balance, recent deals).
-  - Reduced API load and faster merchant detection.
-  - Offline-capable for basic functionality (show cached deals, last known balance).
-- Cache management
-  - Add cache size limits and LRU eviction for memory cache.
-  - Provide cache clear option in settings for troubleshooting.
-  - Analytics for cache hit rates and performance metrics.
-- Success criteria
-  - >90% cache hit rate for balance/transactions; <200ms popup load time; 50% reduction in API calls during normal usage.
-
----
-
-## 15) Remove alarms permission and find alternatives
-
-Status: Completed — 2025-01-27
-
-Goal: Remove the `alarms` permission from the extension manifest to pass Chrome Web Store review, while maintaining all current functionality through alternative approaches.
-
-**Reference: Chrome Web Store Rejection (Item ID: fneoceodefiieccfcapkjanllehpogpj)**
-> "Requesting but not using the following permission(s): alarms. Remove the unused permission(s) listed above from your manifest file. Request access to the narrowest permissions necessary to implement your Product's features or services. Don't attempt to 'future proof' your Product by requesting a permission that might benefit services or features that have not yet been implemented."
-
-### Implementation Details
-
-Completed: 2025-01-27 — commit `[TBD]` (feat: remove alarms permission and replace with event-driven alternatives)
-
-### Additional Permission Cleanup
-
-Completed: 2025-10-10 — commit `[TBD]` (feat: remove unused webRequest permission for Chrome Web Store compliance)
-
-- **Replaced alarm-based cache cleanup** with event-driven triggers:
-  - Cache cleanup now runs on service worker startup, tab activation, and navigation events
-  - Throttled to run at most once per hour to prevent excessive execution
-  - Uses `cleanupIfNeeded()` wrapper with 24-hour throttling for actual cleanup operations
-- **Replaced alarm-based cache preload** with activity-based preloading:
-  - Preload runs on service worker startup and install
-  - Popup can trigger preload via `CACHE_PRELOAD_REQUEST` message
-  - Popular merchants are preloaded for improved performance
-- **Removed HTML scraper entirely** (deals-scraper.ts):
-  - Eliminated 1,330+ lines of unused HTML scraping code
-  - Merchant discovery now uses only fast API endpoints
-  - Fixed function name conflicts and performance issues
-  - No more tab flashing or continuous tab creation/removal
-- **Analytics system unchanged**: Already used `setInterval` instead of alarms
-- **Removed alarms permission** from manifest and updated documentation
-- **All functionality preserved**: Cache cleanup, preload, and analytics work identically to before
-
-### Success Criteria Met
-- ✅ Extension no longer requests alarms permission
-- ✅ All cache cleanup operations work via event-driven triggers
-- ✅ Cache preload maintains performance benefits
-- ✅ Analytics delivery unchanged (already event-driven)
-- ✅ No performance degradation or reliability issues
 
 ## 16) Post-installation landing page
 
@@ -583,7 +317,6 @@ Goal: Show relevant grocery deals when users visit supported supermarket and dru
 ## 18) Autoreward detection and bank connection guidance
 
 Status: Ready for refinement
-
 Goal: Detect when users visit merchants that support autorewards (automatic cashback via connected bank accounts) and provide contextual guidance based on their bank connection status.
 
 - Merchant detection
@@ -633,7 +366,6 @@ Goal: Detect when users visit merchants that support autorewards (automatic cash
 ## 19) In-extension merchant search and navigation
 
 Status: Ready for implementation
-
 Goal: Allow users to search for merchants directly within the extension popup and navigate to their websites with a single click, enabling proactive discovery of cashback opportunities.
 
 - Search interface
@@ -681,10 +413,70 @@ Goal: Allow users to search for merchants directly within the extension popup an
 
 ---
 
+## 21) Migrate from Google Analytics to Firebase Analytics
+Status: Ready for implementation
+Goal: Migrate analytics tracking from the current Google Analytics 4 setup to Firebase Analytics SDK for better integration with the Firebase ecosystem and improved analytics capabilities.
+
+- Firebase configuration
+  - App ID: `1:569989225682:web:8036c27a88e992c2cd210b`
+  - Project: `woolsocks-release`
+  - Measurement ID: `G-WK9ZNG07JV`
+  - API Key: `AIzaSyBtq8BW-qwWDB8JUbOp_RCrseWKkEoHIec`
+  - Auth Domain: `woolsocks-release.firebaseapp.com`
+  - Database URL: `https://woolsocks-release.firebaseio.com`
+  - Storage Bucket: `woolsocks-release.firebasestorage.app`
+  - Messaging Sender ID: `569989225682`
+- SDK integration
+  - Install Firebase JS SDK (v7.20.0+) via npm: `firebase` package.
+  - Initialize Firebase app with provided config in background script/offscreen context.
+  - Replace current GA4 Measurement Protocol HTTP calls with Firebase Analytics SDK methods.
+  - Use `logEvent()` for custom events instead of direct HTTP POST to GA4 endpoint.
+  - Preserve all existing event names and parameters for continuity.
+- Event mapping
+  - Map all current GA4 custom events to Firebase Analytics events: `voucher_detected`, `voucher_click`, `voucher_used`, `cashback_activated`, etc.
+  - Preserve custom parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `ext_version`, `click_id`.
+  - Use standard Firebase fields for currency and user properties.
+  - Ensure key events remain designated: `voucher_click`, `voucher_used`, `cashback_activated`.
+- User identification
+  - Set user ID with `setUserId()` when user logs in (use stable `userId` from backend).
+  - Set user properties with `setUserProperties()`: country, user_type (logged_in/anonymous), account_age.
+  - Clear user ID on logout.
+- Platform compatibility
+  - Chrome: Full Firebase SDK support; initialize in background service worker or offscreen document.
+  - Firefox: Verify Firebase SDK compatibility with MV3 service workers; use offscreen/tab-based relay if needed.
+  - Safari: Test Firebase SDK in Safari Web Extension context; consider native Firebase SDK integration in host app for iOS/macOS.
+- Privacy and consent
+  - Maintain existing analytics consent flow: no tracking until user accepts.
+  - Set Firebase Analytics `analytics_storage` consent based on user preferences.
+  - Update privacy policy to reflect Firebase Analytics usage.
+  - Ensure compliance with GDPR/CCPA: anonymize IP, respect DNT if applicable.
+- Migration strategy
+  - Phase 1: Add Firebase Analytics alongside current GA4 (dual tracking for validation).
+  - Phase 2: Monitor parity between GA4 and Firebase events for 1-2 weeks.
+  - Phase 3: Remove GA4 Measurement Protocol code once Firebase is validated.
+  - Phase 4: Update documentation and monitoring dashboards to use Firebase console.
+- BigQuery integration
+  - Enable Firebase Analytics → BigQuery export for BI dashboards (completes Roadmap Item 2 dependency).
+  - Configure daily export schedule and schema mapping.
+  - Update existing dashboards to query BigQuery tables instead of GA4 export.
+- Testing and validation
+  - Verify event delivery in Firebase Console DebugView during development.
+  - Compare event counts between GA4 and Firebase during dual tracking phase.
+  - Test user ID and user properties propagation.
+  - Validate offline event queuing and retry logic.
+  - Test across all platforms: Chrome, Firefox, Safari (desktop and mobile).
+- Performance considerations
+  - Firebase SDK is heavier than direct HTTP calls; measure impact on service worker memory/startup.
+  - Consider lazy loading Firebase SDK only when analytics consent is granted.
+  - Set appropriate event batch size and upload interval.
+- Analytics
+  - Track migration itself: `analytics_migrated_to_firebase` with `previous_system=ga4`, `migration_date`, `ext_version`.
+  - Monitor Firebase event delivery rates and compare with GA4 baseline.
+- Success criteria
+  - Firebase Analytics receives all events with <5% discrepancy vs. GA4 during dual tracking; BigQuery export enabled and validated; GA4 code removed; dashboards updated; performance impact <10% increase in service worker memory; compliant with privacy policies.
+
 ## 20) AI-powered price comparison on product pages
-
 Status: Ready for refinement
-
 Goal: When users visit e-commerce product pages, automatically detect the product and show alternative prices at other stores, including cashback opportunities, to help users find the best total deal.
 
 - Product page detection
@@ -760,120 +552,87 @@ Goal: When users visit e-commerce product pages, automatically detect the produc
 
 ---
 
-## 21) Migrate from Google Analytics to Firebase Analytics
+## 22) Order success page detection and order ID capture
 
-Status: Ready for implementation
+Status: Ready for refinement
 
-Goal: Migrate analytics tracking from the current Google Analytics 4 setup to Firebase Analytics SDK for better integration with the Firebase ecosystem and improved analytics capabilities.
+Goal: Detect e‑commerce "thank you"/order success pages, extract the merchant order ID, and send it to the backend together with the previously generated `clickId` so the backend can file online cashback claims automatically with networks (actual claim submission is out of scope here).
 
-- Firebase configuration
-  - App ID: `1:569989225682:web:8036c27a88e992c2cd210b`
-  - Project: `woolsocks-release`
-  - Measurement ID: `G-WK9ZNG07JV`
-  - API Key: `AIzaSyBtq8BW-qwWDB8JUbOp_RCrseWKkEoHIec`
-  - Auth Domain: `woolsocks-release.firebaseapp.com`
-  - Database URL: `https://woolsocks-release.firebaseio.com`
-  - Storage Bucket: `woolsocks-release.firebasestorage.app`
-  - Messaging Sender ID: `569989225682`
-- SDK integration
-  - Install Firebase JS SDK (v7.20.0+) via npm: `firebase` package.
-  - Initialize Firebase app with provided config in background script/offscreen context.
-  - Replace current GA4 Measurement Protocol HTTP calls with Firebase Analytics SDK methods.
-  - Use `logEvent()` for custom events instead of direct HTTP POST to GA4 endpoint.
-  - Preserve all existing event names and parameters for continuity.
-- Event mapping
-  - Map all current GA4 custom events to Firebase Analytics events: `voucher_detected`, `voucher_click`, `voucher_used`, `cashback_activated`, etc.
-  - Preserve custom parameters: `domain`, `partner_name`, `deal_id`, `amount_type`, `rate`, `country`, `provider`, `link_host`, `reason`, `ext_version`, `click_id`.
-  - Use standard Firebase fields for currency and user properties.
-  - Ensure key events remain designated: `voucher_click`, `voucher_used`, `cashback_activated`.
-- User identification
-  - Set user ID with `setUserId()` when user logs in (use stable `userId` from backend).
-  - Set user properties with `setUserProperties()`: country, user_type (logged_in/anonymous), account_age.
-  - Clear user ID on logout.
-- Platform compatibility
-  - Chrome: Full Firebase SDK support; initialize in background service worker or offscreen document.
-  - Firefox: Verify Firebase SDK compatibility with MV3 service workers; use offscreen/tab-based relay if needed.
-  - Safari: Test Firebase SDK in Safari Web Extension context; consider native Firebase SDK integration in host app for iOS/macOS.
-- Privacy and consent
-  - Maintain existing analytics consent flow: no tracking until user accepts.
-  - Set Firebase Analytics `analytics_storage` consent based on user preferences.
-  - Update privacy policy to reflect Firebase Analytics usage.
-  - Ensure compliance with GDPR/CCPA: anonymize IP, respect DNT if applicable.
-- Migration strategy
-  - Phase 1: Add Firebase Analytics alongside current GA4 (dual tracking for validation).
-  - Phase 2: Monitor parity between GA4 and Firebase events for 1-2 weeks.
-  - Phase 3: Remove GA4 Measurement Protocol code once Firebase is validated.
-  - Phase 4: Update documentation and monitoring dashboards to use Firebase console.
-- BigQuery integration
-  - Enable Firebase Analytics → BigQuery export for BI dashboards (completes Roadmap Item 2 dependency).
-  - Configure daily export schedule and schema mapping.
-  - Update existing dashboards to query BigQuery tables instead of GA4 export.
-- Testing and validation
-  - Verify event delivery in Firebase Console DebugView during development.
-  - Compare event counts between GA4 and Firebase during dual tracking phase.
-  - Test user ID and user properties propagation.
-  - Validate offline event queuing and retry logic.
-  - Test across all platforms: Chrome, Firefox, Safari (desktop and mobile).
-- Performance considerations
-  - Firebase SDK is heavier than direct HTTP calls; measure impact on service worker memory/startup.
-  - Consider lazy loading Firebase SDK only when analytics consent is granted.
-  - Set appropriate event batch size and upload interval.
+- Detection
+  - Recognize post‑checkout success states using layered heuristics:
+    - URL patterns: `/thank-you`, `/order-confirmation`, `/order/success`, `/checkout/complete`, `?success=true` (per‑merchant allowlist rules preferred over generic).
+    - DOM signals: presence of phrases (localized) like "Thank you for your order", "Order number", "Bestellnummer", and structured containers that often hold order summaries.
+    - Structured data and analytics: read `window.dataLayer` (GA/GTM `ecommerce.purchase`, `transaction_id`), JSON‑LD `Order`/`Invoice`, and meta tags where available.
+    - Debounce and idempotency: ensure detection only fires once per order (persist last seen `domain+orderId` with TTL to avoid duplicates).
+- Extraction
+  - Attempt in priority order:
+    1) `dataLayer` purchase payloads: `transaction_id`/`order_id`, `value`, `currency`.
+    2) JSON‑LD `Order` schema: `orderNumber`, `price`, `priceCurrency`.
+    3) DOM regex around labeled fields: `Order (ID|No|Number)` and common localizations.
+  - Normalize `orderId` (trim whitespace, strip prefixes like `#`).
+  - Optionally capture `amount` and `currency` when present (best effort, never block on these).
+- Correlation with clickouts
+  - Retrieve most recent `clickId` for the same eTLD+1 within a short window (default 24h; configurable 6–48h) from extension storage.
+  - Prefer clickouts that occurred before the order time and after the first visit in the current session; pick most recent eligible.
+  - Store lightweight evidence for debugging: `clickedAt`, `activated`, `domain`.
+- Backend integration
+  - Send a POST to backend endpoint (to be defined by backend team), e.g. `/api/v0/orders/confirm` with payload:
+    - `domain`: merchant eTLD+1 (e.g., `nike.com`)
+    - `orderId`: normalized string
+    - `clickId`: string (from extension tracked clickout)
+    - `amount` (optional): number
+    - `currency` (optional): ISO 4217 code
+    - `extVersion`: extension version, `platform`
+  - Retries with backoff on transient errors; queue offline and flush when online.
+  - Strict dedupe: backend should treat `(domain, orderId)` as idempotent key.
+- Privacy & policy
+  - Feature respects existing analytics/tracking consent; do not run without consent.
+  - Capture only order metadata needed for attribution (no item‑level PII, no names/addresses).
+  - Apply real‑time blacklist to disable on sensitive sites.
+- UX considerations
+  - Silent background capture; no intrusive UI on success pages.
+  - Optional subtle toast: "Order detected. We’ll process your cashback automatically." (A/B and locale aware; off by default.)
 - Analytics
-  - Track migration itself: `analytics_migrated_to_firebase` with `previous_system=ga4`, `migration_date`, `ext_version`.
-  - Monitor Firebase event delivery rates and compare with GA4 baseline.
+  - Emit `order_success_detected` with `domain`, `source` (url|dom|dataLayer|jsonld), `has_amount`, `has_currency`.
+  - Emit `order_capture_sent`/`order_capture_failed` with reason and HTTP status, and `click_correlation_status` (matched|none|ambiguous).
 - Success criteria
-  - Firebase Analytics receives all events with <5% discrepancy vs. GA4 during dual tracking; BigQuery export enabled and validated; GA4 code removed; dashboards updated; performance impact <10% increase in service worker memory; compliant with privacy policies.
+  - >95% of supported merchants’ success pages detected; duplicate submissions <0.5%; correlation finds a `clickId` in >80% of genuine orders within 24h window; negligible user‑visible impact; fully compliant with consent and blacklist rules.
 
 ---
 
-## Completed items
+## 23) Support fixed-amount cashback (online cashback)
 
-### 2) Voucher analytics (events only)
+Status: Ready for refinement
 
-Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
+Goal: Add support for online cashback rates that are fixed amounts (e.g., €5 back) in addition to percentage-based rates, driven by an explicit API property so the extension can display and handle both types correctly.
 
-- Implemented events (GA4 Measurement Protocol)
-  - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
-  - Key parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
-- Key events designated: `voucher_click`, `voucher_used`
-- BI export and dashboards remain pending (tracked in active item 2)
-### 3) Anonymous (not logged in) behaviors
-
-Status: Completed — 2025-01-27
-
-Goal: Ensure utility without a session.
-
-- Popup
-  - When not logged in, tapping the icon should still show eligible deals for the current site.
-- Reminders
-  - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
+- API model (to be aligned with backend)
+  - Add/confirm property on deal/rate entity: `amountType: "PERCENTAGE" | "FIXED"`.
+  - When `amountType == "PERCENTAGE"`: use existing `rate` (e.g., `0.05` → 5%).
+  - When `amountType == "FIXED"`: provide `amount` (number) and `currency` (ISO 4217), and ignore percentage `rate`.
+  - Ensure responses include per‑country values consistent with existing country scoping (see item 11).
+- Detection and filtering
+  - No change to merchant detection; applies to online cashback (`usageType ONLINE`).
+  - Respect real‑time blacklists (item 1) and existing eligibility checks.
+- UX and formatting
+  - Display percentages as today (e.g., “Up to 5%”).
+  - Display fixed amounts as currency (e.g., “Get €5 back”).
+  - For mixed offers (if present), prefer the highest expected value for messaging; consider a secondary line for the alternate type.
+  - Localize currency formatting and symbol placement per locale.
+- Analytics
+  - Add parameter `amount_type` = `percentage|fixed` to relevant events (`cashback_detected`, `cashback_activated`, etc.).
+  - For fixed amounts, include `amount` and `currency` parameters where available.
+- Edge cases
+  - Tiered or category‑specific fixed amounts: show a conservative summary (e.g., “Up to €X back”) and details in panel.
+  - Currency mismatches: only show fixed amounts in the user’s country currency or clearly label currency if cross‑border.
 - Success criteria
-  - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
-
-#### Implementation Details
-
-Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous user behaviors for popup and reminders)
-
-- Removed session guard from popup deal loading to allow anonymous users to view deals
-- Added analytics tracking for anonymous user interactions (`anonymous_deals_viewed`, `anonymous_login_clicked`)
-- Added `ANALYTICS_TRACK` message handler in background script
-- Reduced popup vertical padding by 50% for improved UX
-- Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
-- Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
-- Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
+  - Fixed‑amount deals render correctly with proper currency formatting across supported locales; analytics capture `amount_type` reliably; no regressions for percentage deals; compliant with blacklist and consent rules.
 
 ---
-### 11) Enforce country-scoped deals (vouchers and online cashback)
 
-Completed: 2025-10-13 — commit `ea32a5d`
 
-- Vouchers: filtered by visited domain country; voucher product URLs localized via `getVoucherLocaleForCountry()`.
-- Online cashback: filtered by user account country (from `user-info`), not visited domain country.
-- Added analytics for mismatches and voucher filters: `deal_country_mismatch`, `voucher_country_filtered_out`.
-- Updated roadmap to reflect service rule: online cashback by user country.
 
----
-## Small bugs/fixes (ongoing)
+# Small bugs/fixes (ongoing)
 
 Status: Backlog (triage weekly)
 
@@ -946,6 +705,175 @@ Success criteria
 - Assets and locale fallback behave as expected across browsers
 
 ---
+
+SOLUTION NOTES: 
+
+
+---
+
+# Completed
+
+## 11) Enforce country-scoped deals (vouchers and online cashback)
+
+Status: Completed — 2025-10-13 (see Completed items)
+
+Problem: Deals from outside the visited site's country are considered and shown today, which can mislead users (e.g., Dutch users seeing Amazon.com vouchers that do not apply in NL).
+
+- Goal
+  - Apply country-scoping rules aligned with product constraints:
+    - Vouchers: restricted by the visited domain’s country.
+    - Online cashback: restricted by the user account’s country (service rule).
+- Country source of truth (runtime)
+  - Vouchers (per-visit): derive country from the visited URL/domain using domain/locale parsing (e.g., TLD `.nl`, path `/nl/`, brand-specific patterns).
+  - Online cashback (per-user): use signed-in profile country as the authoritative source; fall back to language-derived default only when user country is unknown.
+  - Persist last derived values in storage for diagnostics; allow override via Settings for debugging.
+- Filtering and matching
+  - Vouchers (`GIFTCARD`): include only when the voucher's canonical product URL locale segment matches the visited domain country (e.g., product URL path `/nl-NL/giftcards-shop/...` → NL). Do not rely on a query parameter; country is conveyed via the locale path segment.
+  - Online cashback (`CASHBACK` with `usageType ONLINE`): include only when the deal's `country` matches the user's account country.
+  - Maintain and use a domain→country/locale map (per partner) for voucher scoping to avoid cross-locale hostnames (e.g., `.com` vs `.nl`) and to correctly interpret path-based locales (e.g., `nike.com/nl/en`).
+- UX
+  - If a site is detected but only cross-country deals exist, show a neutral message: "No deals available for your country." Optionally offer a country switch entry point.
+  - Respect real-time blacklist to suppress prompts on sensitive sites.
+- Analytics
+  - Emit `deal_country_mismatch` with `domain`, `partner`, `deal_country`, `visited_country` (voucher) or `user_country` (online cashback), `flow` (voucher/oc).
+- Success criteria
+  - Cross-country deals no longer appear; reduced misclicks/complaints; country match rate > 99% across top domains.
+
+---
+
+## 13) Anonymous API calls to reduce tab flashing
+Status: Completed
+
+Goal: Use anonymous/unauthenticated API calls wherever possible to fetch deal and voucher details, further reducing the need for authenticated relay tabs and minimizing background tab flashing.
+
+- Anonymous endpoints
+  - Identify which deal/voucher APIs can work without authentication (public deals, partner info, basic eligibility).
+  - Create anonymous API client that bypasses cookie-based authentication entirely.
+  - Use anonymous calls for initial deal detection, partner lookup, and basic voucher information.
+- Authentication fallback
+  - Only use authenticated calls when absolutely necessary (user-specific deals, personalized rates, account-specific vouchers).
+  - Implement graceful degradation: show anonymous deals first, then enhance with authenticated data when available.
+- Implementation
+  - Add anonymous API client alongside existing authenticated client.
+  - Route calls based on data requirements: anonymous for public data, authenticated for user-specific data.
+  - Cache anonymous responses with appropriate TTL to reduce API load.
+- Benefits
+  - Eliminates most background tab opens for deal detection and basic voucher info.
+  - Faster initial load times for popup and content scripts.
+  - Reduced user-visible tab flashing during normal browsing.
+- Analytics
+  - Track `api_call_anonymous`, `api_call_authenticated`, `api_call_fallback` with endpoint and success/failure.
+- Success criteria
+  - >80% of deal/voucher API calls use anonymous endpoints; <5% of user sessions trigger authenticated relay tabs; faster popup load times.
+
+---
+---
+
+### COMPLETED: Chrome Web Store (Google) — upfront consent + countdown notification with opt out
+We should adapt the automatic redirection pattern so it follows these guidelines:
+    1.    During onboarding, ask explicitly:
+“Do you want Woolsocks to auto-activate cashback (redirect via affiliate link) when you visit partner stores?”
+→ Options: Enable auto mode / Ask me each time
+    2.    If user enables auto mode, you remember their preference, but you do not silently redirect.
+    3.    At each partner store load, show a small but obvious UI element (banner, toast, modal) saying:
+“Auto-activating cashback in 3…2…1 — click here to cancel”
+Or
+“Activate cashback now → [button]”
+    4.    If needed, you can implement a countdown (3→2→1) before redirect, as long as the countdown is visible, counts down in the UI, and the user can cancel or see that it’s happening.
+    5.    Always let the user opt-out later (in settings or toggle) and make the auto behavior reversible.
+    6.    In your extension listing/privacy docs, clearly disclose the affiliate monetization and redirection behavior.
+Don’t do background tabs that user doesn’t see. Don’t silently override cookies. Everything must be traceable and visible.
+    3.    Respect existing affiliate attribution
+Don’t override someone’s affiliate tags or tracking codes already present (unless you’re absolutely sure it’s expired or invalid).
+    5.    Always let user opt out or revoke
+User can disable auto activation. All activity should be transparent.
+
+## 15) Remove alarms permission and find alternatives
+Status: Completed — 2025-01-27
+
+Goal: Remove the `alarms` permission from the extension manifest to pass Chrome Web Store review, while maintaining all current functionality through alternative approaches.
+
+**Reference: Chrome Web Store Rejection (Item ID: fneoceodefiieccfcapkjanllehpogpj)**
+> "Requesting but not using the following permission(s): alarms. Remove the unused permission(s) listed above from your manifest file. Request access to the narrowest permissions necessary to implement your Product's features or services. Don't attempt to 'future proof' your Product by requesting a permission that might benefit services or features that have not yet been implemented."
+
+### Implementation Details
+
+Completed: 2025-01-27 — commit `[TBD]` (feat: remove alarms permission and replace with event-driven alternatives)
+
+### Additional Permission Cleanup
+
+Completed: 2025-10-10 — commit `[TBD]` (feat: remove unused webRequest permission for Chrome Web Store compliance)
+
+- **Replaced alarm-based cache cleanup** with event-driven triggers:
+  - Cache cleanup now runs on service worker startup, tab activation, and navigation events
+  - Throttled to run at most once per hour to prevent excessive execution
+  - Uses `cleanupIfNeeded()` wrapper with 24-hour throttling for actual cleanup operations
+- **Replaced alarm-based cache preload** with activity-based preloading:
+  - Preload runs on service worker startup and install
+  - Popup can trigger preload via `CACHE_PRELOAD_REQUEST` message
+  - Popular merchants are preloaded for improved performance
+- **Removed HTML scraper entirely** (deals-scraper.ts):
+  - Eliminated 1,330+ lines of unused HTML scraping code
+  - Merchant discovery now uses only fast API endpoints
+  - Fixed function name conflicts and performance issues
+  - No more tab flashing or continuous tab creation/removal
+- **Analytics system unchanged**: Already used `setInterval` instead of alarms
+- **Removed alarms permission** from manifest and updated documentation
+- **All functionality preserved**: Cache cleanup, preload, and analytics work identically to before
+
+### Success Criteria Met
+- ✅ Extension no longer requests alarms permission
+- ✅ All cache cleanup operations work via event-driven triggers
+- ✅ Cache preload maintains performance benefits
+- ✅ Analytics delivery unchanged (already event-driven)
+- ✅ No performance degradation or reliability issues
+
+### 2) Voucher analytics (events only)
+
+Completed: 2025-10-09 — commit `6bb5ac3` (feat(analytics): add voucher events; GA guidance)
+
+- Implemented events (GA4 Measurement Protocol)
+  - `voucher_detected`, `voucher_panel_shown`, `voucher_view`, `voucher_click`, `voucher_used`
+  - Key parameters: `domain`, `partner_name`, `provider_reference_id`, `rate`, `country`, `ext_version`
+- Key events designated: `voucher_click`, `voucher_used`
+- BI export and dashboards remain pending (tracked in active item 2)
+### 3) Anonymous (not logged in) behaviors
+
+Status: Completed — 2025-01-27
+
+Goal: Ensure utility without a session.
+
+- Popup
+  - When not logged in, tapping the icon should still show eligible deals for the current site.
+- Reminders
+  - Checkout reminder and cashback activation reminder should trigger based on detection rules, gated by blacklist and user settings.
+- Success criteria
+  - Anonymous users see deals and prompts (unless blacklisted); no errors requiring login.
+
+#### Implementation Details
+
+Completed: 2025-01-27 — commit `21d0ef3` (feat(anonymous): enable anonymous user behaviors for popup and reminders)
+
+- Removed session guard from popup deal loading to allow anonymous users to view deals
+- Added analytics tracking for anonymous user interactions (`anonymous_deals_viewed`, `anonymous_login_clicked`)
+- Added `ANALYTICS_TRACK` message handler in background script
+- Reduced popup vertical padding by 50% for improved UX
+- Verified reminder systems already work for anonymous users (checkout detection, cashback reminders)
+- Anonymous users can now see deals in popup, receive reminders, and interact with extension without authentication
+- Foundation ready for blacklist integration (Roadmap Item 1) and anonymous clickouts (Roadmap Item 4)
+
+---
+### 11) Enforce country-scoped deals (vouchers and online cashback)
+
+Completed: 2025-10-13 — commit `ea32a5d`
+
+- Vouchers: filtered by visited domain country; voucher product URLs localized via `getVoucherLocaleForCountry()`.
+- Online cashback: filtered by user account country (from `user-info`), not visited domain country.
+- Added analytics for mismatches and voucher filters: `deal_country_mismatch`, `voucher_country_filtered_out`.
+- Updated roadmap to reflect service rule: online cashback by user country.
+
+---
+
 ### 9) Investigate visible woolsocks.eu tabs (open/close) and alternatives
 
 Status: Completed — 2025-10-09
@@ -973,7 +901,46 @@ Goal: Understand why visible `woolsocks.eu` tabs are created/closed during flows
   - No user-visible `woolsocks.eu` tab opens/closes during standard flows on supported browsers, or tab flashes reduced by >95% with no loss of functionality.
   - All changes remain compliant with Chrome Web Store, App Store (Safari), and AMO policies.
 
-SOLUTION NOTES: 
+
+## 6a) Firefox support (desktop )
+
+Status: MVP Done. 
+
+Goal: Port MV3 functionality to Firefox variants with full feature parity and AMO distribution.
+
+### Desktop Firefox
+
+**API Compatibility Assessment:**
+- ✅ **Storage API**: Full compatibility with `chrome.storage.local` and `chrome.storage.sync`
+- ✅ **Tabs API**: Full compatibility with `chrome.tabs` for tab management and URL updates
+- ✅ **WebNavigation API**: Full compatibility for navigation event detection
+- ✅ **Cookies API**: Full compatibility for session cookie observation
+- ✅ **Scripting API**: Full compatibility for content script injection
+- ✅ **Notifications API**: Full compatibility for user feedback
+- ❌ **Offscreen API**: Not supported in Firefox; use tab-based relay fallback
+- ✅ **Background Scripts**: Service worker support available (MV3 compatible)
+
+**Implementation Requirements:**
+- **Manifest adjustments**: Remove `offscreen` permission, ensure MV3 compatibility
+- **Relay system**: Use existing tab-based relay (already implemented with platform guards)
+- **Platform detection**: Leverage existing `getPlatform()` function (already detects Firefox)
+- **Auto-activation**: Firefox supports auto-redirects with user consent (already configured)
+- **Build system**: Use existing `webextension-polyfill` dependency for cross-browser compatibility
+
+**Technical Implementation:**
+```typescript
+// Platform guards already implemented in src/shared/platform.ts
+export function getPlatform(): Platform {
+  if (userAgent.includes('firefox')) return 'firefox'
+  // ... other platforms
+}
+
+// API compatibility already handled in src/background/api.ts
+function canCreateRelayTab(): boolean {
+  // Chrome only - Firefox uses tab-based relay
+  try { return !!(chrome as any).offscreen && typeof (chrome as any).offscreen.createDocument === 'function' } catch { return false }
+}
+```
 #### Offscreen relay (eliminate visible woolsocks.eu tab flashes)
 
 Completed: 2025-10-09 — commit `7b6800a` (feat(relay): add Chrome offscreen relay with hidden iframe, prefer offscreen over tab relay; manifest updates; content relay postMessage; refs roadmap #9)
@@ -984,4 +951,31 @@ Completed: 2025-10-09 — commit `7b6800a` (feat(relay): add Chrome offscreen re
 - Updated permissions documentation and QA testing guide
 - Success criteria met: no user-visible `woolsocks.eu` tab opens/closes on Chrome; >95% reduction in tab flashes
 
----
+## 14) Comprehensive caching for performance optimization
+Status: Completed
+
+Goal: Implement intelligent caching for cashback balance, transactions, deal information, and other frequently accessed data to reduce API calls and improve perceived loading speed.
+
+- Cache targets
+  - Cashback balance and recent transactions (user-specific, TTL: 5-15 minutes).
+  - Deal information per merchant/domain (public data, TTL: 30-60 minutes).
+  - Partner configuration and eligibility rules (rarely changing, TTL: 24 hours).
+  - User preferences and settings (local storage, persistent).
+- Cache strategy
+  - Multi-tier caching: memory cache (fastest), extension storage (persistent), background refresh.
+  - Cache invalidation: time-based TTL, event-based (user actions, session changes), manual refresh.
+  - Cache warming: preload popular merchants and user's frequent sites.
+- Implementation
+  - Add cache layer to API client with configurable TTL per endpoint.
+  - Implement cache-first strategy with background refresh for stale data.
+  - Add cache status indicators in UI (fresh/stale/loading states).
+- Performance benefits
+  - Instant popup loading for cached data (balance, recent deals).
+  - Reduced API load and faster merchant detection.
+  - Offline-capable for basic functionality (show cached deals, last known balance).
+- Cache management
+  - Add cache size limits and LRU eviction for memory cache.
+  - Provide cache clear option in settings for troubleshooting.
+  - Analytics for cache hit rates and performance metrics.
+- Success criteria
+  - >90% cache hit rate for balance/transactions; <200ms popup load time; 50% reduction in API calls during normal usage.
