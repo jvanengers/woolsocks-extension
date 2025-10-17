@@ -89,7 +89,7 @@ const manifest = {
   ],
   web_accessible_resources: [
     {
-      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf', 'assets/voucher-popup-page.js'],
+      resources: ['content/*.css', 'content/*.js', 'icons/state-*.png', 'icons/icon-*.png', 'public/icons/*.svg', 'public/icons/*.png', 'public/fonts/*.otf', 'public/fonts/*.ttf'],
       matches: ['<all_urls>'],
     },
   ],
@@ -111,7 +111,6 @@ export default defineConfig({
         entrance: 'src/content/entrance.ts',
         ocpanel: 'src/content/oc-panel.ts',
         relay: 'src/content/relay.ts',
-        voucherPopupPage: 'src/shared/voucher-popup-page.ts',
         offscreen: 'src/offscreen/relay.html',
       },
     },
