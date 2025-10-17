@@ -1,30 +1,31 @@
-// Firefox MV2 content-script injector for voucher popup
-// Listens for a message from background and injects a page script that exposes
-// window.createVoucherPopup, then calls it with the provided config.
+// Firefox MV2/Chrome MV3 reliable injector for voucher popup
+// Listens for a message from background and injects a page script into MAIN world
+// using an inline bundle string (no need for web_accessible_resources file names).
+import { getVoucherPopupBundle } from '../shared/voucher-popup-bundle'
 
 function log(...args: any[]) {
   try { console.log('[WS Injector]', ...args) } catch {}
 }
 
-function injectPageScript(srcUrl: string): Promise<void> {
+function injectPageScriptFromBundle(): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
+      const code = getVoucherPopupBundle()
       const script = document.createElement('script')
-      script.src = srcUrl
-      script.onload = () => { log('script loaded'); resolve() }
-      script.onerror = (e) => { log('script error', e); reject(e) }
+      script.textContent = code
       ;(document.documentElement || document.head || document.body).appendChild(script)
-    } catch (e) {
-      reject(e)
-    }
+      // Remove the node after execution to reduce noise
+      try { script.remove() } catch {}
+      log('inline bundle injected')
+      resolve()
+    } catch (e) { reject(e) }
   })
 }
 
 async function injectVoucherPopup(config: any) {
   try {
     log('inject start')
-    const url = chrome.runtime.getURL('assets/voucher-popup-page.js')
-    await injectPageScript(url)
+    await injectPageScriptFromBundle()
 
     // Wait briefly for the page script to register its message listener
     await new Promise(r => setTimeout(r, 100))
