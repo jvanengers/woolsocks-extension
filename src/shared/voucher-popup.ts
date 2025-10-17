@@ -146,7 +146,7 @@ function createPopupContent(
   content.appendChild(mainContent)
 
   // USPs section
-  const uspsSection = createUspsSection(vouchers[currentPopupState.selectedVoucherIndex] || best, assets)
+  const uspsSection = createUspsSection(vouchers[currentPopupState.selectedVoucherIndex] || best, assets, translations)
   content.appendChild(uspsSection)
 
   // Payment methods
@@ -450,16 +450,16 @@ function createActionButton(translations: VoucherTranslations, externalIconUrl?:
   return button
 }
 
-function createUspsSection(voucher: Voucher, assets: PopupAssets): HTMLElement {
+function createUspsSection(voucher: Voucher, assets: PopupAssets, translations: VoucherTranslations): HTMLElement {
   const section = document.createElement('div')
   applyStyles(section, popupStyles.uspsSection)
 
   const usps = [
-    { text: 'Instant delivery' },
+    { text: translations.usps?.instantDelivery || 'Instant delivery' },
     ...(Number.isFinite(voucher.cashbackRate) && voucher.cashbackRate > 0 
-      ? [{ text: `${voucher.cashbackRate}% cashback on purchase` }] 
+      ? [{ text: `${voucher.cashbackRate}${translations.usps?.cashbackOnPurchase || '% cashback on purchase'}` }] 
       : []),
-    { text: 'Use online at checkout' }
+    { text: translations.usps?.useOnlineAtCheckout || 'Use online at checkout' }
   ]
 
   usps.forEach(usp => {

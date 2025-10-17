@@ -20,6 +20,11 @@ export interface VoucherTranslations {
   cashbackSuffix?: string
   viewDetails?: string
   instructions?: string
+  usps?: {
+    instantDelivery: string
+    cashbackOnPurchase: string
+    useOnlineAtCheckout: string
+  }
 }
 
 export interface VoucherPopupConfig {
