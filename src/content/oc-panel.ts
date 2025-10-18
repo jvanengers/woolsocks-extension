@@ -969,31 +969,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   const banner = document.createElement('div')
   banner.className = 'countdown-banner'
   while (banner.firstChild) banner.removeChild(banner.firstChild)
-  const bannerRow = document.createElement('div')
-  bannerRow.className = 'countdown-row'
-  const number = document.createElement('div')
-  number.className = 'countdown-number'
-  number.textContent = String(3)
-  const textWrap = document.createElement('div')
-  textWrap.className = 'countdown-text'
-  const title = document.createElement('div')
-  title.className = 'countdown-title'
-  title.textContent = 'Activating cashback…'
-  const sub = document.createElement('div')
-  sub.className = 'countdown-deal'
-  sub.textContent = ''
-  textWrap.appendChild(title)
-  textWrap.appendChild(sub)
-  const actions = document.createElement('div')
-  actions.className = 'countdown-actions'
-  const cancel = document.createElement('button')
-  cancel.className = 'countdown-cancel-btn'
-  cancel.textContent = 'Cancel'
-  actions.appendChild(cancel)
-  bannerRow.appendChild(number)
-  bannerRow.appendChild(textWrap)
-  bannerRow.appendChild(actions)
-  banner.appendChild(bannerRow)
+  
   const content = document.createElement('div')
   content.className = 'countdown-content'
   const row = document.createElement('div')
@@ -1027,6 +1003,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
     // Clear any saved fixed width so future mounts stay dynamic
     try { chrome.storage.session.remove('__wsOcPanelWidth') } catch {}
   } catch {}
+  
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
   
   // Animate progress bar exactly over the countdown duration

@@ -929,7 +929,6 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
       <div class="countdown-row">
         <div class="countdown-text">
           <div class="countdown-title" id="ws-countdown-title">${translate('ocPanel.countdownTitle', { seconds: countdownSeconds.toString() })}</div>
-          
         </div>
         <div class="countdown-actions">
           <button class="countdown-cancel-btn" id="ws-countdown-cancel">${translate('ocPanel.countdownCancel')}</button>
@@ -945,6 +944,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
     // Clear any saved fixed width so future mounts stay dynamic
     try { chrome.storage.session.remove('__wsOcPanelWidth') } catch {}
   } catch {}
+  
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
   
   // Animate progress bar exactly over the countdown duration
