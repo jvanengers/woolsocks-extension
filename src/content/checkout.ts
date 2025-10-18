@@ -1215,11 +1215,11 @@ const hemaDetector: CheckoutDetector = {
     // Only trigger on the specific cart page URL
     if (url === 'https://www.hema.nl/cart' || url.endsWith('/cart')) return true
     // Also allow when the sidebar totals container exists
-    return document.querySelector('#cart .basket-totals.calculated-totals') !== null
+    return document.querySelector('#main-content .basket-totals.calculated-totals') !== null
   },
   extractTotal: () => {
-    // Primary: exact node provided for the final total row
-    const exact = document.querySelector('#cart .basket-totals.calculated-totals .total-prices.redesign .row.total-amount span.price') as HTMLElement | null
+    // Primary: exact node provided for the final total row - updated selector
+    const exact = document.querySelector('#main-content .basket-totals.calculated-totals .total-prices.redesign .row.total-amount span.price') as HTMLElement | null
     if (exact) {
       const amt = parseAmount(exact.textContent)
       if (amt && amt > 0) return amt
@@ -1227,7 +1227,7 @@ const hemaDetector: CheckoutDetector = {
     }
 
     // Secondary: prefer explicit final total row if present
-    const container = document.querySelector('#cart .basket-totals.calculated-totals .total-prices.redesign')
+    const container = document.querySelector('#main-content .basket-totals.calculated-totals .total-prices.redesign')
     if (container) {
       const finalRowPrice = container.querySelector('.row.total-amount span.price') as HTMLElement | null
       const finalAmt = parseAmount(finalRowPrice?.textContent)
