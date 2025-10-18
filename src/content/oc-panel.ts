@@ -901,17 +901,6 @@ function showAuthenticatedActivePill() {
   const r = ensureMount(); clearTimers()
   const pill = document.createElement('div'); pill.className = 'minipill'
   while (pill.firstChild) pill.removeChild(pill.firstChild)
-  const pillRow2 = document.createElement('div')
-  pillRow2.className = 'pill-row'
-  const label2 = document.createElement('span')
-  label2.className = 'label-text'
-  label2.textContent = 'Tracking status'
-  const inactive = document.createElement('span')
-  inactive.className = 'active-text'
-  inactive.textContent = 'Not active'
-  pillRow2.appendChild(label2)
-  pillRow2.appendChild(inactive)
-  pill.appendChild(pillRow2)
   const activeWrap = document.createElement('div')
   activeWrap.className = 'active-pill'
   const activeText = document.createElement('div')
