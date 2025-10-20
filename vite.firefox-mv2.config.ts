@@ -368,6 +368,7 @@ ${content}
             const isOnboardingComponent = filename.includes('OnboardingComponent')
             const isI18n = filename.includes('i18n')
             const isPlatform = filename.includes('platform')
+            const isFormat = filename.includes('format')
             const isAnalytics = filename.includes('analytics')
             const isClient = filename.includes('client') // React/ReactDOM chunk
             
@@ -376,6 +377,7 @@ ${content}
             if (isOnboardingComponent) globalName = 'window.__woolsocksOnboardingExports'
             else if (isI18n) globalName = 'window.__woolsocksI18nExports'
             else if (isPlatform) globalName = 'window.__woolsocksPlatformExports'
+            else if (isFormat) globalName = 'window.__woolsocksFormatExports'
             else if (isAnalytics) globalName = 'window.__woolsocksAnalyticsExports'
             else if (isClient) globalName = 'window.__woolsocksClientExports'
             
@@ -430,6 +432,10 @@ ${content}
     // Import platform
     if (modulePath.includes('platform')) {
       return (typeof window !== 'undefined' ? window.__woolsocksPlatformExports : undefined) || {};
+    }
+    // Import format
+    if (modulePath.includes('format')) {
+      return (typeof window !== 'undefined' ? window.__woolsocksFormatExports : undefined) || {};
     }
     // Import OnboardingComponent
     if (modulePath.includes('OnboardingComponent')) {
@@ -495,6 +501,7 @@ ${content}
           if (file.includes('options')) chunkFiles.options = file
           if (file.includes('i18n')) chunkFiles.i18n = file
           if (file.includes('platform')) chunkFiles.platform = file
+          if (file.includes('format')) chunkFiles.format = file
           if (file.includes('client')) chunkFiles.client = file
         })
       }
@@ -530,6 +537,7 @@ ${content}
             // Load shared dependencies
             if (chunkFiles.platform) depScripts.push(`<script defer src="/assets/${chunkFiles.platform}"></script>`)
             if (chunkFiles.i18n) depScripts.push(`<script defer src="/assets/${chunkFiles.i18n}"></script>`)
+            if (chunkFiles.format) depScripts.push(`<script defer src="/assets/${chunkFiles.format}"></script>`)
             
             // Load OnboardingComponent (needed by both popup and options)
             if (chunkFiles.onboarding) depScripts.push(`<script defer src="/assets/${chunkFiles.onboarding}"></script>`)
