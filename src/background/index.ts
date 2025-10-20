@@ -824,6 +824,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: true, message: 'Preload disabled to prevent unnecessary API calls' })
     })()
     return true
+  } else if (message?.type === 'REQUEST_USER_LANGUAGE') {
+    ;(async () => {
+      try {
+        const lang = await getUserLanguage()
+        sendResponse(lang)
+      } catch {
+        sendResponse('nl-NL')
+      }
+    })()
+    return true
   }
 })
 

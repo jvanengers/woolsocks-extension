@@ -9,6 +9,7 @@ import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 import { isFirefoxLike } from '../shared/platform'
 import type { Deal } from '../shared/types'
 import { formatCashback } from '../shared/format'
+import { getVoucherLocaleForCountry } from '../background/partners-config'
 
 function App() {
   const [session, setSession] = useState<boolean | null>(null)
@@ -401,9 +402,41 @@ function App() {
               const visitedCountry = await chrome.runtime.sendMessage({ type: 'REQUEST_VISITED_COUNTRY', domain: hostname })
               const countryCode = (visitedCountry && visitedCountry.country) ? String(visitedCountry.country).toUpperCase() : ''
               const filtered = voucherCategory.deals.filter((d: any) => String((d as any).voucherCountry || d.country || '').toUpperCase() === countryCode)
-              setVouchers((filtered.length ? filtered : voucherCategory.deals).slice(0, 3)) // Show max 3 vouchers
+              
+              // Construct dealUrl for vouchers (same logic as checkout detection)
+              const userLang = (await chrome.runtime.sendMessage({ type: 'REQUEST_USER_LANGUAGE' }).catch(() => 'nl-NL')) || 'nl-NL'
+              const locale = getVoucherLocaleForCountry(countryCode, userLang)
+              
+              const vouchersWithUrls = (filtered.length ? filtered : voucherCategory.deals).map((d: any) => {
+                const deal = { ...d }
+                try {
+                  const pid = deal?.providerReferenceId || deal?.productId || deal?.id
+                  if (pid) {
+                    deal.dealUrl = `https://woolsocks.eu/${locale}/giftcards-shop/products/${encodeURIComponent(String(pid))}`
+                  } else if (typeof deal?.dealUrl === 'string') {
+                    const m = String(deal.dealUrl).match(/products\/([A-Za-z0-9-]{8,})/)
+                    if (m && m[1]) {
+                      deal.dealUrl = `https://woolsocks.eu/${locale}/giftcards-shop/products/${m[1]}`
+                    }
+                  }
+                } catch {}
+                return deal
+              })
+              
+              setVouchers(vouchersWithUrls.slice(0, 3)) // Show max 3 vouchers
             } catch {
-              setVouchers(voucherCategory.deals.slice(0, 3))
+              // Fallback: still try to construct URLs even if country detection fails
+              const vouchersWithUrls = voucherCategory.deals.map((d: any) => {
+                const deal = { ...d }
+                try {
+                  const pid = deal?.providerReferenceId || deal?.productId || deal?.id
+                  if (pid) {
+                    deal.dealUrl = `https://woolsocks.eu/nl-NL/giftcards-shop/products/${encodeURIComponent(String(pid))}`
+                  }
+                } catch {}
+                return deal
+              })
+              setVouchers(vouchersWithUrls.slice(0, 3))
             }
           }
 
@@ -740,12 +773,34 @@ function App() {
                   <div 
                     key={index} 
                     onClick={() => {
-                      // Trigger manual redirection for this specific deal
-                      chrome.runtime.sendMessage({
-                        type: 'OC_MANUAL_ACTIVATE_DEAL',
-                        domain: currentDomain,
-                        dealInfo: deal
-                      })
+                      if (session === true) {
+                        // User is authenticated - trigger manual redirection
+                        chrome.runtime.sendMessage({
+                          type: 'OC_MANUAL_ACTIVATE_DEAL',
+                          domain: currentDomain,
+                          dealInfo: deal
+                        })
+                      } else {
+                        // User is not authenticated - navigate to woolsocks.eu cashback page
+                        const dealUrl = deal.merchantId 
+                          ? `https://woolsocks.eu/cashback/${deal.merchantId}`
+                          : 'https://woolsocks.eu/'
+                        chrome.tabs.create({ url: dealUrl, active: true })
+                        
+                        // Track anonymous deal click
+                        try {
+                          chrome.runtime.sendMessage({
+                            type: 'ANALYTICS_TRACK',
+                            event: 'anonymous_oc_deal_clicked',
+                            params: {
+                              domain: currentDomain,
+                              deal_id: deal.id,
+                              merchant_id: deal.merchantId,
+                              has_session: false
+                            }
+                          })
+                        } catch {}
+                      }
                     }}
                     style={{ 
                       display: 'flex', 
