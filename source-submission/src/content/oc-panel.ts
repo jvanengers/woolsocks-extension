@@ -6,8 +6,9 @@ export function onExecute() {
   // Content script initialization
 }
 
-type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
 import { translate, initLanguage } from '../shared/i18n'
+import type { Deal } from '../shared/types'
+import { formatCashback } from '../shared/format'
 
 // Boot diagnostics
 const OC_DEBUG = false // Set to true for debugging
@@ -34,7 +35,7 @@ const WS_LOGO = {
   grey: chrome.runtime.getURL('public/icons/woolsocks _W_ grey.png'),
 }
 const CLOSE_ICON = chrome.runtime.getURL('public/icons/Close.svg')
-const CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM16.8071 9.59036C17.1332 9.14459 17.0361 8.51891 16.5904 8.19286C16.1446 7.86681 15.5189 7.96387 15.1929 8.40964L10.8166 14.3929L8.75809 12C8.39791 11.5813 7.76653 11.5339 7.34785 11.8941C6.92917 12.2543 6.88174 12.8856 7.24191 13.3043L10.1219 16.6522C10.3209 16.8835 10.6146 17.0113 10.9194 16.9992C11.2243 16.9872 11.507 16.8366 11.6871 16.5904L16.8071 9.59036Z" fill="#00C275"/></svg>`
+// CHECK_SVG removed (unused after innerHTML sanitization refactor)
 
 // SVG icons for minimize/expand buttons
 const SVG_ARROW_DOWN = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="25" viewBox="0 0 24 25" fill="none"><path fill-rule="evenodd" clip-rule="evenodd" d="M11.9999 14.0858L17.2928 8.79289L18.707 10.2071L12.707 16.2071C12.3165 16.5976 11.6833 16.5976 11.2928 16.2071L5.29282 10.2071L6.70703 8.79289L11.9999 14.0858Z" fill="#0084FF"/></svg>`
@@ -634,6 +635,7 @@ function clearTimers() {
 }
 
 function render(el: HTMLElement, html: string) {
+  // Controlled templates only; dynamic strings are escaped via escapeHtml above
   el.innerHTML = html
 }
 
@@ -647,7 +649,7 @@ function showDealsFound(host: string, deals: Deal[]) {
   const r = ensureMount(); clearTimers()
   const box = document.createElement('div'); box.className = 'panel'
   const safeHost = host.replace(/^www\./i, '')
-  const list = deals.map(d => `<div class='deal'><div class='badge'>${formatRate(d)}</div><div>${escapeHtml(d.name || 'Online aankoop')}</div></div>`).join('')
+  const list = deals.map(d => `<div class='deal'><div class='badge'>${formatCashback(d)}</div><div>${escapeHtml(d.name || 'Online aankoop')}</div></div>`).join('')
   render(box, `
     <div class="row header">${translate('ocPanel.dealsFoundAt', { host: escapeHtml(safeHost) })}</div>
     <div class="progress"><div class="bar"></div></div>
@@ -693,7 +695,7 @@ function showDeckPage1(allDeals: Deal[], onViewConditions: () => void, onReset: 
   } catch {}
   const list = allDeals.map(d => `
     <div class="deal">
-      <div class="badge">${formatRate(d)}</div>
+      <div class="badge">${formatCashback(d)}</div>
       <div class="deal-text">${escapeHtml(d.name || 'Online aankoop')}</div>
     </div>
   `).join('')
@@ -836,16 +838,38 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
   const pill = document.createElement('div'); pill.className = 'minipill'
   const deals = opts?.deals || (window as any).__wsLastDeals || []
   const bestRate = Array.isArray(deals) && deals.length ? Math.max(...deals.map((d:any)=>Number(d?.rate||0))) : 0
-  const label = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestRate }) : translate('ocPanel.cashbackActive')
+  const labelText = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestRate }) : translate('ocPanel.cashbackActive')
   const logo = opts?.unauth ? WS_LOGO.grey : WS_LOGO.green
-  pill.innerHTML = `
-    <div class="pill-row">
-      <button class="cta-btn" id="ws-expand">${translate('popup.login')}</button>
-      <div class="label-text">${label}</div>
-      <img class="logo logo-30" alt="Woolsocks" src="${logo}">
-      <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
-    </div>
-  `
+  while (pill.firstChild) pill.removeChild(pill.firstChild)
+  const pillRow = document.createElement('div')
+  pillRow.className = 'pill-row'
+  const cta = document.createElement('button')
+  cta.className = 'cta-btn'
+  cta.id = 'ws-expand'
+  cta.textContent = translate('popup.login')
+  const labelEl = document.createElement('div')
+  labelEl.className = 'label-text'
+  labelEl.textContent = labelText
+  const img = document.createElement('img')
+  img.className = 'logo logo-30'
+  img.alt = 'Woolsocks'
+  img.src = logo
+  const close = document.createElement('button')
+  close.className = 'icon-btn'
+  close.id = 'ws-dismiss'
+  const closeImg = document.createElement('img')
+  closeImg.src = CLOSE_ICON
+  closeImg.alt = 'close'
+  closeImg.width = 48; closeImg.height = 48
+  close.appendChild(closeImg)
+  const active = document.createElement('span')
+  active.className = 'active-text'
+  active.textContent = 'Active'
+  pillRow.appendChild(cta)
+  pillRow.appendChild(labelEl)
+  pillRow.appendChild(img)
+  pillRow.appendChild(close)
+  pill.appendChild(pillRow)
   r.getElementById?.('ws-oc-container')?.replaceChildren(pill)
   // Save current width to keep consistent sizing
   ;(async () => {
@@ -877,13 +901,23 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
 function showAuthenticatedActivePill() {
   const r = ensureMount(); clearTimers()
   const pill = document.createElement('div'); pill.className = 'minipill'
-  pill.innerHTML = `
-    <div class="active-pill">
-      ${CHECK_SVG}
-      <div class="active-text">${translate('ocPanel.cashbackActive')}</div>
-    </div>
-    <button class="icon-btn" id="ws-dismiss"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
-  `
+  while (pill.firstChild) pill.removeChild(pill.firstChild)
+  const activeWrap = document.createElement('div')
+  activeWrap.className = 'active-pill'
+  const activeText = document.createElement('div')
+  activeText.className = 'active-text'
+  activeText.textContent = translate('ocPanel.cashbackActive')
+  activeWrap.appendChild(activeText)
+  const close2 = document.createElement('button')
+  close2.className = 'icon-btn'
+  close2.id = 'ws-dismiss'
+  const closeImg2 = document.createElement('img')
+  closeImg2.src = CLOSE_ICON
+  closeImg2.alt = 'close'
+  closeImg2.width = 48; closeImg2.height = 48
+  close2.appendChild(closeImg2)
+  pill.appendChild(activeWrap)
+  pill.appendChild(close2)
   r.getElementById?.('ws-oc-container')?.replaceChildren(pill)
   // dynamic width based on content
   ;(async () => {
@@ -912,7 +946,7 @@ function hideAll() {
 }
 
 function escapeHtml(s: string): string { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c]) }
-function formatRate(d: Deal): string { if ((d.amountType||'').toUpperCase()==='FIXED') return `${d.currency||'€'}${d.rate}`; const r = typeof d.rate==='number'? d.rate:0; return `${r}%` }
+// formatRate function replaced by formatCashback from shared/format.ts
 
 // Countdown banner for auto-activation
 let countdownTimer: number | null = null
@@ -924,19 +958,34 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   
   const banner = document.createElement('div')
   banner.className = 'countdown-banner'
-  banner.innerHTML = `
-    <div class="countdown-content">
-      <div class="countdown-row">
-        <div class="countdown-text">
-          <div class="countdown-title" id="ws-countdown-title">${translate('ocPanel.countdownTitle', { seconds: countdownSeconds.toString() })}</div>
-        </div>
-        <div class="countdown-actions">
-          <button class="countdown-cancel-btn" id="ws-countdown-cancel">${translate('ocPanel.countdownCancel')}</button>
-        </div>
-      </div>
-      <div class="countdown-deal">${formatRate(dealInfo)} cashback on ${escapeHtml(domain)}</div>
-    </div>
-  `
+  while (banner.firstChild) banner.removeChild(banner.firstChild)
+  
+  const content = document.createElement('div')
+  content.className = 'countdown-content'
+  const row = document.createElement('div')
+  row.className = 'countdown-row'
+  const textCol = document.createElement('div')
+  textCol.className = 'countdown-text'
+  const titleDyn = document.createElement('div')
+  titleDyn.className = 'countdown-title'
+  titleDyn.id = 'ws-countdown-title'
+  titleDyn.textContent = translate('ocPanel.countdownTitle', { seconds: countdownSeconds.toString() })
+  textCol.appendChild(titleDyn)
+  const actionsDyn = document.createElement('div')
+  actionsDyn.className = 'countdown-actions'
+  const cancelDyn = document.createElement('button')
+  cancelDyn.className = 'countdown-cancel-btn'
+  cancelDyn.id = 'ws-countdown-cancel'
+  cancelDyn.textContent = translate('ocPanel.countdownCancel')
+  actionsDyn.appendChild(cancelDyn)
+  row.appendChild(textCol)
+  row.appendChild(actionsDyn)
+  const dealLine = document.createElement('div')
+  dealLine.className = 'countdown-deal'
+  dealLine.textContent = `${formatCashback(dealInfo)} cashback on ${escapeHtml(domain)}`
+  content.appendChild(row)
+  content.appendChild(dealLine)
+  banner.appendChild(content)
   
   // Ensure dynamic width so long texts are not truncated
   try {
@@ -1011,19 +1060,48 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
     ;(banner as HTMLElement).style.gap = '12px'
     ;(banner as HTMLElement).style.padding = '12px 16px'
   } catch {}
-  const rate = bestDeal ? formatRate(bestDeal) : '0%'
+  const rate = bestDeal ? formatCashback(bestDeal) : '0%'
   
-  banner.innerHTML = `
-    <div class="manual-activation-left" style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
-      <img class="logo" alt="Woolsocks" src="${WS_LOGO.yellow}" style="width:40px;height:40px;flex-shrink:0;"/>
-      <div class="manual-activation-text" style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;">
-        <div class="manual-activation-title single-line" style="white-space:nowrap;font-size:18px;font-weight:700;color:#0F0B1C;overflow:visible;">${translate('ocPanel.activateTitle', { rate: rate })}</div>
-        <div class="manual-activation-sub single-line" style="white-space:nowrap;font-size:14px;color:#6B7280;overflow:visible;">${translate('ocPanel.activateDescription', { host: escapeHtml(host) })}</div>
-      </div>
-    </div>
-    <button class="manual-activate-btn" id="ws-manual-activate" style="height:40px;padding:0 16px;border:none;border-radius:8px;background:#211940;color:#FFFFFF;font-weight:700;cursor:pointer;flex-shrink:0;">${translate('ocPanel.activateCta')}</button>
-    <button class="icon-btn" id="ws-dismiss" style="flex-shrink:0;"><img src="${CLOSE_ICON}" alt="close" width="48" height="48" /></button>
-  `
+  while (banner.firstChild) banner.removeChild(banner.firstChild)
+  const left = document.createElement('div')
+  left.className = 'manual-activation-left'
+  const logoImg = document.createElement('img')
+  logoImg.className = 'logo'
+  logoImg.alt = 'Woolsocks'
+  logoImg.src = WS_LOGO.yellow
+  logoImg.style.width = '40px'
+  logoImg.style.height = '40px'
+  logoImg.style.flexShrink = '0'
+  const textCol2 = document.createElement('div')
+  textCol2.className = 'manual-activation-text'
+  textCol2.style.display = 'flex'
+  textCol2.style.flexDirection = 'column'
+  textCol2.style.gap = '4px'
+  const title2 = document.createElement('div')
+  title2.className = 'manual-activation-title single-line'
+  title2.textContent = translate('ocPanel.activateTitle', { rate })
+  const sub2 = document.createElement('div')
+  sub2.className = 'manual-activation-sub single-line'
+  sub2.textContent = translate('ocPanel.activateDescription', { host: escapeHtml(host) })
+  textCol2.appendChild(title2)
+  textCol2.appendChild(sub2)
+  left.appendChild(logoImg)
+  left.appendChild(textCol2)
+  const btn = document.createElement('button')
+  btn.className = 'manual-activate-btn'
+  btn.id = 'ws-manual-activate'
+  btn.textContent = translate('ocPanel.activateCta')
+  const dismiss = document.createElement('button')
+  dismiss.className = 'icon-btn'
+  dismiss.id = 'ws-dismiss'
+  const dismissImg = document.createElement('img')
+  dismissImg.src = CLOSE_ICON
+  dismissImg.alt = 'close'
+  dismissImg.width = 48; dismissImg.height = 48
+  dismiss.appendChild(dismissImg)
+  banner.appendChild(left)
+  banner.appendChild(btn)
+  banner.appendChild(dismiss)
   
   r.getElementById?.('ws-oc-container')?.replaceChildren(banner)
   

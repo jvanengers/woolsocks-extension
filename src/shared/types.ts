@@ -1,150 +1,85 @@
-// Shared types for the extension
+// Shared types for cashback deals and amount formatting
 
-export type Voucher =
-  | {
-      voucherId: string
-      type: 'fixed'
-      denomination: number
-      currency: string
-      cashbackRate: number
-      available: boolean
-      howToUse: string
-      conditions: string
-      validityDays: number
-      imageUrl?: string
-    }
-  | {
-      voucherId: string
-      type: 'flex'
-      minAmount: number
-      maxAmount: number
-      step?: number
-      currency: string
-      cashbackRate: number
-      available: boolean
-      howToUse: string
-      conditions: string
-      validityDays: number
-      imageUrl?: string
-    }
+export type AmountType = 'PERCENTAGE' | 'FIXED';
 
-export interface Partner {
-  domain: string
-  name: string
-  cashbackRate: number
-  voucherAvailable: boolean
-  vouchers: Voucher[]
-  logo?: string
-  voucherProductUrl?: string
-  buildVoucherProductUrl?: (amount: number, currency?: string) => string
-}
+export type Deal = {
+  id?: string | number;
+  name?: string;
+  rate?: number;           // percentage value like 6 (not 0.06) or fixed amount
+  amountType?: AmountType; // default 'PERCENTAGE'
+  currency?: string;       // ISO currency when FIXED
+  description?: string;
+  imageUrl?: string;
+  dealUrl?: string;
+  country?: string;
+  usageType?: string;
+  provider?: string;
+  providerMerchantId?: string | number;
+  providerReferenceId?: string | number;
+  requireOptIn?: boolean;
+  conditions?: { siteContents?: string[] };
+  merchantId?: string | number;
+  affiliateUrl?: string;
+  clickId?: string | number;
+};
 
-export interface ActivationRecord {
-  partner: string
-  timestamp: number
-  cashbackRate: number
-  estimatedEarnings: number
-  status: 'active' | 'completed' | 'expired'
-}
+export type PartnerLite = {
+  domain: string;
+  name: string;
+  cashbackRate: number;
+  voucherAvailable: boolean;
+  dealUrl?: string;
+  merchantImageUrl?: string;
+  description?: string;
+  categories?: Category[];
+};
 
-export interface AnonymousUser {
-  totalEarnings: number
-  activationHistory: ActivationRecord[]
+export type Category = {
+  name: string;
+  deals: Deal[];
+  maxRate?: number;
+};
+
+export type AnonymousUser = {
+  totalEarnings: number;
+  activationHistory: ActivationRecord[];
   settings: {
-    showCashbackPrompt: boolean
-    showVoucherPrompt: boolean
-    // QA toggle: when true, content script ignores dismissal cooldowns
-    qaBypassVoucherDismissal?: boolean
-    // When false, disables automatic online cashback activation on navigation
-    autoActivateOnlineCashback?: boolean
-    // When false, disables all cashback detection and reminders
-    showCashbackReminders?: boolean
-  }
-}
+    showCashbackPrompt: boolean;
+    showVoucherPrompt: boolean;
+    autoActivateOnlineCashback?: boolean;
+  };
+};
 
-export interface CheckoutInfo {
-  total: number
-  currency: string
-  merchant: string
-  timestamp: number
-}
+export type ActivationRecord = {
+  domain?: string;
+  dealId?: string | number;
+  clickId?: string | number | null;
+  conditions?: any | null;
+  timestamp: number;
+  partner?: string;
+  status?: string;
+  cashbackRate?: number;
+  estimatedEarnings?: number;
+};
 
-export type IconState = 'neutral' | 'available' | 'active' | 'voucher' | 'error'
+export type IconState = 'neutral' | 'available' | 'active' | 'voucher' | 'error';
 
-export interface CashbackPrompt {
-  partner: Partner
-  isVisible: boolean
-  dismissed: boolean
-}
+export type CheckoutInfo = {
+  total: number;
+  currency: string;
+  merchant: string;
+};
 
-export interface VoucherOffer {
-  partner: Partner
-  amount: number
-  cashbackAmount: number
-  isVisible: boolean
-  dismissed: boolean
-}
-
-// Enhanced partner data with detailed deals and categories
-export interface Deal {
-  name: string
-  rate: number
-  description?: string
-  imageUrl?: string
-  dealUrl?: string
-  // Cashback-specific enrichment (optional for vouchers)
-  id?: string
-  amountType?: 'PERCENTAGE' | 'FIXED'
-  currency?: string
-  country?: string
-  usageType?: string
-  requireOptIn?: boolean
-  provider?: string
-  providerMerchantId?: string
-  providerReferenceId?: string
-  affiliateUrl?: string
-  clickId?: string
-  conditions?: {
-    termsCondition?: string
-    additionalInfo?: string
-    siteContents?: string[]
-  }
-  merchantId?: string | number
-}
-
-export interface Category {
-  name: string
-  iconUrl?: string
-  deals: Deal[]
-  maxRate?: number
-}
-
-export interface PartnerLite {
-  domain: string
-  name: string
-  cashbackRate: number
-  voucherAvailable: boolean
-  dealUrl?: string
-  voucherProductUrl?: string
-  // Enhanced data
-  categories?: Category[]
-  merchantImageUrl?: string
-  description?: string
-  // Voucher data
-  allVouchers?: Array<{
-    url: string
-    imageUrl?: string
-    name?: string
-    cashbackRate?: number
-  }>
-}
-
-// MVP: Remote config cache structure
-export interface PartnersCache {
-  partners: PartnerLite[]
-  toggles: Record<string, boolean>
-  fetchedAt: number
-  ttl: number
-  etag?: string
-  lastModified?: string
-}
+export type Partner = {
+  domain: string;
+  name: string;
+  cashbackRate: number;
+  voucherAvailable: boolean;
+  dealUrl?: string;
+  merchantImageUrl?: string;
+  description?: string;
+  categories?: Category[];
+  logo?: string;
+  vouchers?: any[];
+  voucherProductUrl?: string;
+};

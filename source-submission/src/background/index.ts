@@ -4,7 +4,7 @@ import { getCountryForDomain, getVoucherLocaleForCountry } from './partners-conf
 import type { IconState, AnonymousUser, ActivationRecord } from '../shared/types'
 import { handleActivateCashback } from './activate-cashback'
 import { t, translate, initLanguage, setLanguageFromAPI } from '../shared/i18n'
-import { track } from './analytics'
+import { track, initAnalytics, setUserId, setUserProperties } from '../shared/analytics-dual'
 import { setupOnlineCashbackFlow, getDomainActivationState, removeTabFromOtherDomains } from './online-cashback'
 import { fetchWalletDataCached, fetchTransactionsCached, fetchUserProfileCached } from '../shared/cached-api'
 import { getStats, restoreFromPersistent, CACHE_NAMESPACES } from '../shared/cache'
@@ -25,6 +25,30 @@ chrome.cookies.onChanged.addListener(({ cookie }) => {
         try {
           resetCachedUserId()
           const active = await hasActiveSession()
+          
+          // Update Firebase Analytics user ID based on session state
+          try {
+            if (active) {
+              // User logged in - set user ID and properties
+              const profile = await fetchUserProfileCached()
+              if (profile?.id) {
+                await setUserId(profile.id)
+                await setUserProperties({
+                  country: profile.country,
+                  user_type: 'logged_in'
+                })
+              }
+            } else {
+              // User logged out - clear user ID
+              await setUserId(null)
+              await setUserProperties({
+                user_type: 'anonymous'
+              })
+            }
+          } catch (error) {
+            console.error('[WS] Failed to update Firebase user ID:', error)
+          }
+          
           if (active) {
             chrome.runtime.sendMessage({ type: 'SESSION_UPDATED', active: true })
           } else {
@@ -90,10 +114,12 @@ function setIcon(state: IconState, tabId?: number) {
     
     console.log(`[WS Icon] Setting icon to ${state} for tab ${tabId || 'all'}`)
     
+    // Resolve action API across browsers
+    const actionApi: any = (chrome as any).action || (chrome as any).browserAction
     // Firefox MV2 browserAction.setIcon() returns a Promise, not a callback
     // Chrome action.setIcon() supports both callback and Promise
     try {
-      const result = chrome.action.setIcon({ path: path as any, tabId })
+      const result = actionApi.setIcon({ path: path as any, tabId })
       if (result && typeof result.then === 'function') {
         // Promise-based (Firefox)
         result.then(() => {
@@ -110,7 +136,7 @@ function setIcon(state: IconState, tabId?: number) {
     }
     
     try {
-      chrome.action.setTitle({ title: titleMap[state], tabId })
+      actionApi.setTitle({ title: titleMap[state], tabId })
     } catch (err) {
       console.error(`[WS Icon] Exception calling setTitle:`, err)
     }
@@ -120,6 +146,14 @@ function setIcon(state: IconState, tabId?: number) {
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  // Initialize dual analytics system (GA4 + Firebase)
+  try {
+    await initAnalytics()
+    console.log('[WS] Dual analytics initialized')
+  } catch (err) {
+    console.error('[WS] Analytics initialization failed:', err)
+  }
+  
   // Initialize language from storage (fallback)
   await initLanguage(); __wsLanguageInitialized = true
   
@@ -333,7 +367,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 // No cleanup needed - content scripts are managed by manifest
 
-chrome.action.onClicked.addListener(async (tab) => {
+;(chrome as any).action?.onClicked?.addListener(async (tab: any) => {
   if (!tab.id || !tab.url) return
   
   try {
@@ -376,7 +410,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     
     if (activeActivation) {
       // Already active, show popup with status
-      chrome.action.openPopup()
+      ;(chrome as any).action?.openPopup?.()
     } else {
       // Activate cashback
       const newActivation: ActivationRecord = {

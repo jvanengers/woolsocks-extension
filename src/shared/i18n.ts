@@ -132,7 +132,7 @@ export interface Translations {
     cashbackActive: string
     shopAndPayNormally: string
     acceptCookiesDisableAdblock: string
-    earnRateCashback: string // Earn {rate}% cashback
+    earnRateCashback: string // Earn {rate} cashback
     countdownTitle: string // Auto-activating cashback in {seconds}...
     countdownCancel: string // Cancel
     activateNow: string // Activate cashback now
@@ -175,7 +175,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Cancel',
       countdownTitle: 'Auto-activating cashback in %1$s...',
       dealsFoundAt: 'Deals found at %1$s',
-      earnRateCashback: 'Earn %1$s% cashback',
+      earnRateCashback: 'Earn %1$s cashback',
       noDealsFound: 'No deals found',
       settingUpFor: 'Setting up cashback tracking for %1$s',
       shopAndPayNormally: 'Shop and pay like you do normally',
@@ -300,7 +300,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Annuleren',
       countdownTitle: 'Cashback is actief over %1$s...',
       dealsFoundAt: 'Deals gevonden op %1$s',
-      earnRateCashback: 'Verdien %1$s% cashback',
+      earnRateCashback: 'Verdien %1$s cashback',
       noDealsFound: 'Geen deals gevonden',
       settingUpFor: 'Cashback-tracking instellen voor %1$s',
       shopAndPayNormally: 'Winkel en betaal zoals je normaal doet',
@@ -425,7 +425,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Abbrechen',
       countdownTitle: 'Cashback wird automatisch aktiviert in %1$s...',
       dealsFoundAt: 'Angebote gefunden auf %1$s',
-      earnRateCashback: 'Verdienen Sie %1$s% Cashback',
+      earnRateCashback: 'Verdienen Sie %1$s Cashback',
       noDealsFound: 'Keine Angebote gefunden',
       settingUpFor: 'Cashback-Tracking einrichten für %1$s',
       shopAndPayNormally: 'Einkaufen und bezahlen wie gewohnt',
@@ -545,7 +545,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Annuler',
       countdownTitle: 'Activation automatique du cashback dans %1$s...',
       dealsFoundAt: 'Offres trouvées sur %1$s',
-      earnRateCashback: 'Gagnez %1$s% de cashback',
+      earnRateCashback: 'Gagnez %1$s de cashback',
       noDealsFound: 'Aucune offre trouvée',
       settingUpFor: 'Configuration du suivi cashback pour %1$s',
       shopAndPayNormally: 'Achetez et payez normalement',
@@ -665,7 +665,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Annulla',
       countdownTitle: 'Attivazione automatica cashback tra %1$s...',
       dealsFoundAt: 'Offerte trovate su %1$s',
-      earnRateCashback: 'Guadagna %1$s% di cashback',
+      earnRateCashback: 'Guadagna %1$s di cashback',
       noDealsFound: 'Nessuna offerta trovata',
       settingUpFor: 'Configurazione del monitoraggio cashback per %1$s',
       shopAndPayNormally: 'Acquista e paga normalmente',
@@ -782,7 +782,7 @@ const translations: Record<Language, Translations> = {
       countdownCancel: 'Cancelar',
       countdownTitle: 'Activación automática de cashback en {seconds}...',
       dealsFoundAt: 'Ofertas encontradas en {host}',
-      earnRateCashback: 'Gana {rate}% de cashback',
+      earnRateCashback: 'Gana {rate} de cashback',
       noDealsFound: 'No se encontraron ofertas',
       settingUpFor: 'Configurando seguimiento de cashback para {host}',
       shopAndPayNormally: 'Compra y paga normalmente',

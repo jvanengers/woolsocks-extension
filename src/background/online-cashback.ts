@@ -3,7 +3,7 @@
 // request a tracked redirect URL, and open the popup once activated.
 
 import { getPartnerByHostname, requestRedirectUrl, fetchMerchantConditions, getUserCountryCode, fetchRecentClicksForSite, hasActiveSession } from './api'
-import { track, initAnalytics } from './analytics'
+import { track } from '../shared/analytics-dual'
 import { getPlatform, allowsAutoRedirect, requiresUserGesture } from '../shared/platform'
 import type { Deal, PartnerLite } from '../shared/types'
 
@@ -232,7 +232,7 @@ async function pingContentScript(tabId: number): Promise<boolean> {
 
 export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available' | 'active' | 'voucher' | 'error', tabId?: number) => void) {
   try {
-    initAnalytics()
+    // Analytics is now initialized in main background script
     // Visible diagnostic to confirm listener registration
     // Breadcrumb once on startup
     // Debug breadcrumb once at startup
@@ -335,7 +335,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         // Mark cooldown after landing back to merchant to prevent repeated redirects
         try { await setCooldown(clean) } catch {}
         // Mark domain active for TTL and set icon green immediately
-        try { markDomainActive(clean, tabId, pending.deal.clickId) } catch {}
+        try { markDomainActive(clean, tabId, pending.deal.clickId?.toString()) } catch {}
         // If we landed on the merchant but not on the original deep URL, restore it once
         try {
           const shouldRestore = (() => {
@@ -385,6 +385,7 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
           amount_type: pending.deal.amountType || 'PERCENTAGE',
           rate: pending.deal.rate,
           click_id: pending.deal.clickId,
+          ...(pending.deal.amountType === 'FIXED' && { amount: pending.deal.rate, currency: pending.deal.currency })
         })
         // Notify UI to show post-activation deck; include all deals in category if available
         const allDeals = (pending.deal && Array.isArray((pending as any).deals)) ? (pending as any).deals as Deal[] : [pending.deal]
@@ -482,7 +483,15 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
                 timestamp: Date.now(),
               }
             })
-            track('oc_activated', { domain: clean, partner_name: partner.name, deal_id: best?.id, amount_type: best?.amountType || 'PERCENTAGE', rate: best?.rate || 0, reason: 'affiliate_params' })
+            track('oc_activated', { 
+              domain: clean, 
+              partner_name: partner.name, 
+              deal_id: best?.id, 
+              amount_type: best?.amountType || 'PERCENTAGE', 
+              rate: best?.rate || 0, 
+              reason: 'affiliate_params',
+              ...(best?.amountType === 'FIXED' && { amount: best.rate, currency: best.currency })
+            })
             // Notify UI to show post-activation deck
             try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_activated', host: clean, deals: eligible, dealId: best?.id, providerMerchantId: best?.providerMerchantId }) } catch {}
             try { track('oc_state_reemit', { domain: clean, reason: 'organic_affiliate' }) } catch {}
@@ -666,7 +675,16 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
       const best = pickBestCashback(eligible)
       if (!best || !best.id) { track('oc_blocked', { domain: clean, reason: 'no_link' }); if (OC_DEBUG) console.log('[WS OC] best deal missing id', best); return }
 
-      track('oc_eligible', { domain: clean, partner_name: partner.name, deals_count: eligible.length, deal_id: best.id, amount_type: best.amountType, rate: best.rate, country: userCountry })
+      track('oc_eligible', { 
+        domain: clean, 
+        partner_name: partner.name, 
+        deals_count: eligible.length, 
+        deal_id: best.id, 
+        amount_type: best.amountType, 
+        rate: best.rate, 
+        country: userCountry,
+        ...(best.amountType === 'FIXED' && { amount: best.rate, currency: best.currency })
+      })
       // Skip the "deals found" panel - go straight to countdown after fetching redirect URL
       if (OC_DEBUG) console.log('[WS OC] eligible', { dealId: best.id, rate: best.rate, amountType: best.amountType })
 

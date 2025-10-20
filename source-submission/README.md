@@ -8,16 +8,17 @@
 
 > Automatically earn cashback and discover voucher deals while shopping online. Works seamlessly across Chrome, Firefox, and other browsers.
 
-## ✨ Features
+## Firefox Add-ons listing description
 
-- 🎯 **Automatic Cashback Activation** - Earn cashback on 100+ merchants with one-click activation
-- 🎁 **Smart Voucher Discovery** - Find gift card deals automatically at checkout
-- 🔒 **Privacy-First** - Local processing, minimal data collection, transparent permissions
-- 🌍 **Multi-Browser Support** - Chrome, Firefox, Edge, Brave, and more
-- 📱 **Cross-Platform** - Desktop and mobile (Firefox Android)
+Woolsocks helps you save money by automatically showing you cashback savings when shopping online. 
+It can help you activate online cashback and will remind you to use vouchers to pay with right at checkout. It works locally in your browser—no tracking or hidden data collection. Woolsocks supports 1000+ merchants.
+
+## ✨ Features
+- 🎯 **Automatic or manual Cashback Activation** - Earn cashback on 1000+ merchants
+- 🎁 **Detect how to pay with vouchers at checkout** - Discover vouchers to pay with and get instant cashback
+- 🔒 **Privacy-First** - Local processing, minimal data collection
 - 🚀 **Zero Configuration** - Works immediately after install
-- 🔄 **Session Recovery** - Seamless login with email verification
-- 🌐 **Multi-Country Support** - Works in NL, DE, BE, FR, IT, ES, IE with localized deals
+- 🌐 **Multi-Country Support** - Works in NL, DE, BE, FR, IT, ES, IE with local deals in each region
 
 ## 🚀 Quick Start
 
@@ -51,10 +52,10 @@ npm run build:chrome  # or build:firefox
 
 ## 🎯 How It Works
 
-1. **Merchant Detection** - Automatically recognizes 100+ supported stores as you browse
-2. **Cashback Activation** - One-click activation with visible confirmation and countdown
+1. **Merchant Detection** - Automatically recognizes all supported stores as you browse
+2. **Cashback Activation** - Choose a one-click activation or fully automatic mode including a visible countdown
 3. **Voucher Discovery** - Shows available gift card deals when you reach checkout
-4. **Session Recovery** - Seamless login with email verification (no redirects needed)
+4. **Shared Session** - Seamless login via Woolsocks.eu
 
 ## 🌐 Browser Support
 
@@ -132,7 +133,6 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for detailed roadmap.
 - Safari desktop & iOS support
 - Email-only accounts for quick signup
 - Enhanced analytics dashboard
-- Additional country support
 - Real-time blacklists and alternative UX
 
 ## 🔐 Privacy & Security
@@ -184,7 +184,6 @@ A: You can disable auto-activation in settings and use manual reminders only, or
 
 **Extension not detecting merchant:**
 - Ensure you're on a supported merchant site
-- Check that auto-activation is enabled in settings
 - Try refreshing the page
 - Check browser console for errors
 
@@ -200,10 +199,6 @@ A: You can disable auto-activation in settings and use manual reminders only, or
 - Verify the merchant is eligible for cashback
 - Try the manual activation button in the popup
 
-**Session issues:**
-- Clear browser cookies for woolsocks.eu and reload
-- Use the session recovery feature in the popup
-- Check that cookies are enabled in your browser
 
 ## 📄 License
 

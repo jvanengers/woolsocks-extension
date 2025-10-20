@@ -7,16 +7,8 @@ import OnboardingComponent from '../shared/OnboardingComponent'
 import { hasCompletedOnboarding } from '../shared/onboarding'
 import { loadWoolsocksFonts, getWoolsocksFontFamily } from '../shared/fonts'
 import { isFirefoxLike } from '../shared/platform'
-
-interface Deal {
-  name: string
-  rate: number
-  description?: string
-  imageUrl?: string
-  dealUrl?: string
-  id?: string
-  amountType?: 'PERCENTAGE' | 'FIXED'
-}
+import type { Deal } from '../shared/types'
+import { formatCashback } from '../shared/format'
 
 function App() {
   const [session, setSession] = useState<boolean | null>(null)
@@ -777,11 +769,12 @@ function App() {
                     <div style={{ 
                       background: '#FFF9E6', 
                       borderRadius: 8, 
-                      width: 40, 
+                      minWidth: 40, 
                       height: 40, 
-                      display: 'flex', 
+                      display: 'inline-flex', 
                       alignItems: 'center', 
                       justifyContent: 'center',
+                      padding: '0 10px',
                       flexShrink: 0
                     }}>
                       <span style={{ 
@@ -791,7 +784,7 @@ function App() {
                         color: '#100B1C',
                         letterSpacing: '0.1px'
                       }}>
-                        {deal.amountType === 'FIXED' ? `€${deal.rate}` : `${deal.rate}%`}
+                        {formatCashback(deal)}
                       </span>
                     </div>
                     <div style={{ 

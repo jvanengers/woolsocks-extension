@@ -30,3 +30,4 @@ if [ "${CHKTOOL##*/}" = "shasum" ]; then ARGS="-a 256"; else ARGS=""; fi
 ( cd dist-firefox-mv2 && find . -type f -print0 | sort -z | xargs -0 ${CHKTOOL} ${ARGS} ) > dist-firefox-mv2.SHA256
 
 echo "✅ Firefox MV2 build completed at dist-firefox-mv2/"
+

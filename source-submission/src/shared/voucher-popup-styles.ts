@@ -115,6 +115,7 @@ export const popupStyles = {
     marginBottom: '16px'
   } as StyleObject,
 
+  // New: viewport wrapper that clips the track while we translate it
   carouselViewport: {
     width: '100%',
     overflow: 'hidden',

@@ -23,3 +23,4 @@ Notes:
   - Resulting dist-firefox-mv2 should match the submitted add-on exactly.
 
 
+

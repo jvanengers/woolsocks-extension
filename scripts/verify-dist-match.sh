@@ -18,3 +18,4 @@ diff -u "$TMP/xpi.SHA256" "$TMP/dist.SHA256"
 echo "✅ Checksums match"
 
 
+

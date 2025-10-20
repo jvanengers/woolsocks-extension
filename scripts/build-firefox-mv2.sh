@@ -31,3 +31,4 @@ if [ "${CHKTOOL##*/}" = "shasum" ]; then ARGS="-a 256"; else ARGS=""; fi
 
 echo "✅ Firefox MV2 build completed at dist-firefox-mv2/"
 
+

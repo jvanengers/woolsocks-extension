@@ -22,3 +22,4 @@ Notes:
   - The build is driven by vite.firefox-mv2.config.ts and emits CommonJS output tailored for MV2.
   - Resulting dist-firefox-mv2 should match the submitted add-on exactly.
 
+

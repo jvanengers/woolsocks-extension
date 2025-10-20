@@ -6,8 +6,9 @@ export function onExecute() {
   // Content script initialization
 }
 
-type Deal = { id?: string | number; name?: string; rate?: number; amountType?: string; currency?: string }
 import { translate, initLanguage } from '../shared/i18n'
+import type { Deal } from '../shared/types'
+import { formatCashback } from '../shared/format'
 
 // Boot diagnostics
 const OC_DEBUG = false // Set to true for debugging
@@ -648,7 +649,7 @@ function showDealsFound(host: string, deals: Deal[]) {
   const r = ensureMount(); clearTimers()
   const box = document.createElement('div'); box.className = 'panel'
   const safeHost = host.replace(/^www\./i, '')
-  const list = deals.map(d => `<div class='deal'><div class='badge'>${formatRate(d)}</div><div>${escapeHtml(d.name || 'Online aankoop')}</div></div>`).join('')
+  const list = deals.map(d => `<div class='deal'><div class='badge'>${formatCashback(d)}</div><div>${escapeHtml(d.name || 'Online aankoop')}</div></div>`).join('')
   render(box, `
     <div class="row header">${translate('ocPanel.dealsFoundAt', { host: escapeHtml(safeHost) })}</div>
     <div class="progress"><div class="bar"></div></div>
@@ -694,7 +695,7 @@ function showDeckPage1(allDeals: Deal[], onViewConditions: () => void, onReset: 
   } catch {}
   const list = allDeals.map(d => `
     <div class="deal">
-      <div class="badge">${formatRate(d)}</div>
+      <div class="badge">${formatCashback(d)}</div>
       <div class="deal-text">${escapeHtml(d.name || 'Online aankoop')}</div>
     </div>
   `).join('')
@@ -836,8 +837,14 @@ function showMinimizedPill(opts?: { unauth?: boolean; deals?: Deal[] }) {
   const r = ensureMount(); clearTimers()
   const pill = document.createElement('div'); pill.className = 'minipill'
   const deals = opts?.deals || (window as any).__wsLastDeals || []
-  const bestRate = Array.isArray(deals) && deals.length ? Math.max(...deals.map((d:any)=>Number(d?.rate||0))) : 0
-  const labelText = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestRate }) : translate('ocPanel.cashbackActive')
+  // Choose best deal: prefer percentage max rate, otherwise highest fixed amount
+  const perc = Array.isArray(deals) ? deals.filter((d:any) => ((d?.amountType||'PERCENTAGE').toUpperCase()) === 'PERCENTAGE') : []
+  const fixed = Array.isArray(deals) ? deals.filter((d:any) => ((d?.amountType||'').toUpperCase()) === 'FIXED') : []
+  const bestDeal: Deal | undefined = perc.length
+    ? perc.sort((a:any,b:any)=> (Number(b?.rate||0)) - (Number(a?.rate||0)))[0]
+    : (fixed.sort((a:any,b:any)=> (Number(b?.rate||0)) - (Number(a?.rate||0)))[0])
+  const bestLabel = bestDeal ? formatCashback(bestDeal) : '0%'
+  const labelText = opts?.unauth ? translate('ocPanel.earnRateCashback', { rate: bestLabel }) : translate('ocPanel.cashbackActive')
   const logo = opts?.unauth ? WS_LOGO.grey : WS_LOGO.green
   while (pill.firstChild) pill.removeChild(pill.firstChild)
   const pillRow = document.createElement('div')
@@ -945,7 +952,7 @@ function hideAll() {
 }
 
 function escapeHtml(s: string): string { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c]) }
-function formatRate(d: Deal): string { if ((d.amountType||'').toUpperCase()==='FIXED') return `${d.currency||'€'}${d.rate}`; const r = typeof d.rate==='number'? d.rate:0; return `${r}%` }
+// formatRate function replaced by formatCashback from shared/format.ts
 
 // Countdown banner for auto-activation
 let countdownTimer: number | null = null
@@ -981,7 +988,7 @@ function showCountdownBanner(domain: string, dealInfo: Deal, initialCountdown: n
   row.appendChild(actionsDyn)
   const dealLine = document.createElement('div')
   dealLine.className = 'countdown-deal'
-  dealLine.textContent = `${formatRate(dealInfo)} cashback on ${escapeHtml(domain)}`
+  dealLine.textContent = `${formatCashback(dealInfo)} cashback on ${escapeHtml(domain)}`
   content.appendChild(row)
   content.appendChild(dealLine)
   banner.appendChild(content)
@@ -1059,7 +1066,7 @@ function showManualActivationBanner(host: string, _deals: Deal[], bestDeal: Deal
     ;(banner as HTMLElement).style.gap = '12px'
     ;(banner as HTMLElement).style.padding = '12px 16px'
   } catch {}
-  const rate = bestDeal ? formatRate(bestDeal) : '0%'
+  const rate = bestDeal ? formatCashback(bestDeal) : '0%'
   
   while (banner.firstChild) banner.removeChild(banner.firstChild)
   const left = document.createElement('div')

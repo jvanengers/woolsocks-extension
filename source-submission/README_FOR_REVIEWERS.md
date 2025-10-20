@@ -117,3 +117,4 @@ This extracts the XPI, generates ordered SHA256 sums, and diffs against the loca
 - The resulting `dist-firefox-mv2` contents should match the submitted add-on exactly when compared with a binary diff.
 
 
+

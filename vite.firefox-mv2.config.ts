@@ -8,7 +8,7 @@ import type { Plugin } from 'vite'
 const manifest = {
   manifest_version: 2,  // Use MV2 for Firefox compatibility
   name: 'Woolsocks',
-  version: '0.10.0',
+  version: '0.10.1',
   description: 'Activate cashback automatically and discover gift cards at checkout on supported merchants.',
   
   // MV2 uses browser_specific_settings instead of applications

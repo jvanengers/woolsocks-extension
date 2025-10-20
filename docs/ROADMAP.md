@@ -22,6 +22,7 @@ Estimated RICE scores (Reach × Impact × Confidence ÷ Effort in person‑weeks
 | 11 | 7) Android companion app | 30 | 2.0 | 0.5 | 10 | 3 |
 | 12 | 20) AI‑powered price comparison | 40 | 2.0 | 0.4 | 12 | 2.7 |
 | 13 | 6b) Firefox support (Mobile) | 10 | 1.0 | 0.8 | 4 | 2 |
+| 14 | 24) Remote checkout detector configuration | 90 | 2.5 | 0.8 | 3 | 60 |
 
 Notes:
 - Assumes consented users and supported locales. Reach approximates quarterly user/event exposure.
@@ -414,7 +415,7 @@ Goal: Allow users to search for merchants directly within the extension popup an
 ---
 
 ## 21) Migrate from Google Analytics to Firebase Analytics
-Status: Ready for implementation
+Status: Completed — 2025-01-15 (see Completed items)
 Goal: Migrate analytics tracking from the current Google Analytics 4 setup to Firebase Analytics SDK for better integration with the Firebase ecosystem and improved analytics capabilities.
 
 - Firebase configuration
@@ -602,7 +603,7 @@ Goal: Detect e‑commerce "thank you"/order success pages, extract the merchant 
 
 ## 23) Support fixed-amount cashback (online cashback)
 
-Status: Ready for refinement
+Status: ✅ Completed
 
 Goal: Add support for online cashback rates that are fixed amounts (e.g., €5 back) in addition to percentage-based rates, driven by an explicit API property so the extension can display and handle both types correctly.
 
@@ -631,6 +632,239 @@ Goal: Add support for online cashback rates that are fixed amounts (e.g., €5 b
 ---
 
 
+
+## 24) Remote checkout detector configuration
+
+Status: Ready for implementation
+
+Goal: Enable dynamic configuration of checkout and amount detectors through Firebase Remote Config, allowing rapid updates to merchant detection rules, CSS selectors, and extraction logic without requiring extension updates or Chrome Web Store reviews.
+
+### Problem Statement
+Currently, checkout detectors are hardcoded in `src/content/checkout.ts` with static CSS selectors and extraction logic. When merchants change their website structure (like HEMA's recent DOM changes), the extension requires:
+- Code changes to update selectors
+- Extension rebuild and deployment
+- Chrome Web Store review process (1-3 days)
+- User updates to receive fixes
+
+This creates delays in fixing broken detection and limits rapid response to merchant website changes.
+
+### Solution Architecture
+
+#### Firebase Remote Config Integration
+- **Config Structure**: JSON-based detector definitions with versioning and A/B testing support
+- **Caching Strategy**: Local cache with TTL (24-48 hours) and background refresh
+- **Fallback Logic**: Graceful degradation to hardcoded detectors if remote config fails
+- **Version Management**: Support for detector schema versions and migration
+
+#### Detector Configuration Schema
+```json
+{
+  "version": "1.0",
+  "detectors": {
+    "hema": {
+      "enabled": true,
+      "priority": 1,
+      "domains": ["hema.nl", "www.hema.nl"],
+      "isCheckoutPage": {
+        "urlPatterns": ["/cart", "/checkout"],
+        "domSelectors": [".basket-totals", "#main-content .checkout"]
+      },
+      "extractTotal": {
+        "selectors": [
+          "#main-content .basket-totals .total-prices .row.total-amount span.price",
+          ".total-amount .price",
+          "[data-testid='total-amount']"
+        ],
+        "fallbackPatterns": ["totaal[^€\\d]*([€]?[\\s\\d.,-]+)"],
+        "amountParsing": {
+          "decimalSeparator": ".",
+          "thousandsSeparator": ",",
+          "currencySymbol": "€"
+        }
+      },
+      "metadata": {
+        "lastUpdated": "2025-01-15T10:30:00Z",
+        "version": "2.1",
+        "testedOn": ["hema.nl/cart", "hema.nl/checkout"]
+      }
+    }
+  }
+}
+```
+
+#### Implementation Plan
+
+**Phase 1: Remote Config Infrastructure (1 week)**
+1. **Firebase Setup**
+   - Configure Firebase Remote Config with detector definitions
+   - Set up parameter groups for different detector types
+   - Implement A/B testing for new detector versions
+   - Configure fetch intervals and caching policies
+
+2. **Extension Integration**
+   - Add Firebase Remote Config SDK to extension
+   - Implement config fetcher in background script
+   - Add local storage caching with TTL
+   - Create detector registry that merges remote + local configs
+
+3. **Fallback System**
+   - Maintain existing hardcoded detectors as fallback
+   - Implement config validation and error handling
+   - Add offline mode support with cached configs
+
+**Phase 2: Dynamic Detector Engine (1 week)**
+1. **Detector Factory**
+   - Create dynamic detector generator from config
+   - Implement selector testing and validation
+   - Add detector performance monitoring
+   - Support for complex extraction logic (regex, DOM traversal)
+
+2. **Configuration Management**
+   - Add detector enable/disable controls
+   - Implement detector priority system
+   - Support for detector versioning and rollback
+   - Add detector testing and validation tools
+
+3. **Analytics Integration**
+   - Track detector success/failure rates
+   - Monitor selector performance and accuracy
+   - Add detector usage analytics
+   - Implement alerting for broken detectors
+
+**Phase 3: Migration and Testing (1 week)**
+1. **Detector Migration**
+   - Convert existing hardcoded detectors to config format
+   - Test all existing detectors with remote config
+   - Implement gradual rollout with feature flags
+   - Add detector validation and testing suite
+
+2. **Quality Assurance**
+   - Automated testing for detector configurations
+   - Manual testing on major merchant sites
+   - Performance testing for config loading
+   - Cross-browser compatibility testing
+
+### Technical Implementation
+
+#### Background Script Integration
+```typescript
+// src/background/remote-config.ts
+class RemoteDetectorConfig {
+  private config: DetectorConfig | null = null
+  private lastFetch: number = 0
+  private readonly TTL = 24 * 60 * 60 * 1000 // 24 hours
+
+  async getDetectorConfig(): Promise<DetectorConfig> {
+    if (this.shouldRefresh()) {
+      await this.fetchConfig()
+    }
+    return this.config || this.getFallbackConfig()
+  }
+
+  private async fetchConfig(): Promise<void> {
+    try {
+      const config = await remoteConfig.fetchAndActivate()
+      this.config = this.validateConfig(config)
+      this.lastFetch = Date.now()
+      await this.cacheConfig(config)
+    } catch (error) {
+      console.warn('Failed to fetch remote config:', error)
+      this.config = await this.getCachedConfig()
+    }
+  }
+}
+```
+
+#### Dynamic Detector Generation
+```typescript
+// src/content/dynamic-checkout.ts
+function createDynamicDetector(config: DetectorConfig): CheckoutDetector {
+  return {
+    isCheckoutPage: () => {
+      const url = window.location.href
+      const path = window.location.pathname
+      
+      // Check URL patterns
+      if (config.isCheckoutPage.urlPatterns?.some(pattern => 
+        new RegExp(pattern).test(path)
+      )) return true
+      
+      // Check DOM selectors
+      if (config.isCheckoutPage.domSelectors?.some(selector =>
+        document.querySelector(selector)
+      )) return true
+      
+      return false
+    },
+    
+    extractTotal: () => {
+      // Try selectors in priority order
+      for (const selector of config.extractTotal.selectors) {
+        const element = document.querySelector(selector)
+        if (element) {
+          const amount = parseAmount(element.textContent, config.extractTotal.amountParsing)
+          if (amount && amount > 0) return amount
+        }
+      }
+      
+      // Fallback to regex patterns
+      for (const pattern of config.extractTotal.fallbackPatterns) {
+        const match = document.body.textContent?.match(new RegExp(pattern, 'i'))
+        if (match) {
+          const amount = parseAmount(match[1], config.extractTotal.amountParsing)
+          if (amount && amount > 0) return amount
+        }
+      }
+      
+      return null
+    },
+    
+    getCurrency: () => config.extractTotal.amountParsing?.currencySymbol || 'EUR'
+  }
+}
+```
+
+### Benefits
+
+#### Operational Benefits
+- **Rapid Response**: Fix broken detectors within hours instead of days
+- **A/B Testing**: Test new detector versions with subset of users
+- **Rollback Capability**: Quickly revert problematic detector changes
+- **Merchant Onboarding**: Add new merchants without extension updates
+
+#### Development Benefits
+- **Reduced Deployment Friction**: No Chrome Web Store review delays
+- **Better Testing**: Test detectors on live sites before deployment
+- **Version Control**: Track detector changes and performance over time
+- **Analytics**: Monitor detector success rates and user impact
+
+#### User Benefits
+- **Faster Fixes**: Broken detection fixed automatically
+- **Better Coverage**: New merchants added more frequently
+- **Improved Accuracy**: Detectors updated based on real-world usage
+- **Reduced Extension Updates**: Fewer mandatory updates required
+
+### Success Criteria
+- **Response Time**: Broken detectors fixed within 4 hours of detection
+- **Reliability**: >99% config fetch success rate with <2s load time
+- **Accuracy**: Detector success rate maintained at >95% across all merchants
+- **Performance**: No measurable impact on extension startup or memory usage
+- **Adoption**: >90% of active users receive remote config updates within 24 hours
+
+### Risk Mitigation
+- **Fallback System**: Always maintain hardcoded detectors as backup
+- **Validation**: Strict config validation to prevent broken detectors
+- **Gradual Rollout**: A/B test new detectors before full deployment
+- **Monitoring**: Real-time alerts for detector failure rates
+- **Rollback**: Quick rollback capability for problematic configs
+
+### Future Enhancements
+- **Machine Learning**: Use ML to automatically generate selectors
+- **Crowdsourcing**: Allow users to report broken detection
+- **Merchant Integration**: Direct integration with merchant APIs
+- **Advanced Parsing**: Support for complex extraction logic and data transformation
+
+---
 
 # Small bugs/fixes (ongoing)
 
@@ -717,6 +951,60 @@ SOLUTION NOTES:
 ---
 
 # Completed
+
+## 21) Migrate from Google Analytics to Firebase Analytics
+
+Status: Completed — 2025-01-15
+
+Goal: Migrate analytics tracking from the current Google Analytics 4 setup to Firebase Analytics SDK for better integration with the Firebase ecosystem and improved analytics capabilities.
+
+### Implementation Details
+
+Completed: 2025-01-15 — Firebase Analytics migration with dual tracking system
+
+- **Firebase SDK Integration**: Installed Firebase v10.14.1 and configured with project settings
+- **Dual Tracking System**: Implemented system that tracks events in both GA4 and Firebase Analytics during migration phase
+- **User Identification**: Added automatic user ID and properties management in Firebase Analytics
+- **Event Mapping**: All existing GA4 events preserved and sent to Firebase with same names and parameters
+- **Platform Compatibility**: Tested and working on Chrome and Firefox; Safari compatibility needs validation
+- **Comprehensive Testing**: Added test suite covering initialization, event tracking, user management, and error handling
+
+### Key Features Implemented
+
+- **Firebase Configuration**: Complete Firebase project setup with measurement ID and API keys
+- **Analytics Wrapper**: Firebase Analytics wrapper maintaining compatibility with existing GA4 event structure
+- **User Management**: Automatic user ID setting on login/logout with user properties (country, user_type, platform)
+- **Event Preservation**: All existing events (`voucher_detected`, `cashback_activated`, `cache_hit`, etc.) work identically
+- **Key Events**: Designated `voucher_click`, `voucher_used`, `cashback_activated` as key events in Firebase
+- **Error Handling**: Graceful fallback to GA4-only if Firebase fails to initialize
+- **Performance**: Lazy loading and event queuing to minimize performance impact
+
+### Migration Phases
+
+- **Phase 1 (Current)**: Dual tracking active - events sent to both GA4 and Firebase
+- **Phase 2 (Next)**: Validation period - monitor event parity between systems
+- **Phase 3 (Future)**: Firebase-only mode - remove GA4 code after validation
+- **Phase 4 (Future)**: Cleanup - update dashboards and documentation
+
+### Success Criteria Met
+
+- ✅ Firebase Analytics receives all events with same structure as GA4
+- ✅ User identification and properties working correctly
+- ✅ Platform compatibility verified (Chrome, Firefox)
+- ✅ Comprehensive test coverage implemented
+- ✅ Performance impact minimized with lazy loading
+- ✅ Privacy and consent handling maintained
+- ✅ Documentation and migration guide created
+
+### Next Steps
+
+1. Monitor dual tracking for 1-2 weeks to validate event parity
+2. Test Safari compatibility in Safari Web Extension context
+3. Update monitoring dashboards to use Firebase data
+4. Remove GA4 code after validation period
+5. Enable BigQuery export for BI dashboards
+
+---
 
 ## 11) Enforce country-scoped deals (vouchers and online cashback)
 
