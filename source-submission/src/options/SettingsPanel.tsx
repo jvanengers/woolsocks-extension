@@ -150,7 +150,7 @@ export default function SettingsPanel({ variant = 'options', onBalance }: { vari
       // Fallback: check storage for cached session state
       const stored = await chrome.storage.local.get(['__wsSessionActive', '__wsSessionCheckedAt'])
       const age = stored.__wsSessionCheckedAt ? Date.now() - stored.__wsSessionCheckedAt : Infinity
-      if (typeof stored.__wsSessionActive === 'boolean' && age < 30000) {
+      if (typeof stored.__wsSessionActive === 'boolean' && age < 300000) { // Use if less than 5 minutes old
         return stored.__wsSessionActive
       }
       

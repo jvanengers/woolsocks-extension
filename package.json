@@ -37,7 +37,9 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:firefox-build": "vitest run src/test/firefox-build.test.ts src/test/firefox-modules.test.ts",
+    "validate:firefox": "npm run build:firefox && npm run test:firefox-build && ./scripts/validate-firefox-build.sh"
   },
   "dependencies": {
     "firebase": "^10.14.1",

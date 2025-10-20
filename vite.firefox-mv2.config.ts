@@ -171,10 +171,12 @@ function handleMV2CompatibilityPlugin(): Plugin {
   return {
     name: 'handle-mv2-compatibility',
     writeBundle() {
-      // Find analytics and i18n chunks and update manifest
+      // Find required chunks and update manifest
       const assetsDirPath = 'dist-firefox-mv2/assets'
       let analyticsChunkFilename: string | null = null
       let i18nChunkFilename: string | null = null
+      let partnersConfigChunkFilename: string | null = null
+      let platformChunkFilename: string | null = null
       
       if (existsSync(assetsDirPath)) {
         const files = readdirSync(assetsDirPath)
@@ -185,6 +187,12 @@ function handleMV2CompatibilityPlugin(): Plugin {
           if (file.includes('i18n') && file.endsWith('.js')) {
             i18nChunkFilename = `assets/${file}`
           }
+          if (file.includes('partners-config') && file.endsWith('.js')) {
+            partnersConfigChunkFilename = `assets/${file}`
+          }
+          if (file.includes('platform') && file.endsWith('.js')) {
+            platformChunkFilename = `assets/${file}`
+          }
         }
       }
       
@@ -193,10 +201,25 @@ function handleMV2CompatibilityPlugin(): Plugin {
         let manifestContent = readFileSync(manifestPath, 'utf-8')
         let manifestJson = JSON.parse(manifestContent)
         
-        // Update background scripts to load analytics first
+        // Update background scripts to load dependencies first
+        const backgroundScripts: string[] = []
         if (analyticsChunkFilename) {
-          manifestJson.background.scripts = [analyticsChunkFilename, 'background.js']
-          console.log(`✅ Updated manifest to load ${analyticsChunkFilename} before background.js`)
+          backgroundScripts.push(analyticsChunkFilename)
+        }
+        if (partnersConfigChunkFilename) {
+          backgroundScripts.push(partnersConfigChunkFilename)
+        }
+        if (i18nChunkFilename) {
+          backgroundScripts.push(i18nChunkFilename)
+        }
+        if (platformChunkFilename) {
+          backgroundScripts.push(platformChunkFilename)
+        }
+        backgroundScripts.push('background.js')
+        
+        if (backgroundScripts.length > 1) {
+          manifestJson.background.scripts = backgroundScripts
+          console.log(`✅ Updated manifest to load dependencies before background.js:`, backgroundScripts)
         }
         
         // Replace i18n placeholder in content_scripts
@@ -227,6 +250,10 @@ function handleMV2CompatibilityPlugin(): Plugin {
         // Check if the module is already loaded via globalThis (shared chunks)
         if (path.includes('analytics')) {
           return (typeof globalThis !== 'undefined' ? globalThis.__woolsocksAnalyticsExports : undefined) || {};
+        }
+        // partners-config fallback
+        if (path.includes('partners-config')) {
+          return (typeof globalThis !== 'undefined' ? globalThis.__woolsocksPartnersConfigExports : undefined) || {};
         }
         // i18n fallback (background only uses for console.log)
         if (path.includes('i18n')) {
@@ -368,6 +395,7 @@ ${content}
             const isOnboardingComponent = filename.includes('OnboardingComponent')
             const isI18n = filename.includes('i18n')
             const isPlatform = filename.includes('platform')
+            const isPartnersConfig = filename.includes('partners-config')
             const isFormat = filename.includes('format')
             const isAnalytics = filename.includes('analytics')
             const isClient = filename.includes('client') // React/ReactDOM chunk
@@ -377,6 +405,7 @@ ${content}
             if (isOnboardingComponent) globalName = 'window.__woolsocksOnboardingExports'
             else if (isI18n) globalName = 'window.__woolsocksI18nExports'
             else if (isPlatform) globalName = 'window.__woolsocksPlatformExports'
+            else if (isPartnersConfig) globalName = 'window.__woolsocksPartnersConfigExports'
             else if (isFormat) globalName = 'window.__woolsocksFormatExports'
             else if (isAnalytics) globalName = 'window.__woolsocksAnalyticsExports'
             else if (isClient) globalName = 'window.__woolsocksClientExports'

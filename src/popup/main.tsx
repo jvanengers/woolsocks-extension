@@ -87,7 +87,7 @@ function App() {
         let stored = await chrome.storage.local.get(['__wsSessionActive', '__wsSessionCheckedAt'])
         let age = stored.__wsSessionCheckedAt ? Date.now() - stored.__wsSessionCheckedAt : Infinity
         
-        if (typeof stored.__wsSessionActive === 'boolean' && age < 30000) {
+        if (typeof stored.__wsSessionActive === 'boolean' && age < 300000) { // Use if less than 5 minutes old
           console.log('[Popup] Using cached session state from storage (immediate):', stored.__wsSessionActive, `(${Math.round(age)}ms old)`)
           setSession(stored.__wsSessionActive)
           return
@@ -292,8 +292,8 @@ function App() {
           let stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabUpdated'])
           let age = stored.__wsCurrentTabUpdated ? Date.now() - stored.__wsCurrentTabUpdated : Infinity
           
-          // If storage is too old (> 5 seconds), ask background to refresh it
-          if (age > 5000 || !stored.__wsCurrentTabUrl) {
+          // If storage is too old (> 5 minutes), ask background to refresh it
+          if (age > 300000 || !stored.__wsCurrentTabUrl) {
             console.log('[Popup] Storage too old or missing, asking background to refresh tab info...')
             try {
               // Send a message to background to get current active tab
@@ -315,7 +315,7 @@ function App() {
           
           if (stored.__wsCurrentTabUrl) {
             age = stored.__wsCurrentTabUpdated ? Date.now() - stored.__wsCurrentTabUpdated : Infinity
-            if (age < 10000) { // Use if less than 10 seconds old
+            if (age < 300000) { // Use if less than 5 minutes old
               const url = new URL(stored.__wsCurrentTabUrl)
               hostname = url.hostname
               console.log('[Popup] Got tab from storage:', hostname, `(${Math.round(age)}ms old)`)

@@ -626,7 +626,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           const stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabId', '__wsCurrentTabUpdated'])
           if (stored.__wsCurrentTabUrl && stored.__wsCurrentTabUpdated) {
             const age = Date.now() - stored.__wsCurrentTabUpdated
-            if (age < 30000) { // Use if less than 30 seconds old
+            if (age < 300000) { // Use if less than 5 minutes old
               console.log('[WS] Using stored tab info:', stored.__wsCurrentTabUrl, `(${Math.round(age)}ms old)`)
               sendResponse({ url: stored.__wsCurrentTabUrl, id: stored.__wsCurrentTabId })
             } else {
@@ -645,7 +645,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           const stored = await chrome.storage.local.get(['__wsCurrentTabUrl', '__wsCurrentTabId', '__wsCurrentTabUpdated'])
           if (stored.__wsCurrentTabUrl && stored.__wsCurrentTabUpdated) {
             const age = Date.now() - stored.__wsCurrentTabUpdated
-            if (age < 30000) {
+            if (age < 300000) { // Use if less than 5 minutes old
               console.log('[WS] Using stored tab info after error:', stored.__wsCurrentTabUrl)
               sendResponse({ url: stored.__wsCurrentTabUrl, id: stored.__wsCurrentTabId })
             } else {

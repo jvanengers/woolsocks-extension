@@ -651,3 +651,72 @@ Open the service worker console (chrome://extensions → Inspect service worker)
 - **Pill dismissal not persisting**: Check `__wsOcPillDismissedByDomain` in session storage and verify `isPillDismissed()` function
 - **Pill reappearing after dismissal**: Verify all automatic triggers (DOMContentLoaded, visibilitychange, oc_activated) check dismissal state
 - **Fresh activation not clearing dismissal**: Verify `setPillDismissed(domain, false)` is called in oc_activated handler
+
+## Firefox Build Validation
+
+Before releasing any Firefox version, run comprehensive build validation to prevent dependency issues.
+
+### Pre-Release Checklist
+
+1. **Run complete validation:**
+   ```bash
+   npm run validate:firefox
+   ```
+
+2. **Manual verification:**
+   - Open Firefox Developer Tools on MediaMarkt.nl
+   - Check console for any `TypeError: y.xxx is not a function` errors
+   - Verify unauthenticated users see deals (not "No deals available")
+   - Test that fixed amounts display as `€5.00` (not `undefined`)
+
+### Validation Tests
+
+**Build Structure Tests:**
+- Manifest loads all required chunks before background.js
+- Popup HTML includes format chunk for fixed-amount display
+- All asset files exist with correct naming patterns
+- Content scripts are properly bundled
+
+**Module Dependency Tests:**
+- `getCountryForDomain` function available from partners-config
+- `formatCashback` function available from format module
+- Platform detection functions work correctly
+- Analytics tracking functions are accessible
+
+**File Integrity Tests:**
+- Background script size is reasonable (100KB-2MB)
+- All required content scripts exist
+- HTML files have correct script loading order
+
+### Common Issues and Fixes
+
+**"TypeError: y.getCountryForDomain is not a function":**
+- Check manifest.json background.scripts includes partners-config chunk
+- Verify partners-config loads before background.js
+- Run `npm run validate:firefox` to catch this automatically
+
+**"No deals available for this site" for unauthenticated users:**
+- Check popup HTML includes format chunk
+- Verify formatCashback function is available
+- Test with `npm run test:firefox-build`
+
+**Missing module chunks:**
+- Check vite.firefox-mv2.config.ts chunk detection
+- Verify all required modules are wrapped with CommonJS exports
+- Run validation script to identify missing assets
+
+### Integration with Release Process
+
+**Before every Firefox release:**
+1. `npm run validate:firefox` (must pass)
+2. Manual test on MediaMarkt.nl (unauthenticated)
+3. Check Firefox console for errors
+4. Package and verify XPI integrity
+
+**In CI/CD pipeline:**
+```yaml
+- name: Validate Firefox Build
+  run: npm run validate:firefox
+```
+
+This validation prevents the dependency issues that caused Firefox 0.10.3 problems.
