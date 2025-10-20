@@ -423,25 +423,50 @@ function buildNameCandidates(hostnameOrName: string): string[] {
   return Array.from(candidates).filter(Boolean)
 }
 
-function pickBestMerchant(query: string, list: any[]): any | null {
+function extractDomainFromUrl(url: string): string | null {
+  try {
+    const urlObj = new URL(url)
+    return urlObj.hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function pickBestMerchant(query: string, list: any[], expectedHostDomain?: string): any | null {
   if (!Array.isArray(list) || list.length === 0) return null
   const q = query.toLowerCase().replace(/\s+/g, '')
+  const expectedDomain = expectedHostDomain ? expectedHostDomain.replace(/^www\./, '').toLowerCase() : null
   
-  // Score each merchant based on how well it matches the query
+  // Score each merchant based on how well it matches the query and domain
   const scored = list.map((m) => {
     const name = (m?.data?.name || m?.name || '').toLowerCase().replace(/\s+/g, '')
     let score = 0
     
-    // Exact match gets highest score
-    if (name === q) score = 100
-    // Query is exact start of merchant name gets high score
-    else if (name.startsWith(q) && name.length === q.length + 1) score = 90
-    // Query is start of merchant name gets medium-high score
-    else if (name.startsWith(q)) score = 70
-    // Query is contained in merchant name gets lower score
-    else if (name.includes(q)) score = 50
-    // Special case: if query is "bol" and merchant is "bol" (not "bolero"), prioritize it
-    else if (q === 'bol' && name === 'bol') score = 95
+    // Domain matching gets highest priority (1000+)
+    if (expectedDomain) {
+      const merchantWebsiteUrl = m?.data?.websiteUrl || m?.websiteUrl
+      if (merchantWebsiteUrl) {
+        const merchantDomain = extractDomainFromUrl(merchantWebsiteUrl)
+        if (merchantDomain && merchantDomain === expectedDomain) {
+          score = 1000 // Much higher than any name match
+          console.log(`[WS API] Domain match found: ${merchantDomain} === ${expectedDomain} for merchant: ${name}`)
+        }
+      }
+    }
+    
+    // If no domain match, use name matching logic
+    if (score === 0) {
+      // Exact match gets highest score
+      if (name === q) score = 100
+      // Query is exact start of merchant name gets high score
+      else if (name.startsWith(q) && name.length === q.length + 1) score = 90
+      // Query is start of merchant name gets medium-high score
+      else if (name.startsWith(q)) score = 70
+      // Query is contained in merchant name gets lower score
+      else if (name.includes(q)) score = 50
+      // Special case: if query is "bol" and merchant is "bol" (not "bolero"), prioritize it
+      else if (q === 'bol' && name === 'bol') score = 95
+    }
     
     return { merchant: m, score, name }
   })
@@ -594,7 +619,7 @@ export async function searchMerchantByName(name: string, country: string = 'NL',
     
     console.log(`[WS API] Found ${data.merchants.length} merchants for candidate: "${candidate}"`)
 
-    const chosen = pickBestMerchant(candidate, data.merchants)
+    const chosen = pickBestMerchant(candidate, data.merchants, expectedHostDomain)
     const apiMerchant = chosen
     if (!apiMerchant?.id) continue
 

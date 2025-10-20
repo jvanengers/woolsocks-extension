@@ -1,7 +1,7 @@
 {
   "name": "woolsocks-extension",
   "private": true,
-  "version": "0.10.1",
+  "version": "0.10.3",
   "description": "Browser extension for automatic cashback and voucher discovery",
   "keywords": [
     "browser-extension",

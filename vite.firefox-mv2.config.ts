@@ -8,7 +8,7 @@ import type { Plugin } from 'vite'
 const manifest = {
   manifest_version: 2,  // Use MV2 for Firefox compatibility
   name: 'Woolsocks',
-  version: '0.10.1',
+  version: '0.10.3',
   description: 'Activate cashback automatically and discover gift cards at checkout on supported merchants.',
   
   // MV2 uses browser_specific_settings instead of applications
@@ -173,8 +173,8 @@ function handleMV2CompatibilityPlugin(): Plugin {
     writeBundle() {
       // Find analytics and i18n chunks and update manifest
       const assetsDirPath = 'dist-firefox-mv2/assets'
-      let analyticsChunkFilename = null
-      let i18nChunkFilename = null
+      let analyticsChunkFilename: string | null = null
+      let i18nChunkFilename: string | null = null
       
       if (existsSync(assetsDirPath)) {
         const files = readdirSync(assetsDirPath)
@@ -552,7 +552,8 @@ ${content}
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), writeManifestPlugin(), handleMV2CompatibilityPlugin()],
-  build: {
+  // Cast build block to any to accommodate Firefox MV2 specific options
+  build: ({
     outDir: 'dist-firefox-mv2',
     rollupOptions: {
       input: {
@@ -640,5 +641,5 @@ export default defineConfig({
     esbuild: {
       target: 'es2017'
     }
-  },
+  } as any),
 })
