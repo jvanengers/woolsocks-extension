@@ -708,8 +708,23 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         console.error('[WS OC] Error fetching redirect URL:', e)
         // Set cooldown to prevent repeated attempts when fetch fails
         try { await setCooldown(clean) } catch {}
-        // Show login required as fallback if redirect fetch fails
-        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
+        // Show login required as fallback if redirect fetch fails with retry to avoid race with content injection
+        try {
+          const sendWithRetry = async (message: any, attempts = 3) => {
+            for (let i = 0; i < attempts; i++) {
+              try {
+                await chrome.tabs.sendMessage(tabId, message)
+                return
+              } catch (err) {
+                if (i < attempts - 1) {
+                  const delay = [100, 500, 1000][i]
+                  await new Promise(r => setTimeout(r, delay))
+                }
+              }
+            }
+          }
+          await sendWithRetry({ __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId })
+        } catch {}
         return
       }
       
@@ -717,7 +732,23 @@ export function setupOnlineCashbackFlow(setIcon: (state: 'neutral' | 'available'
         if (OC_DEBUG) console.log('[WS OC] no redirect url returned (likely not logged in)')
         // Set cooldown to prevent repeated attempts when not authenticated
         try { await setCooldown(clean) } catch {}
-        try { chrome.tabs.sendMessage(tabId, { __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId }) } catch {}
+        // Retry send to improve reliability when content script initializes slightly later
+        try {
+          const sendWithRetry = async (message: any, attempts = 3) => {
+            for (let i = 0; i < attempts; i++) {
+              try {
+                await chrome.tabs.sendMessage(tabId, message)
+                return
+              } catch (err) {
+                if (i < attempts - 1) {
+                  const delay = [100, 500, 1000][i]
+                  await new Promise(r => setTimeout(r, delay))
+                }
+              }
+            }
+          }
+          await sendWithRetry({ __wsOcUi: true, kind: 'oc_login_required', host: clean, deals: eligible, providerMerchantId: (best as any).providerMerchantId })
+        } catch {}
         return
       }
       if (OC_DEBUG) console.log('[WS OC] Redirect URL valid, proceeding to countdown')
